@@ -129,15 +129,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     public boolean isDebugViewVisible() {
-        return getPlayerView().isDebugViewVisible();
+        return false;
     }
 
     public void toggleDebugView() {
-        getPlayerView().toggleDebugView();
     }
 
     public void hideDebugView() {
-        getPlayerView().hideDebugView();
     }
 
     public void chooseOtherPlayer(CharSequence title) {

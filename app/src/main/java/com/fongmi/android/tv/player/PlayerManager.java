@@ -54,6 +54,7 @@ public class PlayerManager implements ParseCallback {
     private long pendingStartPositionMs;
     private boolean danmakuEnabled;
     private boolean initTrack;
+    private boolean mpvFallbackUsed;
     private int retry;
     private int decode;
 
@@ -363,6 +364,7 @@ public class PlayerManager implements ParseCallback {
     public void reset() {
         App.removeCallbacks(runnable);
         retry = 0;
+        mpvFallbackUsed = false;
     }
 
     public void clear() {
@@ -407,6 +409,25 @@ public class PlayerManager implements ParseCallback {
         engine = PlayerEngineFactory.create(decode, spec, listener);
         setPlayer(engine.getPlayer());
         old.release();
+    }
+
+    private boolean fallbackMpvToExo() {
+        if (mpvFallbackUsed || engine.getType() != PlayerEngine.Type.MPV || spec == null) {
+            return false;
+        }
+        mpvFallbackUsed = true;
+        long position = Math.max(0, getPosition());
+        PlayerEngine old = engine;
+        player.removeListener(listener);
+        engine = PlayerEngineFactory.createExo(decode, listener);
+        setPlayer(engine.getPlayer());
+        old.release();
+        engine.start(spec, position);
+        setDanmakus(spec.getDanmakus());
+        App.post(runnable, Constant.TIMEOUT_PLAY);
+        callback.onPrepare();
+        initTrack = false;
+        return true;
     }
 
     private void setPlayer(Player player) {
@@ -564,7 +585,9 @@ public class PlayerManager implements ParseCallback {
             switch (engine.handleError(e)) {
                 case DECODE -> handleDecodeError(e);
                 case RECOVERED -> setDanmakus(spec.getDanmakus());
-                case FATAL -> callback.onError(engine.getErrorMessage(e));
+                case FATAL -> {
+                    if (!fallbackMpvToExo()) callback.onError(engine.getErrorMessage(e));
+                }
             }
         }
     };

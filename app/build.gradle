@@ -42,6 +42,10 @@ android {
             dimension "abi"
             ndk { abiFilters "armeabi-v7a" }
         }
+        x86_64 {
+            dimension "abi"
+            ndk { abiFilters "x86_64" }
+        }
     }
 
     buildFeatures {
@@ -104,6 +108,7 @@ dependencies {
     implementation project(':catvod')
     implementation project(':chaquo')
     implementation project(':quickjs')
+    implementation project(':media3compat')
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media
