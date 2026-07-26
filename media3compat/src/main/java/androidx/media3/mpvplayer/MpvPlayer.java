@@ -673,7 +673,6 @@ public final class MpvPlayer extends SimpleBasePlayer
             // Surface came back after a transient detach: keep demuxer, restore VO only.
             MPVLib.setPropertyString("vo", getVo());
             firstFrameReported = false;
-            reportFirstFrame();
         }
     }
 
@@ -801,7 +800,9 @@ public final class MpvPlayer extends SimpleBasePlayer
                     lastNativeError = null;
                     updateState(STATE_READY, state.playWhenReady, null);
                 }
-                case MPVLib.MpvEvent.VIDEO_RECONFIG, MPVLib.MpvEvent.PLAYBACK_RESTART ->
+                // VIDEO_RECONFIG is also emitted by force-window before loadfile and therefore
+                // does not prove that a decoded frame reached the Android Surface.
+                case MPVLib.MpvEvent.PLAYBACK_RESTART ->
                         reportFirstFrame();
                 case MPVLib.MpvEvent.END_FILE -> {
                     if (currentMediaItemIndex + 1 < playlist.size()
@@ -826,12 +827,16 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void reportFirstFrame() {
-        if (firstFrameReported || !surfaceReady) return;
+        if (firstFrameReported || !surfaceReady || !fileLoaded
+                || videoWidth <= 0 || videoHeight <= 0) return;
         firstFrameReported = true;
         state = buildState(STATE_READY, state.playWhenReady, null).buildUpon()
                 .setNewlyRenderedFirstFrame(true)
                 .build();
         invalidateState();
+        // newlyRenderedFirstFrame is an edge event. Do not leave it in the backing state or
+        // later unrelated invalidations will notify PlayerView/listeners repeatedly.
+        state = state.buildUpon().setNewlyRenderedFirstFrame(false).build();
     }
 
     private void refreshTracks() {

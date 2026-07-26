@@ -350,11 +350,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void attachSurface() {
-        if (mService != null && getPlayerView().getPlayer() == null) {
+        if (mService != null) {
             // MPV renders directly to the Surface. An artwork/EPG logo left by PlayerView can
             // otherwise cover the moving video even after native rendering has started.
             getPlayerView().setUseArtwork(player().getEngine() != PlayerSetting.ENGINE_MPV);
-            getPlayerView().setPlayer(player().getPlayer());
+            if (getPlayerView().getPlayer() == null) {
+                getPlayerView().setPlayer(player().getPlayer());
+            }
         }
         applyDanmaku();
     }
