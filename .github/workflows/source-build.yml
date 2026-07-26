@@ -1,4 +1,4 @@
-name: Source-only Android build
+name: Source-built player Android release
 
 on:
   workflow_dispatch:
@@ -71,8 +71,12 @@ jobs:
           git clone --filter=blob:none https://github.com/FongMi/media.git "$RUNNER_TEMP/media"
           git -C "$RUNNER_TEMP/media" checkout --detach c8a183b8ca7e57f43213c55f418d89fe45965db8
           echo "sdk.dir=$ANDROID_HOME" > "$RUNNER_TEMP/media/local.properties"
+          sed -i '/"org.mockito:mockito-core",/a\        "org.brotli:dec",' \
+            "$RUNNER_TEMP/media/missing_aar_type_workaround.gradle"
           "$RUNNER_TEMP/media/gradlew" -p "$RUNNER_TEMP/media" \
-            :lib-common:publishToMavenLocal --stacktrace
+            :lib-common:publishToMavenLocal \
+            :lib-ui-danmaku:publishToMavenLocal \
+            :lib-ui:publishToMavenLocal --stacktrace
 
       - name: Build release APK from source
         run: ./gradlew :app:assembleLeanbackArm64_v8aRelease --stacktrace

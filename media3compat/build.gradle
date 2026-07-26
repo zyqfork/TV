@@ -177,10 +177,6 @@ dependencies {
     api "androidx.media3:media3-exoplayer-smoothstreaming:1.10.1"
     api "androidx.media3:media3-session:1.10.1"
     api "androidx.media3:media3-ui:1.10.1"
+    api "androidx.media3:media3-ui-danmaku:1.10.1"
     api "androidx.media3:media3-datasource-okhttp:1.10.1"
-    implementation "org.brotli:dec:0.1.2"
-}
-
-configurations.configureEach {
-    exclude group: "androidx.media3", module: "media3-ui-danmaku"
 }
