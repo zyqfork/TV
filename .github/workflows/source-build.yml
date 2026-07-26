@@ -66,6 +66,14 @@ jobs:
           ! grep -R -E 'FongMi/Release|releases/download/.+\\.apk|zipTree\\(.+apk' \
             media3compat app/build.gradle
 
+      - name: Build customized Media3 API from source
+        run: |
+          git clone --filter=blob:none https://github.com/FongMi/media.git "$RUNNER_TEMP/media"
+          git -C "$RUNNER_TEMP/media" checkout --detach c8a183b8ca7e57f43213c55f418d89fe45965db8
+          echo "sdk.dir=$ANDROID_HOME" > "$RUNNER_TEMP/media/local.properties"
+          "$RUNNER_TEMP/media/gradlew" -p "$RUNNER_TEMP/media" \
+            :lib-common:publishToMavenLocal --stacktrace
+
       - name: Build release APK from source
         run: ./gradlew :app:assembleLeanbackArm64_v8aRelease --stacktrace
 
