@@ -52,8 +52,15 @@ public final class MpvPlayer extends SimpleBasePlayer
         implements MPVLib.EventObserver, MPVLib.LogObserver {
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
-    /** Prefer zero-copy MediaCodec, then copy-back; matches mpv-android HWDECS. */
-    private static final String HWDEC_HARD = "mediacodec,mediacodec-copy";
+    /**
+     * Use MediaCodec copy-back rather than the zero-copy AImageReader path.
+     *
+     * <p>Many Android TV/box drivers accept zero-copy initialization and render one frame, but
+     * then stop updating the EGL texture while audio continues. Since mpv sees no decoder error,
+     * the comma-separated fallback is never attempted. Copy-back remains hardware decoding and
+     * is substantially more compatible across vendor Surface/EGL implementations.
+     */
+    private static final String HWDEC_HARD = "mediacodec-copy";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
