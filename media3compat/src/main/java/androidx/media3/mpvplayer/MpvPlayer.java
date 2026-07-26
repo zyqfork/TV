@@ -53,18 +53,14 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
     /**
-     * Use MediaCodec copy-back rather than the zero-copy AImageReader path.
-     *
-     * <p>Many Android TV/box drivers accept zero-copy initialization and render one frame, but
-     * then stop updating the EGL texture while audio continues. Since mpv sees no decoder error,
-     * the comma-separated fallback is never attempted. Copy-back remains hardware decoding and
-     * is substantially more compatible across vendor Surface/EGL implementations.
+     * Match the working FongMi release: prefer MediaCodec direct rendering and retain copy-back
+     * as mpv's compatibility fallback.
      */
-    private static final String HWDEC_HARD = "mediacodec-copy";
+    private static final String HWDEC_HARD = "mediacodec,mediacodec-copy";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
-    private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "eof-reached", "seekable"};
+    private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "seekable"};
     private static final String[] OBSERVED_INT = {"video-params/w", "video-params/h"};
 
     private final Context context;
@@ -82,9 +78,10 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Nullable private String pendingLoadUri;
     private boolean ownsSurface;
     private boolean surfaceReady;
-    private boolean fileLoaded;
+    private volatile boolean fileLoaded;
     private boolean firstFrameReported;
-    private int decode;
+    private volatile boolean renderFallbackUsed;
+    private volatile int decode;
     private long positionMs;
     private long pendingSeekMs = C.TIME_UNSET;
     private long durationMs = C.TIME_UNSET;
@@ -233,11 +230,14 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (!config.preInitOptions.containsKey("vo")) {
             MPVLib.setOptionString("vo", VO_DEFAULT);
         }
+        MPVLib.setOptionString("force-window", "no");
+        MPVLib.setOptionString("keepaspect", "no");
         // Allow reading mpv.conf from config-dir (mpv-android does the same).
         if (config.preInitOptions.containsKey("config-dir")) {
             MPVLib.setOptionString("config", "yes");
         }
-        MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
+        MPVLib.setOptionString("hwdec-codecs",
+                "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1,vc1");
         MPVLib.setOptionString("ao", "audiotrack,opensles");
         MPVLib.setOptionString("audio-set-media-role", "yes");
         MPVLib.setOptionString("network-timeout", "60");
@@ -282,7 +282,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     public void setDecode(int decode) {
         this.decode = decode;
-        if (!released) MPVLib.setPropertyString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
+        renderFallbackUsed = false;
+        if (!released) MPVLib.setPropertyString(
+                "hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
     }
 
     private String getVo() {
@@ -413,6 +415,9 @@ public final class MpvPlayer extends SimpleBasePlayer
     private void loadFile(String uri) {
         fileLoaded = false;
         firstFrameReported = false;
+        renderFallbackUsed = false;
+        // A previous stream may have activated the per-file copy-back fallback.
+        MPVLib.setPropertyString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
         // Avoid loadfile options entirely: mpv 0.38+ inserted an integer index argument, and
         // KEYVALUELIST parsing differs across builds. Resume via seek after FILE_LOADED instead.
         MPVLib.command(new String[]{"loadfile", uri, "replace"});
@@ -701,9 +706,8 @@ public final class MpvPlayer extends SimpleBasePlayer
     private void detachNativeSurface() {
         if (attachedSurface == null) return;
         surfaceReady = false;
-        // Keep demux/decode alive; only tear down the video output while surface is gone.
-        MPVLib.setPropertyString("vo", "null");
-        MPVLib.setPropertyString("force-window", "no");
+        // Match the reference player: detach only the Android window. Changing vo to null tears
+        // down the GPU pipeline and some live decoders never reconnect it when the Surface returns.
         MPVLib.detachSurface();
         if (ownsSurface) attachedSurface.release();
         attachedSurface = null;
@@ -776,9 +780,6 @@ public final class MpvPlayer extends SimpleBasePlayer
                 case "pause" -> updateState(state.playbackState, !value, state.playerError);
                 case "paused-for-cache" -> updateState(value ? STATE_BUFFERING : STATE_READY,
                         state.playWhenReady, state.playerError);
-                case "eof-reached" -> {
-                    if (value) updateState(STATE_ENDED, false, null);
-                }
                 case "seekable" -> {
                     seekable = value;
                     updateState(state.playbackState, state.playWhenReady, state.playerError);
@@ -826,26 +827,52 @@ public final class MpvPlayer extends SimpleBasePlayer
                 // does not prove that a decoded frame reached the Android Surface.
                 case MPVLib.MpvEvent.PLAYBACK_RESTART ->
                         reportFirstFrame();
-                case MPVLib.MpvEvent.END_FILE -> {
-                    if (currentMediaItemIndex + 1 < playlist.size()
-                            && state.repeatMode != REPEAT_MODE_ONE) {
-                        currentMediaItemIndex++;
-                        mediaItem = playlist.get(currentMediaItemIndex);
-                        positionMs = 0;
-                        handlePrepare();
-                    } else if (state.playbackState != STATE_ENDED) {
-                        PlaybackException error = lastNativeError == null ? null
-                                : new PlaybackException(lastNativeError, null,
-                                PlaybackException.ERROR_CODE_IO_UNSPECIFIED);
-                        updateState(error == null ? STATE_ENDED : STATE_IDLE, false, error);
-                    }
-                }
+                // Current native builds deliver END_FILE through eventEndFile(), including its
+                // reason and error. Retain this only for compatibility with an older bridge.
+                case MPVLib.MpvEvent.END_FILE -> handleEndFile(
+                        lastNativeError == null
+                                ? MPVLib.MpvEndFileReason.EOF
+                                : MPVLib.MpvEndFileReason.ERROR,
+                        0, lastNativeError);
                 case MPVLib.MpvEvent.SHUTDOWN ->
                         updateState(STATE_IDLE, false,
                                 new PlaybackException("libmpv shut down unexpectedly", null,
                                         PlaybackException.ERROR_CODE_UNSPECIFIED));
             }
         });
+    }
+
+    @Override
+    public void eventEndFile(int reason, int error, String fileError) {
+        onApplicationThread(() -> handleEndFile(reason, error, fileError));
+    }
+
+    private void handleEndFile(int reason, int error, @Nullable String fileError) {
+        if (reason == MPVLib.MpvEndFileReason.STOP
+                || reason == MPVLib.MpvEndFileReason.QUIT
+                || reason == MPVLib.MpvEndFileReason.REDIRECT) {
+            return;
+        }
+        if (reason != MPVLib.MpvEndFileReason.EOF || error < 0) {
+            String detail = fileError;
+            if (detail == null || detail.isBlank()) detail = lastNativeError;
+            if (detail == null || detail.isBlank()) {
+                detail = error < 0 ? "mpv failed to play media (" + error + ")"
+                        : "mpv ended media without reaching EOF";
+            }
+            updateState(STATE_IDLE, false, new PlaybackException(detail, null,
+                    PlaybackException.ERROR_CODE_IO_UNSPECIFIED));
+            return;
+        }
+        if (currentMediaItemIndex + 1 < playlist.size()
+                && state.repeatMode != REPEAT_MODE_ONE) {
+            currentMediaItemIndex++;
+            mediaItem = playlist.get(currentMediaItemIndex);
+            positionMs = 0;
+            handlePrepare();
+        } else if (state.playbackState != STATE_ENDED) {
+            updateState(STATE_ENDED, false, null);
+        }
     }
 
     private void reportFirstFrame() {
@@ -952,10 +979,32 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     public void logMessage(String prefix, int level, String text) {
-        // mpv: 0=fatal 10=error 20=warn. Ignore hook/script noise that is not a stream failure.
-        if (level > 10 || text == null || text.isBlank()) return;
+        // libmpv levels 10/20/30 are fatal/error/warn. This matches the reference player's
+        // diagnostic capture and lets legacy bridges distinguish load failure from natural EOF.
+        if (level > 30 || text == null || text.isBlank()) return;
         if ("ytdl_hook".equals(prefix)) return;
+        if (!renderFallbackUsed && fileLoaded
+                && prefix != null && prefix.startsWith("vo/gpu")
+                && text.contains("OpenGL error")) {
+            onApplicationThread(this::fallbackRendering);
+            return;
+        }
         onApplicationThread(() -> lastNativeError = "mpv[" + prefix + "]: " + text.trim());
+    }
+
+    private void fallbackRendering() {
+        if (released || renderFallbackUsed || !fileLoaded) return;
+        renderFallbackUsed = true;
+        firstFrameReported = false;
+        lastNativeError = null;
+        MPVLib.command(new String[]{"apply-profile", "fast"});
+        // A direct MediaCodec presentation error can leave the existing EGL/VO state poisoned.
+        // Recreate it before reloading the decoder; changing hwdec alone still produces black.
+        MPVLib.setPropertyString("vo", "null");
+        if (decode == 1) MPVLib.setPropertyString("hwdec", "mediacodec-copy");
+        MPVLib.setPropertyString("vo", getVo());
+        // Reload only the video decoder. Demuxing, audio and the current live position continue.
+        MPVLib.command(new String[]{"video-reload"});
     }
 
     public static final class Builder {

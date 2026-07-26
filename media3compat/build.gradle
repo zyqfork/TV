@@ -22,7 +22,7 @@ android {
     }
 }
 
-def libmpvVersion = "source-3018d472-2026-07-26"
+def libmpvVersion = "source-46ef59a1-2026-07-26"
 def nativeAbis = providers.environmentVariable("FONGMI_NATIVE_ABIS")
         .getOrElse("arm64-v8a,armeabi-v7a,x86_64").split(",") as List
 def prepareLibmpv = tasks.register("prepareLibmpv") {

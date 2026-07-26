@@ -32,11 +32,11 @@ public final class MpvPlayerConfig {
         private final Map<String, String> postInitOptions = new LinkedHashMap<>();
 
         public Builder setDefaultUserAgent(String value) {
-            return addPostInitStringOption("user-agent", value);
+            return addPreInitStringOption("user-agent", value);
         }
 
         public Builder setHlsHttpPersistent(boolean value) {
-            return addPostInitStringOption("hls-http-persistent", value ? "yes" : "no");
+            return addPreInitStringOption("hls-http-persistent", value ? "yes" : "no");
         }
 
         public Builder addConfigDirectory(File directory) {
@@ -50,7 +50,7 @@ public final class MpvPlayerConfig {
 
         public Builder addAndroidDefaults(String videoOutput, File cacheDir) {
             if (videoOutput != null) addPreInitStringOption("vo", videoOutput);
-            return addPreInitStringOption("cache-dir", cacheDir.getAbsolutePath());
+            return addPreInitStringOption("gpu-shader-cache-dir", cacheDir.getAbsolutePath());
         }
 
         public Builder addTlsCaFileFromAsset(Context context, String assetName, File destination) {
@@ -67,9 +67,12 @@ public final class MpvPlayerConfig {
         }
 
         public Builder addDiskCacheOptions(File cacheDir, int seconds, int sizeMb) {
-            addPostInitStringOption("cache-dir", cacheDir.getAbsolutePath());
-            addPostInitStringOption("demuxer-readahead-secs", Integer.toString(seconds));
-            return addPostInitStringOption("demuxer-max-bytes", sizeMb + "MiB");
+            addPreInitStringOption("cache", "yes");
+            addPreInitStringOption("cache-on-disk", "yes");
+            addPreInitStringOption("demuxer-cache-dir", cacheDir.getAbsolutePath());
+            addPreInitStringOption("cache-secs", Integer.toString(seconds));
+            addPreInitStringOption("demuxer-max-bytes", sizeMb + "MiB");
+            return addPreInitStringOption("demuxer-max-back-bytes", "0");
         }
 
         public Builder addAndroidSubtitleOptions(Context context, boolean caption, double position, double scale) {

@@ -1,13 +1,14 @@
 # libmpv Android native components
 
-This module downloads the pinned `2026-04-25` mpv-android release artifacts during the build and
-packages their native libraries for `arm64-v8a` and `armeabi-v7a`.
+This module reproducibly builds mpv-android and its FFmpeg/libmpv dependencies from pinned source
+revisions. No prebuilt mpv or FFmpeg binaries are downloaded.
 
-- Project: https://github.com/mpv-android/mpv-android
-- JNI source revision: `6deb01c`
-- mpv source revision: `mpv-player/mpv@41f6a64` (libmpv 0.41.0)
+- Project fork: https://github.com/zyqfork/mpv-android
+- JNI source revision: `46ef59a1f093b30e774f463d5c5942a3ac8d22be`
+- Upstream base revision: `3018d47277d5b3ca02acdd96466f261c1d23ee08`
+- mpv source revision: `mpv-player/mpv@8c67647b50059406c5c0444903597281b81516cf`
+- FFmpeg source revision: `FFmpeg/FFmpeg@894da5ca7d742e4429ffb2af534fcda0103ef593`
 - mpv-android application/JNI code: MIT License
 - mpv and linked libraries: see the corresponding upstream source trees and release notes
 
-The artifact URLs and SHA-256 checksums are declared in `build.gradle`. Corresponding native build
-scripts are available in the mpv-android repository under `buildscripts/`.
+The complete native build entry point is `scripts/build_libmpv_android.sh`.

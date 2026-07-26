@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Java binding for the native bridge maintained by mpv-android.
  *
  * <p>The matching JNI source is available at
- * https://github.com/mpv-android/mpv-android/tree/6deb01c/app/src/main/jni
+ * https://github.com/zyqfork/mpv-android/tree/46ef59a1f093b30e774f463d5c5942a3ac8d22be/app/src/main/jni
  * under the MIT license.
  */
 public final class MPVLib {
@@ -184,6 +184,17 @@ public final class MPVLib {
         public static final int PLAYBACK_RESTART = 21;
 
         private MpvEvent() {
+        }
+    }
+
+    public static final class MpvEndFileReason {
+        public static final int EOF = 0;
+        public static final int STOP = 2;
+        public static final int QUIT = 3;
+        public static final int ERROR = 4;
+        public static final int REDIRECT = 5;
+
+        private MpvEndFileReason() {
         }
     }
 }

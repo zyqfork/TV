@@ -6,13 +6,16 @@ cache_dir=$2
 output_dir=$3
 requested_abis=${4:-arm64-v8a,armeabi-v7a,x86_64}
 ndk_version=29.0.14206865
-source_revision=3018d47277d5b3ca02acdd96466f261c1d23ee08
+source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
 
 mkdir -p "$cache_dir" "$output_dir"
 all_present=true
 IFS=, read -ra abi_list <<< "$requested_abis"
 for abi in "${abi_list[@]}"; do
-    [[ -f "$output_dir/$abi/libplayer.so" ]] || all_present=false
+    player_lib="$output_dir/$abi/libplayer.so"
+    if [[ ! -f "$player_lib" ]] || ! strings "$player_lib" | grep -q eventEndFile; then
+        all_present=false
+    fi
 done
 if $all_present; then
     exit 0
@@ -29,7 +32,7 @@ command -v docker >/dev/null || {
 
 source_dir="$cache_dir/mpv-android-$source_revision"
 if [[ ! -d "$source_dir/.git" ]]; then
-    git clone https://github.com/mpv-android/mpv-android.git "$source_dir"
+    git clone https://github.com/zyqfork/mpv-android.git "$source_dir"
 fi
 git -C "$source_dir" checkout --detach "$source_revision"
 
