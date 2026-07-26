@@ -31,6 +31,16 @@ jobs:
       - name: Install Android native toolchains
         run: sdkmanager "ndk;26.1.10909125" "ndk;29.0.14206865" "cmake;3.22.1"
 
+      - name: Configure local debug build
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "storeFile=debug.keystore"
+            echo "keyAlias=androiddebugkey"
+            echo "storePassword=android"
+            echo "keyPassword=android"
+          } > local.properties
+
       - name: Cache source-built native libraries
         uses: actions/cache@v4
         with:
