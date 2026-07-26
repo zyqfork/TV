@@ -11,12 +11,14 @@ import androidx.media3.ui.SubtitleView;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.track.LangUtil;
 import com.fongmi.android.tv.player.util.PlayerHelper;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
+import java.util.Map;
 
 public final class MpvUtil {
 
@@ -36,7 +38,7 @@ public final class MpvUtil {
     private static final String VALUE_GPU = "gpu";
     private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
-    private static final int DEFAULT_DEMUXER_CACHE_MB = 64;
+    private static final String OPT_PROXY_URL = "proxy-url";
 
     public static boolean isAvailable() {
         try {
@@ -57,8 +59,11 @@ public final class MpvUtil {
     }
 
     private static MpvPlayerConfig buildConfig() {
-        MpvPlayerConfig.Builder builder = newConfigBuilder();
-        addAndroidOptions(builder);
+        Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
+        MpvPlayerConfig.Builder builder = new MpvPlayerConfig.Builder();
+        addAndroidOptions(builder, userOptions);
+        addUserOptions(builder, userOptions);
+        addApplicationOptions(builder, userOptions);
         addTrackLanguageOptions(builder);
         addSubtitleStyleOptions(builder);
         return builder.build();
@@ -70,21 +75,18 @@ public final class MpvUtil {
         return builder.build();
     }
 
-    private static MpvPlayerConfig.Builder newConfigBuilder() {
-        return new MpvPlayerConfig.Builder().setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
-    }
-
-    private static void addAndroidOptions(MpvPlayerConfig.Builder builder) {
-        addAndroidDefaultOptions(builder);
+    private static void addAndroidOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
+        addAndroidDefaultOptions(builder, userOptions);
         addTlsCaFile(builder);
-        addVideoOutputOptions(builder);
-        addPreloadOptions(builder);
     }
 
-    private static void addAndroidDefaultOptions(MpvPlayerConfig.Builder builder) {
+    private static void addAndroidDefaultOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
         File configDir = Path.mpv();
         File cacheDir = Path.mpvCache();
-        builder.addConfigDirectory(configDir).addAndroidDefaults(getVideoOutputDriver(), cacheDir);
+        MpvConfigFiles.ensureAndroidFontsConfig(cacheDir);
+        builder.addConfigDirectory(configDir)
+                .addAndroidFontConfig(configDir, cacheDir)
+                .addAndroidDefaults(getVideoOutputDriver(userOptions), cacheDir);
     }
 
     private static void addTlsCaFile(MpvPlayerConfig.Builder builder) {
@@ -95,28 +97,50 @@ public final class MpvUtil {
         builder.addPostInitStringOption(OPT_SUB_LANG, LangUtil.getPreferredTextLanguageList());
     }
 
-    private static String getVideoOutputDriver() {
-        return PlayerSetting.isMpvGpuNext() ? MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT : VALUE_GPU;
+    private static void addUserOptions(MpvPlayerConfig.Builder builder, Map<String, String> options) {
+        for (Map.Entry<String, String> option : options.entrySet()) {
+            builder.addPreInitStringOption(option.getKey(), option.getValue());
+        }
     }
 
-    private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder) {
+    private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
+        builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
+        if (!userOptions.containsKey(OPT_PROXY_URL)) {
+            builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
+        }
+        addVideoOutputOptions(builder, userOptions);
+        addPreloadOptions(builder);
+    }
+
+    private static String getVideoOutputDriver(Map<String, String> userOptions) {
+        if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
+        return userOptions.containsKey("vo") ? null : VALUE_GPU;
+    }
+
+    private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
         // Match mpv-android: Android GLES context is required for vo=gpu, otherwise audio-only.
         if (PlayerSetting.isMpvVulkan()) {
             builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN)
                     .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
             return;
         }
-        builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
-                .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
+        if (VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))
+                && !userOptions.containsKey(OPT_GPU_CONTEXT)) {
+            builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
+            return;
+        }
+        if (!userOptions.containsKey(OPT_GPU_CONTEXT)) {
+            builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID);
+        }
+        if (!userOptions.containsKey(OPT_OPENGL_ES)
+                && !VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))) {
+            builder.addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
+        }
     }
 
     private static void addPreloadOptions(MpvPlayerConfig.Builder builder) {
-        // mpv-android always caps demuxer cache; oversized defaults stall network open.
-        int cacheMb = PreloadSetting.isPreload()
-                ? Math.max(DEFAULT_DEMUXER_CACHE_MB, PreloadSetting.getPreloadSizeMb())
-                : DEFAULT_DEMUXER_CACHE_MB;
-        int readaheadSecs = PreloadSetting.isPreload() ? PreloadSetting.getPreloadTimeSeconds() : 10;
-        builder.addDiskCacheOptions(Path.mpvCache(), readaheadSecs, cacheMb);
+        if (!PreloadSetting.isPreload()) return;
+        builder.addDiskCacheOptions(Path.mpvCache(), PreloadSetting.getPreloadTimeSeconds(), PreloadSetting.getPreloadSizeMb());
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {

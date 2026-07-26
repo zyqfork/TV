@@ -2,6 +2,7 @@ package com.fongmi.android.tv.player.exo;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
@@ -9,16 +10,20 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.RenderersFactory;
+import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.trackselection.TrackSelector;
 import androidx.media3.exoplayer.util.EventLogger;
+import androidx.media3.exoplayer.video.VideoRendererEventListener;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
@@ -26,6 +31,7 @@ import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.track.LangUtil;
 import com.fongmi.android.tv.setting.PlayerSetting;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -64,7 +70,6 @@ public class ExoUtil {
         if (PlayerSetting.isPreferAAC()) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
         builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
         builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled());
-        builder.setForceHighestSupportedBitrate(true);
         trackSelector.setParameters(builder.build());
         return trackSelector;
     }
@@ -78,13 +83,45 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildRenderersFactory(int renderMode, boolean audioPrefer, boolean videoPrefer) {
+        boolean preferByDecode = renderMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                 return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
             }
+
+            @Override
+            protected void buildVideoRenderers(Context context, int extensionRendererMode,
+                                               MediaCodecSelector mediaCodecSelector,
+                                               boolean enableDecoderFallback, Handler eventHandler,
+                                               VideoRendererEventListener eventListener,
+                                               long allowedVideoJoiningTimeMs,
+                                               ArrayList<Renderer> out) {
+                super.buildVideoRenderers(context,
+                        preferByDecode || videoPrefer
+                                ? EXTENSION_RENDERER_MODE_PREFER
+                                : EXTENSION_RENDERER_MODE_ON,
+                        mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener,
+                        allowedVideoJoiningTimeMs, out);
+            }
+
+            @Override
+            protected void buildAudioRenderers(Context context, int extensionRendererMode,
+                                               MediaCodecSelector mediaCodecSelector,
+                                               boolean enableDecoderFallback, AudioSink audioSink,
+                                               Handler eventHandler,
+                                               AudioRendererEventListener eventListener,
+                                               ArrayList<Renderer> out) {
+                super.buildAudioRenderers(context,
+                        preferByDecode || audioPrefer
+                                ? EXTENSION_RENDERER_MODE_PREFER
+                                : EXTENSION_RENDERER_MODE_ON,
+                        mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler,
+                        eventListener, out);
+            }
         };
-        return factory.setEnableDecoderFallback(true).setExtensionRendererMode(renderMode);
+        return factory.setEnableDecoderFallback(true)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
     }
 
     private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {

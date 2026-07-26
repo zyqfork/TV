@@ -236,19 +236,22 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (config.preInitOptions.containsKey("config-dir")) {
             MPVLib.setOptionString("config", "yes");
         }
-        MPVLib.setOptionString("hwdec-codecs",
-                "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1,vc1");
-        MPVLib.setOptionString("ao", "audiotrack,opensles");
-        MPVLib.setOptionString("audio-set-media-role", "yes");
-        MPVLib.setOptionString("network-timeout", "60");
+        if (!config.preInitOptions.containsKey("hwdec-codecs")) {
+            MPVLib.setOptionString("hwdec-codecs",
+                    "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1,vc1");
+        }
+        if (!config.preInitOptions.containsKey("ao")) {
+            MPVLib.setOptionString("ao", "audiotrack,opensles");
+        }
+        if (!config.preInitOptions.containsKey("audio-set-media-role")) {
+            MPVLib.setOptionString("audio-set-media-role", "yes");
+        }
+        if (!config.preInitOptions.containsKey("network-timeout")) {
+            MPVLib.setOptionString("network-timeout", "60");
+        }
         // Direct HTTP URLs must not fall into youtube-dl; missing yt-dlp would poison errors.
         if (!config.preInitOptions.containsKey("ytdl") && !config.postInitOptions.containsKey("ytdl")) {
             MPVLib.setOptionString("ytdl", "no");
-        }
-        if (!config.preInitOptions.containsKey("demuxer-max-bytes")
-                && !config.postInitOptions.containsKey("demuxer-max-bytes")) {
-            MPVLib.setOptionString("demuxer-max-bytes", "67108864");
-            MPVLib.setOptionString("demuxer-max-back-bytes", "67108864");
         }
     }
 
@@ -277,14 +280,19 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void applyDecodeOption() {
-        MPVLib.setOptionString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
+        MPVLib.setOptionString("hwdec", getDecodeOption());
+    }
+
+    private String getDecodeOption() {
+        return decode == 1
+                ? config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD)
+                : HWDEC_SOFT;
     }
 
     public void setDecode(int decode) {
         this.decode = decode;
         renderFallbackUsed = false;
-        if (!released) MPVLib.setPropertyString(
-                "hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
+        if (!released) MPVLib.setPropertyString("hwdec", getDecodeOption());
     }
 
     private String getVo() {
@@ -417,7 +425,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         firstFrameReported = false;
         renderFallbackUsed = false;
         // A previous stream may have activated the per-file copy-back fallback.
-        MPVLib.setPropertyString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
+        MPVLib.setPropertyString("hwdec", getDecodeOption());
         // Avoid loadfile options entirely: mpv 0.38+ inserted an integer index argument, and
         // KEYVALUELIST parsing differs across builds. Resume via seek after FILE_LOADED instead.
         MPVLib.command(new String[]{"loadfile", uri, "replace"});
@@ -1000,8 +1008,11 @@ public final class MpvPlayer extends SimpleBasePlayer
         MPVLib.command(new String[]{"apply-profile", "fast"});
         // A direct MediaCodec presentation error can leave the existing EGL/VO state poisoned.
         // Recreate it before reloading the decoder; changing hwdec alone still produces black.
+        String activeHwdec = MPVLib.getPropertyString("hwdec");
         MPVLib.setPropertyString("vo", "null");
-        if (decode == 1) MPVLib.setPropertyString("hwdec", "mediacodec-copy");
+        if (decode == 1 && activeHwdec != null && !"no".equals(activeHwdec)) {
+            MPVLib.setPropertyString("hwdec", "mediacodec-copy");
+        }
         MPVLib.setPropertyString("vo", getVo());
         // Reload only the video decoder. Demuxing, audio and the current live position continue.
         MPVLib.command(new String[]{"video-reload"});

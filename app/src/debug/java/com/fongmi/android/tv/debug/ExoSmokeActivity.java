@@ -18,18 +18,20 @@ public final class ExoSmokeActivity extends Activity implements Player.Listener 
 
     public static final String TAG = "ExoSmoke";
     private ExoPlayer player;
+    private int decode;
 
     @Override
     protected void onCreate(@Nullable Bundle state) {
         super.onCreate(state);
         String url = getIntent().getStringExtra("url");
         if (url == null) throw new IllegalArgumentException("Missing url extra");
+        decode = getIntent().getIntExtra("decode", 1);
         PlayerView view = new PlayerView(this);
         view.setUseController(false);
         setContentView(view);
-        player = ExoUtil.buildPlayer(0, this);
+        player = ExoUtil.buildPlayer(decode, this);
         view.setPlayer(player);
-        Log.i(TAG, "START url=" + url);
+        Log.i(TAG, "START url=" + url + " decode=" + decode);
         player.setMediaItem(MediaItem.fromUri(url));
         player.prepare();
     }
@@ -42,6 +44,12 @@ public final class ExoSmokeActivity extends Activity implements Player.Listener 
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
         Log.i(TAG, "PLAYING " + isPlaying);
+    }
+
+    @Override
+    public void onRenderedFirstFrame() {
+        Log.i(TAG, "RENDERED_FIRST_FRAME decode=" + decode
+                + " video=" + player.getVideoSize().width + "x" + player.getVideoSize().height);
     }
 
     @Override

@@ -23,6 +23,8 @@ import com.fongmi.android.tv.player.mpv.MpvUtil;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 
+import is.xyz.mpv.MPVLib;
+
 /**
  * ADB-driven debug harness used by the Android Docker playback smoke test.
  *
@@ -125,6 +127,8 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 + " durationMs=" + duration
                 + " tracks=" + player.getCurrentTracks().getGroups().size()
                 + " decode=" + decode
+                + " nativeHwdec=" + MPVLib.getPropertyString("hwdec")
+                + " nativeVo=" + MPVLib.getPropertyString("current-vo")
                 + " startMs=" + startMs
                 + " renderedFirstFrame=" + renderedFirstFrame
                 + " video=" + videoW + "x" + videoH);

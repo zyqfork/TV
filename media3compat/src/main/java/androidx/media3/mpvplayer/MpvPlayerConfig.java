@@ -1,18 +1,18 @@
 package androidx.media3.mpvplayer;
 
 import android.content.Context;
+import android.graphics.Color;
+import android.view.accessibility.CaptioningManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * Configuration accepted by the MPV compatibility player.
- *
- * <p>Options are retained so a native MPV backend can consume the same API.
- * The bundled compatibility backend currently maps playback to Media3.
+ * Configuration applied to the native libmpv-backed Media3 player.
  */
 public final class MpvPlayerConfig {
 
@@ -76,9 +76,47 @@ public final class MpvPlayerConfig {
         }
 
         public Builder addAndroidSubtitleOptions(Context context, boolean caption, double position, double scale) {
-            addPostInitStringOption("sub-visibility", caption ? "yes" : "no");
+            int foreground = Color.WHITE;
+            int background = Color.TRANSPARENT;
+            int edgeColor = Color.BLACK;
+            int edgeType = CaptioningManager.CaptionStyle.EDGE_TYPE_NONE;
+            if (caption) {
+                addPostInitStringOption("embeddedfonts", "no");
+                addPostInitStringOption("sub-ass-override", "force");
+                CaptioningManager manager =
+                        (CaptioningManager) context.getSystemService(Context.CAPTIONING_SERVICE);
+                CaptioningManager.CaptionStyle style = manager == null ? null : manager.getUserStyle();
+                if (style != null) {
+                    if (style.hasForegroundColor()) foreground = style.foregroundColor;
+                    if (style.hasBackgroundColor()) background = style.backgroundColor;
+                    if (style.hasEdgeColor()) edgeColor = style.edgeColor;
+                    if (style.hasEdgeType()) edgeType = style.edgeType;
+                }
+            }
+            addPostInitStringOption("sub-color", color(foreground));
+            addPostInitStringOption("sub-back-color", color(background));
+            addPostInitStringOption("sub-outline-color", color(edgeColor));
+            addPostInitStringOption("sub-border-style",
+                    Color.alpha(background) > 0 ? "background-box" : "outline-and-shadow");
+            if (edgeType == CaptioningManager.CaptionStyle.EDGE_TYPE_DROP_SHADOW) {
+                addPostInitStringOption("sub-back-color", color(edgeColor));
+                addPostInitStringOption("sub-border-style", "outline-and-shadow");
+                addPostInitStringOption("sub-outline-size", "0");
+                addPostInitStringOption("sub-shadow-offset", "2");
+            } else if (edgeType == CaptioningManager.CaptionStyle.EDGE_TYPE_NONE) {
+                addPostInitStringOption("sub-outline-size", caption ? "0" : "1.65");
+                addPostInitStringOption("sub-shadow-offset", "0");
+            } else {
+                addPostInitStringOption("sub-outline-size", "1.65");
+                addPostInitStringOption("sub-shadow-offset", "0");
+            }
             addPostInitStringOption("sub-pos", Double.toString(position));
             return addPostInitStringOption("sub-scale", Double.toString(scale));
+        }
+
+        private static String color(int value) {
+            return String.format(Locale.US, "#%02X%02X%02X%02X",
+                    Color.alpha(value), Color.red(value), Color.green(value), Color.blue(value));
         }
 
         public Builder addPreInitStringOption(String key, String value) {
