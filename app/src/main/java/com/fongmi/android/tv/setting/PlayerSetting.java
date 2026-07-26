@@ -27,6 +27,8 @@ public class PlayerSetting {
 
     public static void putEngine(int engine) {
         Prefers.put("player_engine", Math.clamp(engine, ENGINE_EXO, ENGINE_MPV));
+        // MPV + TextureView frequently yields audio-only with MediaCodec; prefer SurfaceView.
+        if (isMpv()) Prefers.put("render", RENDER_SURFACE);
         if (!isMpv() && isTunnel()) Prefers.put("render", RENDER_SURFACE);
     }
 

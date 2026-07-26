@@ -1038,6 +1038,11 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     @Override
+    protected boolean stopPlaybackOnBackground() {
+        return !isInPictureInPictureMode();
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (PlayerSetting.isBackgroundOff()) mClock.stop();

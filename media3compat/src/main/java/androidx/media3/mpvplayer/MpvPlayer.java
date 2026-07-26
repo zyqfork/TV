@@ -52,6 +52,10 @@ public final class MpvPlayer extends SimpleBasePlayer
         implements MPVLib.EventObserver, MPVLib.LogObserver {
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
+    /** Prefer zero-copy MediaCodec, then copy-back; matches mpv-android HWDECS. */
+    private static final String HWDEC_HARD = "mediacodec,mediacodec-copy";
+    private static final String HWDEC_SOFT = "no";
+    private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
     private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "eof-reached", "seekable"};
     private static final String[] OBSERVED_INT = {"video-params/w", "video-params/h"};
@@ -68,9 +72,14 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Nullable private MediaItem mediaItem;
     @Nullable private Object videoOutput;
     @Nullable private Surface attachedSurface;
+    @Nullable private String pendingLoadUri;
     private boolean ownsSurface;
+    private boolean surfaceReady;
+    private boolean fileLoaded;
+    private boolean firstFrameReported;
     private int decode;
     private long positionMs;
+    private long pendingSeekMs = C.TIME_UNSET;
     private long durationMs = C.TIME_UNSET;
     private long bufferedPositionMs;
     private int videoWidth;
@@ -188,6 +197,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         }
         try {
             MPVLib.create(context);
+            applyAndroidDefaults();
             applyOptions(config.preInitOptions);
             applyDecodeOption();
             MPVLib.init();
@@ -195,14 +205,44 @@ public final class MpvPlayer extends SimpleBasePlayer
             MPVLib.releaseInstance();
             throw error;
         }
-        applyOptions(config.postInitOptions);
-        MPVLib.setOptionString("force-window", "no");
-        MPVLib.setOptionString("idle", "yes");
+        // After init, options must be set as properties (setOptionString is a no-op/fragile).
+        applyProperties(config.postInitOptions);
+        // Same as mpv-android BaseMPVView: keep VO idle until a Surface is attached.
+        MPVLib.setPropertyString("force-window", "no");
+        MPVLib.setPropertyString("idle", "yes");
         MPVLib.addObserver(this);
         MPVLib.addLogObserver(this);
         for (String property : OBSERVED_DOUBLE) MPVLib.observeProperty(property, MPVLib.MpvFormat.DOUBLE);
         for (String property : OBSERVED_FLAG) MPVLib.observeProperty(property, MPVLib.MpvFormat.FLAG);
         for (String property : OBSERVED_INT) MPVLib.observeProperty(property, MPVLib.MpvFormat.INT64);
+    }
+
+    private void applyAndroidDefaults() {
+        // Required for vo=gpu on Android. Without these, playback is often audio-only.
+        if (!config.preInitOptions.containsKey("gpu-context")) {
+            MPVLib.setOptionString("gpu-context", "android");
+            MPVLib.setOptionString("opengl-es", "yes");
+        }
+        if (!config.preInitOptions.containsKey("vo")) {
+            MPVLib.setOptionString("vo", VO_DEFAULT);
+        }
+        // Allow reading mpv.conf from config-dir (mpv-android does the same).
+        if (config.preInitOptions.containsKey("config-dir")) {
+            MPVLib.setOptionString("config", "yes");
+        }
+        MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
+        MPVLib.setOptionString("ao", "audiotrack,opensles");
+        MPVLib.setOptionString("audio-set-media-role", "yes");
+        MPVLib.setOptionString("network-timeout", "60");
+        // Direct HTTP URLs must not fall into youtube-dl; missing yt-dlp would poison errors.
+        if (!config.preInitOptions.containsKey("ytdl") && !config.postInitOptions.containsKey("ytdl")) {
+            MPVLib.setOptionString("ytdl", "no");
+        }
+        if (!config.preInitOptions.containsKey("demuxer-max-bytes")
+                && !config.postInitOptions.containsKey("demuxer-max-bytes")) {
+            MPVLib.setOptionString("demuxer-max-bytes", "67108864");
+            MPVLib.setOptionString("demuxer-max-back-bytes", "67108864");
+        }
     }
 
     private void onAudioFocusChange(int change) {
@@ -223,13 +263,23 @@ public final class MpvPlayer extends SimpleBasePlayer
         }
     }
 
+    private void applyProperties(Map<String, String> options) {
+        for (Map.Entry<String, String> option : options.entrySet()) {
+            MPVLib.setPropertyString(option.getKey(), option.getValue());
+        }
+    }
+
     private void applyDecodeOption() {
-        MPVLib.setOptionString("hwdec", decode == 1 ? "mediacodec-copy" : "no");
+        MPVLib.setOptionString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
     }
 
     public void setDecode(int decode) {
         this.decode = decode;
-        if (!released) MPVLib.setPropertyString("hwdec", decode == 1 ? "mediacodec-copy" : "no");
+        if (!released) MPVLib.setPropertyString("hwdec", decode == 1 ? HWDEC_HARD : HWDEC_SOFT);
+    }
+
+    private String getVo() {
+        return config.preInitOptions.getOrDefault("vo", VO_DEFAULT);
     }
 
     public int getDecode() {
@@ -237,7 +287,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     public void setSubtitleOptions(MpvPlayerConfig subtitleConfig) {
-        if (!released) applyOptions(subtitleConfig.postInitOptions);
+        if (!released) applyProperties(subtitleConfig.postInitOptions);
     }
 
     public void addSubtitle(MediaItem.SubtitleConfiguration subtitle) {
@@ -326,9 +376,12 @@ public final class MpvPlayer extends SimpleBasePlayer
         currentMediaItemIndex = mediaItems.isEmpty()
                 ? 0 : Math.min(requestedIndex, mediaItems.size() - 1);
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(currentMediaItemIndex);
-        positionMs = Math.max(0, startPositionMs);
+        // C.TIME_UNSET must not be treated as a resume offset.
+        positionMs = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
+        pendingSeekMs = positionMs > 0 ? positionMs : C.TIME_UNSET;
         durationMs = C.TIME_UNSET;
         lastNativeError = null;
+        fileLoaded = false;
         bufferedPositionMs = positionMs;
         updateState(STATE_IDLE, false, null);
         return done();
@@ -340,16 +393,36 @@ public final class MpvPlayer extends SimpleBasePlayer
         updateState(STATE_BUFFERING, state.playWhenReady, null);
         applyHttpHeaders(mediaItem);
         String uri = mediaItem.localConfiguration.uri.toString();
-        if (positionMs > 0) {
-            MPVLib.command(new String[]{"loadfile", uri, "replace", "start=" + (positionMs / 1000.0)});
+        // mpv-android waits for Surface before the first loadfile; loading earlier often
+        // leaves video without an output (audio-only) especially with MediaCodec hwdec.
+        if (surfaceReady) {
+            loadFile(uri);
         } else {
-            MPVLib.command(new String[]{"loadfile", uri, "replace"});
+            pendingLoadUri = uri;
         }
+        return done();
+    }
+
+    private void loadFile(String uri) {
+        fileLoaded = false;
+        firstFrameReported = false;
+        // Avoid loadfile options entirely: mpv 0.38+ inserted an integer index argument, and
+        // KEYVALUELIST parsing differs across builds. Resume via seek after FILE_LOADED instead.
+        MPVLib.command(new String[]{"loadfile", uri, "replace"});
+    }
+
+    private void applyPendingSeekAndSubtitles() {
+        if (pendingSeekMs != C.TIME_UNSET && pendingSeekMs > 0) {
+            MPVLib.command(new String[]{
+                    "seek", Double.toString(pendingSeekMs / 1000.0), "absolute+exact"
+            });
+            pendingSeekMs = C.TIME_UNSET;
+        }
+        if (mediaItem == null || mediaItem.localConfiguration == null) return;
         for (MediaItem.SubtitleConfiguration subtitle :
                 mediaItem.localConfiguration.subtitleConfigurations) {
             MPVLib.command(new String[]{"sub-add", subtitle.uri.toString(), "auto"});
         }
-        return done();
     }
 
     private void applyHttpHeaders(MediaItem item) {
@@ -489,6 +562,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     protected ListenableFuture<?> handleStop() {
+        pendingLoadUri = null;
+        fileLoaded = false;
+        MPVLib.setPropertyBoolean("pause", true);
         MPVLib.command(new String[]{"stop"});
         positionMs = 0;
         updateState(STATE_IDLE, false, null);
@@ -528,7 +604,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     protected ListenableFuture<?> handleSetVideoOutput(Object output) {
-        clearVideoOutputInternal();
+        // Keep the current native surface alive until the replacement is ready. PlayerView may
+        // replace SurfaceView/SurfaceHolder objects while playback is running.
+        unregisterVideoOutputCallbacks();
         videoOutput = output;
         if (output instanceof Surface surface) {
             attachNativeSurface(surface);
@@ -544,6 +622,8 @@ public final class MpvPlayer extends SimpleBasePlayer
             if (view.isAvailable() && view.getSurfaceTexture() != null) {
                 attachNativeSurface(new Surface(view.getSurfaceTexture()), true);
             }
+        } else {
+            detachNativeSurface();
         }
         return done();
     }
@@ -559,16 +639,48 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void attachNativeSurface(Surface surface, boolean ownsSurface) {
-        detachNativeSurface();
+        if (attachedSurface == surface && surfaceReady) {
+            MPVLib.setPropertyString("force-window", "yes");
+            MPVLib.setPropertyString("vo", getVo());
+            return;
+        }
+        Surface oldSurface = attachedSurface;
+        boolean releaseOldSurface = this.ownsSurface;
         attachedSurface = surface;
         this.ownsSurface = ownsSurface;
-        MPVLib.attachSurface(surface);
+        if (oldSurface == null) {
+            MPVLib.attachSurface(surface);
+        } else {
+            try {
+                // FongMi's bridge changes the render target without destroying the active VO.
+                MPVLib.replaceSurface(surface);
+            } catch (UnsatisfiedLinkError unsupportedByOldBridge) {
+                // Keep x86/debug builds based on upstream mpv-android compatible.
+                MPVLib.detachSurface();
+                MPVLib.attachSurface(surface);
+            }
+            if (releaseOldSurface) oldSurface.release();
+        }
+        // Match mpv-android BaseMPVView surfaceCreated().
         MPVLib.setPropertyString("force-window", "yes");
-        MPVLib.setPropertyString("vo", config.preInitOptions.getOrDefault("vo", "gpu"));
+        MPVLib.setPropertyString("vo", getVo());
+        surfaceReady = true;
+        if (pendingLoadUri != null) {
+            String uri = pendingLoadUri;
+            pendingLoadUri = null;
+            loadFile(uri);
+        } else if (fileLoaded) {
+            // Surface came back after a transient detach: keep demuxer, restore VO only.
+            MPVLib.setPropertyString("vo", getVo());
+            firstFrameReported = false;
+            reportFirstFrame();
+        }
     }
 
     private void detachNativeSurface() {
         if (attachedSurface == null) return;
+        surfaceReady = false;
+        // Keep demux/decode alive; only tear down the video output while surface is gone.
         MPVLib.setPropertyString("vo", "null");
         MPVLib.setPropertyString("force-window", "no");
         MPVLib.detachSurface();
@@ -578,6 +690,12 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void clearVideoOutputInternal() {
+        unregisterVideoOutputCallbacks();
+        detachNativeSurface();
+        videoOutput = null;
+    }
+
+    private void unregisterVideoOutputCallbacks() {
         if (videoOutput instanceof SurfaceHolder holder) {
             holder.removeCallback(surfaceCallback);
         } else if (videoOutput instanceof SurfaceView view) {
@@ -586,20 +704,27 @@ public final class MpvPlayer extends SimpleBasePlayer
                 && view.getSurfaceTextureListener() == textureListener) {
             view.setSurfaceTextureListener(null);
         }
-        detachNativeSurface();
-        videoOutput = null;
     }
 
     @Override
     protected ListenableFuture<?> handleRelease() {
         if (released) return done();
         released = true;
-        clearVideoOutputInternal();
         MPVLib.removeObserver(this);
         MPVLib.removeLogObserver(this);
         audioManager.abandonAudioFocusRequest(audioFocusRequest);
-        MPVLib.destroy();
-        MPVLib.releaseInstance();
+        pendingLoadUri = null;
+        fileLoaded = false;
+        try {
+            // Do not rely on Service/Activity ordering: silence native audio synchronously before
+            // destroying the handle, including task-removal and application shutdown paths.
+            MPVLib.setPropertyBoolean("pause", true);
+            MPVLib.command(new String[]{"stop"});
+            clearVideoOutputInternal();
+            MPVLib.destroy();
+        } finally {
+            MPVLib.releaseInstance();
+        }
         return done();
     }
 
@@ -669,13 +794,15 @@ public final class MpvPlayer extends SimpleBasePlayer
                 case MPVLib.MpvEvent.START_FILE ->
                         updateState(STATE_BUFFERING, state.playWhenReady, null);
                 case MPVLib.MpvEvent.FILE_LOADED -> {
+                    fileLoaded = true;
+                    applyPendingSeekAndSubtitles();
                     refreshTracks();
                     refreshChaptersAndEditions();
                     lastNativeError = null;
                     updateState(STATE_READY, state.playWhenReady, null);
                 }
-                case MPVLib.MpvEvent.PLAYBACK_RESTART ->
-                        updateState(STATE_READY, state.playWhenReady, null);
+                case MPVLib.MpvEvent.VIDEO_RECONFIG, MPVLib.MpvEvent.PLAYBACK_RESTART ->
+                        reportFirstFrame();
                 case MPVLib.MpvEvent.END_FILE -> {
                     if (currentMediaItemIndex + 1 < playlist.size()
                             && state.repeatMode != REPEAT_MODE_ONE) {
@@ -696,6 +823,15 @@ public final class MpvPlayer extends SimpleBasePlayer
                                         PlaybackException.ERROR_CODE_UNSPECIFIED));
             }
         });
+    }
+
+    private void reportFirstFrame() {
+        if (firstFrameReported || !surfaceReady) return;
+        firstFrameReported = true;
+        state = buildState(STATE_READY, state.playWhenReady, null).buildUpon()
+                .setNewlyRenderedFirstFrame(true)
+                .build();
+        invalidateState();
     }
 
     private void refreshTracks() {
@@ -789,7 +925,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     public void logMessage(String prefix, int level, String text) {
-        if (level > 20 || text == null || text.isBlank()) return;
+        // mpv: 0=fatal 10=error 20=warn. Ignore hook/script noise that is not a stream failure.
+        if (level > 10 || text == null || text.isBlank()) return;
+        if ("ytdl_hook".equals(prefix)) return;
         onApplicationThread(() -> lastNativeError = "mpv[" + prefix + "]: " + text.trim());
     }
 

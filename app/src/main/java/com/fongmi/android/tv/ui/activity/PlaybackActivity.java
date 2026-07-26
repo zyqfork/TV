@@ -123,6 +123,16 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return key == null || (mService != null && key.equals(player().getKey()));
     }
 
+    /**
+     * Whether leaving this activity must terminate playback rather than keeping the service alive.
+     *
+     * <p>Live screens override this because continuing a live stream with no visible playback UI
+     * leaks network/decoder resources and leaves audio playing after returning home.
+     */
+    protected boolean stopPlaybackOnBackground() {
+        return false;
+    }
+
     protected <T> void observeForever(LiveData<T> liveData, Observer<T> observer) {
         liveData.observeForever(observer);
         foreverObserverRemovers.add(() -> liveData.removeObserver(observer));
@@ -340,7 +350,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void attachSurface() {
-        if (mService != null && getPlayerView().getPlayer() == null) getPlayerView().setPlayer(player().getPlayer());
+        if (mService != null && getPlayerView().getPlayer() == null) {
+            // MPV renders directly to the Surface. An artwork/EPG logo left by PlayerView can
+            // otherwise cover the moving video even after native rendering has started.
+            getPlayerView().setUseArtwork(player().getEngine() != PlayerSetting.ENGINE_MPV);
+            getPlayerView().setPlayer(player().getPlayer());
+        }
         applyDanmaku();
     }
 
@@ -541,7 +556,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     protected void onStop() {
         super.onStop();
-        if (isOwner() && PlayerSetting.isBackgroundOff() && mController != null) mController.pause();
+        if (!isOwner() || mController == null) return;
+        if (stopPlaybackOnBackground() && mService != null) {
+            detachSurface();
+            mService.suspend();
+        } else if (PlayerSetting.isBackgroundOff()) {
+            mController.pause();
+        }
     }
 
     @Override

@@ -161,7 +161,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        tryShutdown();
+        // Removing the app task is an explicit exit. Do not keep VOD/MPV audio alive merely
+        // because a stale controller or navigation callback still references this service.
+        shutdown();
     }
 
     @Override

@@ -29,9 +29,14 @@ public final class MpvUtil {
     private static final double MAX_SUB_POS = 150.0;
     private static final String OPT_GPU_API = "gpu-api";
     private static final String OPT_GPU_CONTEXT = "gpu-context";
+    private static final String OPT_OPENGL_ES = "opengl-es";
     private static final String OPT_SUB_LANG = "slang";
+    private static final String VALUE_ANDROID = "android";
     private static final String VALUE_ANDROID_VK = "androidvk";
+    private static final String VALUE_GPU = "gpu";
     private static final String VALUE_VULKAN = "vulkan";
+    private static final String VALUE_YES = "yes";
+    private static final int DEFAULT_DEMUXER_CACHE_MB = 64;
 
     public static boolean isAvailable() {
         try {
@@ -91,17 +96,27 @@ public final class MpvUtil {
     }
 
     private static String getVideoOutputDriver() {
-        return PlayerSetting.isMpvGpuNext() ? MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT : null;
+        return PlayerSetting.isMpvGpuNext() ? MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT : VALUE_GPU;
     }
 
     private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder) {
-        if (!PlayerSetting.isMpvVulkan()) return;
-        builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN).addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
+        // Match mpv-android: Android GLES context is required for vo=gpu, otherwise audio-only.
+        if (PlayerSetting.isMpvVulkan()) {
+            builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN)
+                    .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
+            return;
+        }
+        builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
+                .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
     }
 
     private static void addPreloadOptions(MpvPlayerConfig.Builder builder) {
-        if (!PreloadSetting.isPreload()) return;
-        builder.addDiskCacheOptions(Path.mpvCache(), PreloadSetting.getPreloadTimeSeconds(), PreloadSetting.getPreloadSizeMb());
+        // mpv-android always caps demuxer cache; oversized defaults stall network open.
+        int cacheMb = PreloadSetting.isPreload()
+                ? Math.max(DEFAULT_DEMUXER_CACHE_MB, PreloadSetting.getPreloadSizeMb())
+                : DEFAULT_DEMUXER_CACHE_MB;
+        int readaheadSecs = PreloadSetting.isPreload() ? PreloadSetting.getPreloadTimeSeconds() : 10;
+        builder.addDiskCacheOptions(Path.mpvCache(), readaheadSecs, cacheMb);
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {

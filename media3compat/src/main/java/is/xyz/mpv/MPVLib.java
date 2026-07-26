@@ -52,6 +52,14 @@ public final class MPVLib {
 
     public static native void attachSurface(Surface surface);
 
+    /**
+     * Atomically switches the Android render target.
+     *
+     * <p>This entry point is provided by FongMi's player bridge. Older mpv-android builds don't
+     * have it, so callers must fall back to detach/attach when it is unavailable.
+     */
+    public static native void replaceSurface(Surface surface);
+
     public static native void detachSurface();
 
     public static native void command(String[] command);
@@ -125,6 +133,11 @@ public final class MPVLib {
     }
 
     @SuppressWarnings("unused")
+    public static void eventEndFile(int reason, int error, String fileError) {
+        for (EventObserver observer : observers) observer.eventEndFile(reason, error, fileError);
+    }
+
+    @SuppressWarnings("unused")
     public static void logMessage(String prefix, int level, String text) {
         for (LogObserver observer : logObservers) observer.logMessage(prefix, level, text);
     }
@@ -141,6 +154,10 @@ public final class MPVLib {
         void eventProperty(String property, double value);
 
         void event(int eventId);
+
+        default void eventEndFile(int reason, int error, String fileError) {
+            event(MpvEvent.END_FILE);
+        }
     }
 
     public interface LogObserver {

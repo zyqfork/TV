@@ -1116,6 +1116,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     @Override
+    protected boolean stopPlaybackOnBackground() {
+        return !isAudioOnly() && !isInPictureInPictureMode();
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (!isAudioOnly()) setStop(true);

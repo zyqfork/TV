@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.mpv;
 
+import androidx.media3.common.C;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.mpvplayer.MpvPlayer;
@@ -66,7 +67,8 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public void start(PlaySpec spec, long startPositionMs) {
-        player.setMediaItem(MediaItemFactory.from(spec), startPositionMs);
+        long position = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
+        player.setMediaItem(MediaItemFactory.from(spec), position);
         player.prepare();
         player.play();
     }

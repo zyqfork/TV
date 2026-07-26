@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = 'com.fongmi.media3.compat'
     compileSdk libs.versions.compileSdk.get().toInteger()
+    ndkVersion "26.1.10909125"
 
     defaultConfig {
         minSdk libs.versions.minSdk.get().toInteger()
@@ -12,6 +13,7 @@ android {
 
     sourceSets {
         main.jniLibs.srcDir("${project.layout.buildDirectory.get()}/generated/libmpv/jniLibs")
+        main.java.srcDir("${project.layout.buildDirectory.get()}/generated/ffmpeg/java")
     }
 
     compileOptions {
@@ -20,58 +22,91 @@ android {
     }
 }
 
-def libmpvVersion = "2026-04-25"
-def libmpvArtifacts = [
-        "arm64-v8a"  : [
-                file: "app-default-arm64-v8a-release.apk",
-                sha256: "4400bcba6be9cec1128e24d1eba153d8727384926b0639fa7fe44d4e36b04f81"
-        ],
-        "armeabi-v7a": [
-                file: "app-default-armeabi-v7a-release.apk",
-                sha256: "95a863eddc407f95bb1e5917957d7a9b0e6e290109ee5709b7eb3bc90458a024"
-        ],
-        "x86_64"     : [
-                file: "app-default-x86_64-release.apk",
-                sha256: "af240afd26d7110f83ee14a6dbb6c2b451eb1849ea99bb8a27e1928a7df7d873"
-        ]
-]
-
+def libmpvVersion = "source-3018d472-2026-07-26"
+def nativeAbis = providers.environmentVariable("FONGMI_NATIVE_ABIS")
+        .getOrElse("arm64-v8a,armeabi-v7a,x86_64").split(",") as List
 def prepareLibmpv = tasks.register("prepareLibmpv") {
     def outputDir = layout.buildDirectory.dir("generated/libmpv/jniLibs")
+    def ffmpegBuildScript = layout.projectDirectory.file("scripts/build_ffmpeg_x86_64.sh")
+    def libmpvBuildScript = layout.projectDirectory.file("scripts/build_libmpv_android.sh")
     outputs.dir(outputDir)
+    inputs.file(ffmpegBuildScript)
+    inputs.file(libmpvBuildScript)
     inputs.property("libmpvVersion", libmpvVersion)
-    inputs.properties(libmpvArtifacts.collectEntries { abi, artifact -> [(abi): artifact.sha256] })
+    inputs.property("nativeAbis", nativeAbis.join(","))
 
     doLast {
         def cacheDir = new File(gradle.gradleUserHomeDir, "caches/fongmi-libmpv/${libmpvVersion}")
         cacheDir.mkdirs()
-        libmpvArtifacts.each { abi, artifact ->
-            def apk = new File(cacheDir, artifact.file)
-            if (!apk.exists() || apk.bytes.digest("SHA-256") != artifact.sha256) {
-                apk.delete()
-                new URI("https://github.com/mpv-android/mpv-android/releases/download/${libmpvVersion}/${artifact.file}")
-                        .toURL().withInputStream { input -> apk.withOutputStream { it << input } }
+        def sourceBuild = new ProcessBuilder(
+                "bash", libmpvBuildScript.asFile.absolutePath,
+                androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath,
+                cacheDir.absolutePath, outputDir.get().asFile.absolutePath,
+                nativeAbis.join(","))
+                .inheritIO().start()
+        if (sourceBuild.waitFor() != 0) {
+            throw new GradleException("Failed to build ARM libmpv from source")
+        }
+        nativeAbis.each { abi ->
+            def ffmpegJni = outputDir.get().file("${abi}/libffmpegJNI.so").asFile
+            def command = [
+                    "bash", ffmpegBuildScript.asFile.absolutePath,
+                    androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath,
+                    new File(gradle.gradleUserHomeDir,
+                            "caches/fongmi-ffmpeg-${abi}").absolutePath,
+                    ffmpegJni.absolutePath, abi
+            ]
+            def process = new ProcessBuilder(command).inheritIO().start()
+            if (process.waitFor() != 0) {
+                throw new GradleException("Failed to build ${abi} FFmpeg JNI")
             }
-            def actual = apk.bytes.digest("SHA-256")
-            if (actual != artifact.sha256) {
-                throw new GradleException("libmpv artifact checksum mismatch for ${artifact.file}")
+        }
+    }
+}
+
+def ffmpegSourceRevision = "c8a183b8ca7e57f43213c55f418d89fe45965db8"
+def ffmpegSources = [
+        "FfmpegLibrary.java": "4453935015abbdadbeba04c4aca171c0c2d51738fe79c12f176ec5f4da9457ac",
+        "FfmpegDecoderException.java": "9e73968d0802b2d7f8add911ec4dc5a6e621777e997eca74332e173c5463ad7a",
+        "FfmpegAudioRenderer.java": "bb860123a49456e48761fff145eed3d156497be77346955d93286286d42a9a3f",
+        "FfmpegAudioDecoder.java": "1f88283be0226e9d1cab8d6b7055f75e9ca0678e74818704822b4a1d8613fb25"
+]
+
+def prepareFfmpegSources = tasks.register("prepareFfmpegSources") {
+    def packageDir = layout.buildDirectory.dir(
+            "generated/ffmpeg/java/androidx/media3/decoder/ffmpeg")
+    outputs.dir(packageDir)
+    inputs.property("ffmpegSourceRevision", ffmpegSourceRevision)
+    inputs.properties(ffmpegSources)
+    doLast {
+        def output = packageDir.get().asFile
+        output.mkdirs()
+        ffmpegSources.each { source, checksum ->
+            def target = new File(output, source)
+            if (!target.exists() || target.bytes.digest("SHA-256") != checksum) {
+                target.delete()
+                def url = "https://raw.githubusercontent.com/FongMi/media/${ffmpegSourceRevision}" +
+                        "/libraries/decoder_ffmpeg/src/main/java/androidx/media3/decoder/ffmpeg/${source}"
+                new URI(url).toURL().withInputStream { input ->
+                    target.withOutputStream { it << input }
+                }
             }
-            copy {
-                from zipTree(apk)
-                include "lib/${abi}/*.so"
-                eachFile { path = path.replaceFirst("lib/", "") }
-                includeEmptyDirs = false
-                into outputDir
+            if (target.bytes.digest("SHA-256") != checksum) {
+                throw new GradleException("FFmpeg source checksum mismatch for ${source}")
             }
         }
     }
 }
 
 tasks.configureEach {
-    if (name == "preBuild") dependsOn(prepareLibmpv)
+    if (name == "preBuild") {
+        dependsOn(prepareLibmpv)
+        dependsOn(prepareFfmpegSources)
+    }
 }
 
 dependencies {
+    compileOnly "org.checkerframework:checker-qual:3.13.0"
     api "androidx.media3:media3-exoplayer:1.10.1"
     api "androidx.media3:media3-exoplayer-dash:1.10.1"
     api "androidx.media3:media3-exoplayer-hls:1.10.1"
