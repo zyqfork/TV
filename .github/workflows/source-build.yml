@@ -26,16 +26,27 @@ jobs:
           java-version: "21"
           cache: gradle
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: chaquo/requirements.txt
+
       - uses: android-actions/setup-android@v3
 
       - name: Install Android native toolchains
         run: sdkmanager "ndk;26.1.10909125" "ndk;29.0.14206865" "cmake;3.22.1"
 
-      - name: Configure local debug build
+      - name: Configure CI release signing
         run: |
+          keytool -genkeypair -noprompt \
+            -keystore app/ci-release.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey -dname "CN=CI" \
+            -keyalg RSA -keysize 2048 -validity 10000
           {
             echo "sdk.dir=$ANDROID_HOME"
-            echo "storeFile=debug.keystore"
+            echo "storeFile=ci-release.keystore"
             echo "keyAlias=androiddebugkey"
             echo "storePassword=android"
             echo "keyPassword=android"
@@ -55,18 +66,18 @@ jobs:
           ! grep -R -E 'FongMi/Release|releases/download/.+\\.apk|zipTree\\(.+apk' \
             media3compat app/build.gradle
 
-      - name: Build debug APK from source
-        run: ./gradlew :app:assembleLeanbackArm64_v8aDebug --stacktrace
+      - name: Build release APK from source
+        run: ./gradlew :app:assembleLeanbackArm64_v8aRelease --stacktrace
 
       - name: Verify source-built AV1 extension
         run: |
           test -f media3compat/build/generated/av1/java/androidx/media3/decoder/av1/Libdav1dVideoRenderer.java
-          unzip -l app/build/outputs/apk/leanbackArm64_v8a/debug/*.apk |
+          unzip -l app/build/outputs/apk/leanbackArm64_v8a/release/*.apk |
             grep -q 'lib/arm64-v8a/libdav1dJNI.so'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: leanback-arm64-source-debug
-          path: app/build/outputs/apk/leanbackArm64_v8a/debug/*.apk
+          name: leanback-arm64-source-release
+          path: app/build/outputs/apk/leanbackArm64_v8a/release/*.apk
           if-no-files-found: error
