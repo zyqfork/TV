@@ -48,7 +48,19 @@ apt-get install -y autoconf automake build-essential ca-certificates cmake git g
     libtool nasm ninja-build pkg-config python3 python3-pip unzip wget xz-utils >/dev/null
 pip3 install --break-system-packages 'meson>=1.6.1' >/dev/null
 git config --global --add safe.directory '*'
-if [[ ! -d deps/mpv ]]; then IN_CI=1 ./include/download-deps.sh; fi
+if [[ ! -d deps/mpv ]]; then
+    for attempt in 1 2 3; do
+        rm -rf deps
+        if IN_CI=1 ./include/download-deps.sh; then
+            break
+        fi
+        echo \"Dependency download attempt \$attempt failed.\" >&2
+    done
+fi
+[[ -d deps/mpv/.git ]] || {
+    echo \"Unable to download the pinned mpv dependency sources.\" >&2
+    exit 1
+}
 git -C deps/dav1d checkout --detach 54706fc6bc0cdecab7e9593974a4039cc038fca7
 git -C deps/ffmpeg checkout --detach 894da5ca7d742e4429ffb2af534fcda0103ef593
 git -C deps/freetype2 checkout --detach 0a0221a1347e2f1e07c395263540026e9a0aa7c7
