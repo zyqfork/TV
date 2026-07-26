@@ -84,7 +84,7 @@ public final class MpvUtil {
     private static void addAndroidDefaultOptions(MpvPlayerConfig.Builder builder) {
         File configDir = Path.mpv();
         File cacheDir = Path.mpvCache();
-        builder.addConfigDirectory(configDir).addAndroidFontConfig(configDir, cacheDir).addAndroidDefaults(getVideoOutputDriver(), cacheDir);
+        builder.addConfigDirectory(configDir).addAndroidDefaults(getVideoOutputDriver(), cacheDir);
     }
 
     private static void addTlsCaFile(MpvPlayerConfig.Builder builder) {

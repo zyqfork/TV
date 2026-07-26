@@ -18,6 +18,11 @@ import androidx.media3.mpvplayer.MpvPlayer;
 import androidx.media3.mpvplayer.MpvPlayerConfig;
 import androidx.media3.ui.PlayerView;
 
+import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.player.mpv.MpvUtil;
+import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.ui.activity.VideoActivity;
+
 /**
  * ADB-driven debug harness used by the Android Docker playback smoke test.
  *
@@ -47,6 +52,12 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         String headerName = getIntent().getStringExtra("header_name");
         String headerValue = getIntent().getStringExtra("header_value");
         if (url == null) throw new IllegalArgumentException("Missing url extra");
+        if (getIntent().getBooleanExtra("formal_activity", false)) {
+            PlayerSetting.putEngine(PlayerSetting.ENGINE_MPV);
+            VideoActivity.start(this, url);
+            finish();
+            return;
+        }
 
         Log.i(TAG, "FFMPEG available=" + FfmpegLibrary.isAvailable()
                 + " version=" + FfmpegLibrary.getVersion()
@@ -57,19 +68,26 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         decode = getIntent().getIntExtra("decode", 1);
         startMs = Math.max(0, getIntent().getLongExtra("start_ms", 0L));
 
-        PlayerView view = new PlayerView(this);
+        setContentView(R.layout.activity_mpv_smoke);
+        PlayerView view = findViewById(R.id.player);
+        // Exercise the same surface_type=none -> dynamic SurfaceView path as PlaybackActivity.
+        view.setRender(0);
+        view.setArtworkDisplayMode(PlayerView.ARTWORK_DISPLAY_MODE_OFF);
         view.setUseController(false);
-        setContentView(view);
-        player = new MpvPlayer.Builder(this)
-                .setDecode(decode)
-                .setConfig(new MpvPlayerConfig.Builder()
-                        .addPreInitStringOption("gpu-context", "android")
-                        .addPreInitStringOption("opengl-es", "yes")
-                        .addPreInitStringOption("vo", "gpu")
-                        .addPreInitStringOption("ytdl", "no")
-                        .build())
-                .build();
-        player.addListener(this);
+        if (getIntent().getBooleanExtra("formal_config", false)) {
+            player = MpvUtil.buildPlayer(decode, this);
+        } else {
+            player = new MpvPlayer.Builder(this)
+                    .setDecode(decode)
+                    .setConfig(new MpvPlayerConfig.Builder()
+                            .addPreInitStringOption("gpu-context", "android")
+                            .addPreInitStringOption("opengl-es", "yes")
+                            .addPreInitStringOption("vo", "gpu")
+                            .addPreInitStringOption("ytdl", "no")
+                            .build())
+                    .build();
+            player.addListener(this);
+        }
         view.setPlayer(player);
 
         MediaItem.RequestMetadata.Builder request = new MediaItem.RequestMetadata.Builder();

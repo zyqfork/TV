@@ -108,7 +108,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private final SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
-            attachNativeSurface(holder.getSurface());
+            attachSurfaceHolder(holder);
         }
 
         @Override
@@ -619,11 +619,11 @@ public final class MpvPlayer extends SimpleBasePlayer
             attachNativeSurface(surface);
         } else if (output instanceof SurfaceHolder holder) {
             holder.addCallback(surfaceCallback);
-            if (holder.getSurface().isValid()) attachNativeSurface(holder.getSurface());
+            if (holder.getSurface().isValid()) attachSurfaceHolder(holder);
         } else if (output instanceof SurfaceView view) {
             SurfaceHolder holder = view.getHolder();
             holder.addCallback(surfaceCallback);
-            if (holder.getSurface().isValid()) attachNativeSurface(holder.getSurface());
+            if (holder.getSurface().isValid()) attachSurfaceHolder(holder);
         } else if (output instanceof TextureView view) {
             view.setSurfaceTextureListener(textureListener);
             if (view.isAvailable() && view.getSurfaceTexture() != null) {
@@ -643,6 +643,21 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private void attachNativeSurface(Surface surface) {
         attachNativeSurface(surface, false);
+    }
+
+    private void attachSurfaceHolder(SurfaceHolder holder) {
+        // PlayerView can dynamically create its SurfaceView before assigning the player. In that
+        // case SurfaceHolder.Callback is registered after surfaceChanged() already ran. libmpv's
+        // Android GPU context still needs the existing buffer size or it can present one frame and
+        // then leave that frame frozen while audio continues.
+        int width = holder.getSurfaceFrame().width();
+        int height = holder.getSurfaceFrame().height();
+        attachNativeSurface(holder.getSurface());
+        if (width > 0 && height > 0) {
+            // Set this after wid/Surface is attached. The Android GPU context may ignore a resize
+            // sent before it has a native window.
+            MPVLib.setPropertyString("android-surface-size", width + "x" + height);
+        }
     }
 
     private void attachNativeSurface(Surface surface, boolean ownsSurface) {

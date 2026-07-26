@@ -351,11 +351,27 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     private void attachSurface() {
         if (mService != null) {
+            boolean mpv = player().getEngine() == PlayerSetting.ENGINE_MPV;
             // MPV renders directly to the Surface. An artwork/EPG logo left by PlayerView can
             // otherwise cover the moving video even after native rendering has started.
-            getPlayerView().setUseArtwork(player().getEngine() != PlayerSetting.ENGINE_MPV);
+            //
+            // Do not use the deprecated setUseArtwork(boolean) helper here. FongMi's Media3 fork
+            // currently maps its boolean in reverse, so setUseArtwork(false) enables FIT artwork
+            // and leaves a static poster above MPV's moving Surface.
+            getPlayerView().setArtworkDisplayMode(
+                    mpv
+                            ? PlayerView.ARTWORK_DISPLAY_MODE_OFF
+                            : PlayerView.ARTWORK_DISPLAY_MODE_FIT);
             if (getPlayerView().getPlayer() == null) {
                 getPlayerView().setPlayer(player().getPlayer());
+            }
+            if (mpv) {
+                // PlaybackService may render MPV's first frame before this activity attaches its
+                // PlayerView listener. In that race PlayerView misses onRenderedFirstFrame() and
+                // its shutter permanently covers the live Surface with a static black/poster
+                // frame. MPV owns the visible Surface, so remove that overlay deterministically.
+                View shutter = getPlayerView().findViewById(androidx.media3.ui.R.id.exo_shutter);
+                if (shutter != null) shutter.setVisibility(View.INVISIBLE);
             }
         }
         applyDanmaku();
@@ -558,12 +574,15 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     protected void onStop() {
         super.onStop();
-        if (!isOwner() || mController == null) return;
+        if (!isOwner() || mService == null) return;
         if (stopPlaybackOnBackground() && mService != null) {
             detachSurface();
             mService.suspend();
         } else if (PlayerSetting.isBackgroundOff()) {
-            mController.pause();
+            // The service/player can be ready before the asynchronous MediaController connects.
+            // Never leave audio running just because the activity stopped during that window.
+            if (mController != null) mController.pause();
+            else player().pause();
         }
     }
 
