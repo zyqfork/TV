@@ -53,10 +53,16 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
     /**
-     * Match the working FongMi release: prefer MediaCodec direct rendering and retain copy-back
-     * as mpv's compatibility fallback.
+     * Use MediaCodec copy-back by default on Android TV.
+     *
+     * <p>The zero-copy MediaCodec path keeps vendor AImageReader/GraphicBuffer state across
+     * {@code loadfile replace}. A number of TV decoders then expose the old YUV buffer as a green
+     * frame, or block while releasing it during rapid episode changes. Copy-back still uses the
+     * hardware decoder, but gives mpv ownership of the output frames and makes file replacement
+     * independent from the previous codec surface. An explicit hwdec value in mpv.conf continues
+     * to override this compatibility default.
      */
-    private static final String HWDEC_HARD = "mediacodec,mediacodec-copy";
+    private static final String HWDEC_HARD = "mediacodec-copy";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
@@ -397,6 +403,12 @@ public final class MpvPlayer extends SimpleBasePlayer
         positionMs = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
         pendingSeekMs = positionMs > 0 ? positionMs : C.TIME_UNSET;
         durationMs = C.TIME_UNSET;
+        videoWidth = 0;
+        videoHeight = 0;
+        currentTracks = Tracks.EMPTY;
+        mpvTrackIds.clear();
+        chapters = List.of();
+        editions = List.of();
         lastNativeError = null;
         fileLoaded = false;
         bufferedPositionMs = positionMs;

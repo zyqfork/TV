@@ -44,6 +44,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
     private boolean controlsApplied;
     private boolean renderedFirstFrame;
     private boolean stopOnBackground;
+    private String secondUrl;
     private long startMs;
     private int decode;
 
@@ -51,6 +52,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
     protected void onCreate(@Nullable Bundle state) {
         super.onCreate(state);
         String url = getIntent().getStringExtra("url");
+        secondUrl = getIntent().getStringExtra("second_url");
         String headerName = getIntent().getStringExtra("header_name");
         String headerValue = getIntent().getStringExtra("header_value");
         if (url == null) throw new IllegalArgumentException("Missing url extra");
@@ -105,7 +107,18 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 .build(), startMs);
         player.prepare();
         player.play();
-        handler.postDelayed(this::reportProgress, 10_000);
+        if (secondUrl != null) handler.postDelayed(this::switchMedia, 5_000);
+        handler.postDelayed(this::reportProgress, secondUrl == null ? 10_000 : 15_000);
+    }
+
+    private void switchMedia() {
+        if (player == null || secondUrl == null) return;
+        renderedFirstFrame = false;
+        controlsApplied = false;
+        Log.i(TAG, "SWITCH url=" + secondUrl);
+        player.setMediaItem(MediaItem.fromUri(secondUrl));
+        player.prepare();
+        player.play();
     }
 
     private void reportProgress() {
