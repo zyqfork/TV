@@ -13,7 +13,9 @@ android {
 
     sourceSets {
         main.jniLibs.srcDir("${project.layout.buildDirectory.get()}/generated/libmpv/jniLibs")
+        main.jniLibs.srcDir("${project.layout.buildDirectory.get()}/generated/dav1d/jniLibs")
         main.java.srcDir("${project.layout.buildDirectory.get()}/generated/ffmpeg/java")
+        main.java.srcDir("${project.layout.buildDirectory.get()}/generated/av1/java")
     }
 
     compileOptions {
@@ -22,9 +24,68 @@ android {
     }
 }
 
-def libmpvVersion = "source-46ef59a1-2026-07-26"
 def nativeAbis = providers.environmentVariable("FONGMI_NATIVE_ABIS")
         .getOrElse("arm64-v8a,armeabi-v7a,x86_64").split(",") as List
+def dav1dVersion = "media3-1.10.1-dav1d-54706fc6"
+def prepareDav1d = tasks.register("prepareDav1d") {
+    def outputDir = layout.buildDirectory.dir("generated/dav1d/jniLibs")
+    def buildScript = layout.projectDirectory.file("scripts/build_dav1d_android.sh")
+    outputs.dir(outputDir)
+    inputs.file(buildScript)
+    inputs.property("dav1dVersion", dav1dVersion)
+    inputs.property("nativeAbis", nativeAbis.join(","))
+
+    doLast {
+        def cacheDir = new File(gradle.gradleUserHomeDir, "caches/fongmi-dav1d/${dav1dVersion}")
+        cacheDir.mkdirs()
+        def process = new ProcessBuilder(
+                "bash", buildScript.asFile.absolutePath,
+                androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath,
+                cacheDir.absolutePath, outputDir.get().asFile.absolutePath,
+                nativeAbis.join(","))
+                .inheritIO().start()
+        if (process.waitFor() != 0) {
+            throw new GradleException("Failed to build dav1d JNI from source")
+        }
+    }
+}
+
+def av1SourceRevision = "5fb306449733dd71595700c1227ad6087578c559"
+def av1Sources = [
+        "Dav1dDecoder.java": "2faecbed8d79ebe8d09af9ef2f13b74eba25a24fa001ce1f421b94870ff2f305",
+        "Dav1dDecoderException.java": "2822bcae1bafdcfb9f0d3ac6ff306bace7fb7694fd0e7773f37bc5088e21e62b",
+        "Dav1dLibrary.java": "3b8fe940818f88f5a9b8b4d86116c2d3fe42e85921a6f2aa35529623435fab17",
+        "Libdav1dVideoRenderer.java": "9661ff2437625ebd2ced8bef1cf1521ce9b792260993835d1ee42c802a809967",
+        "package-info.java": "98e4c36aba97f2764ce410d6009ad637ac583d28fb27ec752f2bdb6789f09c59"
+]
+
+def prepareAv1Sources = tasks.register("prepareAv1Sources") {
+    def packageDir = layout.buildDirectory.dir(
+            "generated/av1/java/androidx/media3/decoder/av1")
+    outputs.dir(packageDir)
+    inputs.property("av1SourceRevision", av1SourceRevision)
+    inputs.properties(av1Sources)
+    doLast {
+        def output = packageDir.get().asFile
+        output.mkdirs()
+        av1Sources.each { source, checksum ->
+            def target = new File(output, source)
+            if (!target.exists() || target.bytes.digest("SHA-256") != checksum) {
+                target.delete()
+                def url = "https://raw.githubusercontent.com/androidx/media/${av1SourceRevision}" +
+                        "/libraries/decoder_av1/src/main/java/androidx/media3/decoder/av1/${source}"
+                new URI(url).toURL().withInputStream { input ->
+                    target.withOutputStream { it << input }
+                }
+            }
+            if (target.bytes.digest("SHA-256") != checksum) {
+                throw new GradleException("AV1 source checksum mismatch for ${source}")
+            }
+        }
+    }
+}
+
+def libmpvVersion = "source-46ef59a1-2026-07-26"
 def prepareLibmpv = tasks.register("prepareLibmpv") {
     def outputDir = layout.buildDirectory.dir("generated/libmpv/jniLibs")
     def ffmpegBuildScript = layout.projectDirectory.file("scripts/build_ffmpeg_x86_64.sh")
@@ -102,6 +163,8 @@ tasks.configureEach {
     if (name == "preBuild") {
         dependsOn(prepareLibmpv)
         dependsOn(prepareFfmpegSources)
+        dependsOn(prepareDav1d)
+        dependsOn(prepareAv1Sources)
     }
 }
 

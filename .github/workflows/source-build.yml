@@ -47,6 +47,7 @@ jobs:
           path: |
             ~/.gradle/caches/fongmi-libmpv
             ~/.gradle/caches/fongmi-ffmpeg-arm64-v8a
+            ~/.gradle/caches/fongmi-dav1d
           key: native-arm64-${{ runner.os }}-${{ hashFiles('media3compat/scripts/*.sh', 'media3compat/build.gradle') }}
 
       - name: Verify no APK binary dependency
@@ -56,6 +57,12 @@ jobs:
 
       - name: Build debug APK from source
         run: ./gradlew :app:assembleLeanbackArm64_v8aDebug --stacktrace
+
+      - name: Verify source-built AV1 extension
+        run: |
+          test -f media3compat/build/generated/av1/java/androidx/media3/decoder/av1/Libdav1dVideoRenderer.java
+          unzip -l app/build/outputs/apk/leanbackArm64_v8a/debug/*.apk |
+            grep -q 'lib/arm64-v8a/libdav1dJNI.so'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

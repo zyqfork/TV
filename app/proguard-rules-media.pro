@@ -59,7 +59,7 @@
 }
 
 -dontnote androidx.media3.decoder.av1.Libdav1dVideoRenderer
--keepclassmembers class androidx.media3.decoder.av1.Libdav1dVideoRenderer {
+-keep class androidx.media3.decoder.av1.Libdav1dVideoRenderer {
   <init>(long, android.os.Handler, androidx.media3.exoplayer.video.VideoRendererEventListener, int);
 }
 
