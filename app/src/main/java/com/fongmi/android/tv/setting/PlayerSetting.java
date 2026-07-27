@@ -22,18 +22,66 @@ public class PlayerSetting {
     private static final float MAX_SPEED = 5.0f;
 
     public static int getEngine() {
-        return Math.clamp(Prefers.getInt("player_engine", ENGINE_EXO), ENGINE_EXO, ENGINE_MPV);
+        int legacy = Prefers.getInt("player_engine", ENGINE_EXO);
+        return Math.clamp(Prefers.getInt("player_config_engine", legacy), ENGINE_EXO, ENGINE_MPV);
     }
 
     public static void putEngine(int engine) {
-        Prefers.put("player_engine", Math.clamp(engine, ENGINE_EXO, ENGINE_MPV));
+        Prefers.put("player_config_engine", Math.clamp(engine, ENGINE_EXO, ENGINE_MPV));
+    }
+
+    public static int getVodEngine() {
+        return getEngine("player_engine_vod");
+    }
+
+    public static int getLiveEngine() {
+        return getEngine("player_engine_live");
+    }
+
+    private static int getEngine(String key) {
+        int legacy = Prefers.getInt("player_engine", ENGINE_EXO);
+        return Math.clamp(Prefers.getInt(key, legacy), ENGINE_EXO, ENGINE_MPV);
+    }
+
+    public static void putVodEngine(int engine) {
+        putEngine("player_engine_vod", engine);
+    }
+
+    public static void putLiveEngine(int engine) {
+        putEngine("player_engine_live", engine);
+    }
+
+    private static void putEngine(String key, int engine) {
+        Prefers.put(key, Math.clamp(engine, ENGINE_EXO, ENGINE_MPV));
         // MPV + TextureView frequently yields audio-only with MediaCodec; prefer SurfaceView.
-        if (isMpv()) Prefers.put("render", RENDER_SURFACE);
-        if (!isMpv() && isTunnel()) Prefers.put("render", RENDER_SURFACE);
+        if (engine == ENGINE_MPV || isTunnel()) Prefers.put("render", RENDER_SURFACE);
     }
 
     public static boolean isMpv() {
         return getEngine() == ENGINE_MPV;
+    }
+
+    public static int getMpvDecode() {
+        return Math.clamp(Prefers.getInt("mpv_decode", 1), 0, 2);
+    }
+
+    public static void putMpvDecode(int decode) {
+        Prefers.put("mpv_decode", Math.clamp(decode, 0, 2));
+    }
+
+    public static int getDecode(boolean live, int engine) {
+        String scene = live ? "live" : "vod";
+        String player = engine == ENGINE_MPV ? "mpv" : "exo";
+        int fallback = engine == ENGINE_MPV ? getMpvDecode() : 1;
+        int max = engine == ENGINE_MPV ? 2 : 1;
+        return Math.clamp(Prefers.getInt(scene + "_" + player + "_decode", fallback), 0, max);
+    }
+
+    public static void putDecode(boolean live, int engine, int decode) {
+        String scene = live ? "live" : "vod";
+        String player = engine == ENGINE_MPV ? "mpv" : "exo";
+        int max = engine == ENGINE_MPV ? 2 : 1;
+        Prefers.put(scene + "_" + player + "_decode", Math.clamp(decode, 0, max));
     }
 
     public static boolean isMpvGpuNext() {

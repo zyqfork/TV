@@ -133,6 +133,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return false;
     }
 
+    protected boolean isLivePlayback() {
+        return false;
+    }
+
     protected <T> void observeForever(LiveData<T> liveData, Observer<T> observer) {
         liveData.observeForever(observer);
         foreverObserverRemovers.add(() -> liveData.removeObserver(observer));
@@ -540,6 +544,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     public void onServiceConnected(ComponentName name, IBinder binder) {
         mService = ((PlaybackService.LocalBinder) binder).getService();
+        player().setLiveMode(isLivePlayback());
         mService.replaceBinding(this::closePiP);
         mService.setSessionActivity(buildSessionIntent());
         mService.setNavigationCallback(getNavigationCallback(), getPlaybackKey());
@@ -576,8 +581,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         super.onStop();
         if (!isOwner() || mService == null) return;
         if (stopPlaybackOnBackground() && mService != null) {
-            detachSurface();
+            // Stop the native decoder while its render target is still valid. Detaching first
+            // makes mpv process the stop/video-reconfig events without an Android surface, which
+            // can tear down gpu-next with "Missing surface pointer" and poison the next playback.
             mService.suspend();
+            detachSurface();
         } else if (PlayerSetting.isBackgroundOff()) {
             // The service/player can be ready before the asynchronous MediaController connects.
             // Never leave audio running just because the activity stopped during that window.

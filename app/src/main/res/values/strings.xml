@@ -238,7 +238,8 @@
 
     <string-array name="select_decode">
         <item>Soft</item>
-        <item>Hard</item>
+        <item>Hard compatible</item>
+        <item>Hard performance</item>
     </string-array>
 
     <string-array name="select_engine">

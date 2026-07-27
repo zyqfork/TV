@@ -63,6 +63,7 @@ public final class MpvPlayer extends SimpleBasePlayer
      * to override this compatibility default.
      */
     private static final String HWDEC_HARD = "mediacodec-copy";
+    private static final String HWDEC_PERFORMANCE = "mediacodec";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
@@ -290,9 +291,9 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private String getDecodeOption() {
-        return decode == 1
-                ? config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD)
-                : HWDEC_SOFT;
+        if (decode == 2) return HWDEC_PERFORMANCE;
+        if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD);
+        return HWDEC_SOFT;
     }
 
     public void setDecode(int decode) {
@@ -482,6 +483,7 @@ public final class MpvPlayer extends SimpleBasePlayer
                 != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             return done();
         }
+        if (!playWhenReady) audioManager.abandonAudioFocusRequest(audioFocusRequest);
         MPVLib.setPropertyBoolean("pause", !playWhenReady);
         updateState(state.playbackState, playWhenReady, null);
         return done();
@@ -765,6 +767,9 @@ public final class MpvPlayer extends SimpleBasePlayer
             // destroying the handle, including task-removal and application shutdown paths.
             MPVLib.setPropertyBoolean("pause", true);
             MPVLib.command(new String[]{"stop"});
+            // stop is asynchronous. Disable the VO while its Android window is still valid so a
+            // late idle/video-reconfig event cannot recreate gpu-next after detachSurface().
+            if (surfaceReady) MPVLib.setPropertyString("vo", "null");
             clearVideoOutputInternal();
             MPVLib.destroy();
         } finally {
@@ -1003,7 +1008,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         // diagnostic capture and lets legacy bridges distinguish load failure from natural EOF.
         if (level > 30 || text == null || text.isBlank()) return;
         if ("ytdl_hook".equals(prefix)) return;
-        if (!renderFallbackUsed && fileLoaded
+        if (!renderFallbackUsed && fileLoaded && surfaceReady
                 && prefix != null && prefix.startsWith("vo/gpu")
                 && text.contains("OpenGL error")) {
             onApplicationThread(this::fallbackRendering);
@@ -1013,7 +1018,11 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void fallbackRendering() {
-        if (released || renderFallbackUsed || !fileLoaded) return;
+        // Player replacement and Activity teardown detach the Android window before every
+        // asynchronous native log has drained. Rebuilding gpu-next without a live window turns a
+        // recoverable stream/HTTP error into "Missing surface pointer" and can poison the next
+        // MPV instance.
+        if (released || renderFallbackUsed || !fileLoaded || !surfaceReady) return;
         renderFallbackUsed = true;
         firstFrameReported = false;
         lastNativeError = null;

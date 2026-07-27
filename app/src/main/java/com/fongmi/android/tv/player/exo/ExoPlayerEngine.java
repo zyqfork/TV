@@ -21,6 +21,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     private int decode;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
+        decode = decode == SOFT ? SOFT : HARD;
         this.player = ExoUtil.buildPlayer(decode, listener);
         this.provider = new ErrorMsgProvider();
         this.preCache = new PreCache();

@@ -15,9 +15,13 @@ import java.util.concurrent.TimeUnit;
 public class MpvPlayerEngine implements PlayerEngine {
 
     private final MpvErrorMsgProvider provider;
-    private final MpvPlayer player;
+    private final Player.Listener listener;
+    private MpvPlayer player;
+    private int decode;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
+        this.decode = decode;
+        this.listener = listener;
         this.player = MpvUtil.buildPlayer(decode, listener);
         this.provider = new MpvErrorMsgProvider();
     }
@@ -43,7 +47,8 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public Player rebuild() {
-        return player;
+        player.release();
+        return player = MpvUtil.buildPlayer(decode, listener);
     }
 
     @Override
@@ -61,6 +66,9 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean setDecode(int decode) {
+        boolean rebuild = this.decode == HARD_PERFORMANCE || decode == HARD_PERFORMANCE;
+        this.decode = decode;
+        if (rebuild) return true;
         player.setDecode(decode);
         return false;
     }

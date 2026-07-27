@@ -1121,6 +1121,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     @Override
+    protected boolean isLivePlayback() {
+        return true;
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (!isAudioOnly()) setStop(true);

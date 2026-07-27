@@ -1043,6 +1043,11 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     @Override
+    protected boolean isLivePlayback() {
+        return true;
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (PlayerSetting.isBackgroundOff()) mClock.stop();

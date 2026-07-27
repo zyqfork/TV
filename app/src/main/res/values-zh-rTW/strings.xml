@@ -237,7 +237,8 @@
 
     <string-array name="select_decode">
         <item>軟解</item>
-        <item>硬解</item>
+        <item>相容硬解</item>
+        <item>效能硬解</item>
     </string-array>
 
     <string-array name="select_size">

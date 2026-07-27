@@ -57,12 +57,15 @@ public class PlayerManager implements ParseCallback {
     private boolean mpvFallbackUsed;
     private int retry;
     private int decode;
+    private int preferredEngine;
+    private boolean liveMode;
 
     public PlayerManager(Callback callback) {
         this.callback = callback;
         this.runnable = this::onPlayTimeout;
-        this.decode = PlayerEngine.HARD;
-        this.engine = PlayerEngineFactory.create(decode, listener);
+        this.preferredEngine = PlayerSetting.getVodEngine();
+        this.decode = PlayerSetting.getDecode(false, preferredEngine);
+        this.engine = PlayerEngineFactory.create(decode, preferredEngine, listener);
         this.player = engine.getPlayer();
         this.pendingStartPositionMs = C.TIME_UNSET;
         this.danmakuConfig = DanmakuSetting.getConfig();
@@ -226,10 +229,27 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setEngine(int targetEngine) {
-        int oldEngine = getEngine();
-        PlayerSetting.putEngine(targetEngine);
-        if (oldEngine == targetEngine || isEmpty()) return;
+        targetEngine = Math.clamp(targetEngine, PlayerSetting.ENGINE_EXO, PlayerSetting.ENGINE_MPV);
+        if (preferredEngine == targetEngine) return;
+        preferredEngine = targetEngine;
+        if (liveMode) PlayerSetting.putLiveEngine(targetEngine);
+        else PlayerSetting.putVodEngine(targetEngine);
+        decode = PlayerSetting.getDecode(liveMode, targetEngine);
+        callback.onDecodeChanged();
+        if (isEmpty()) return;
         startCurrent();
+    }
+
+    public void setLiveMode(boolean liveMode) {
+        this.liveMode = liveMode;
+        int target = liveMode ? PlayerSetting.getLiveEngine() : PlayerSetting.getVodEngine();
+        int targetDecode = PlayerSetting.getDecode(liveMode, target);
+        boolean engineChanged = preferredEngine != target;
+        preferredEngine = target;
+        if (decode == targetDecode) return;
+        decode = targetDecode;
+        if (engineChanged || engine == null) return;
+        if (engine.setDecode(decode)) setPlayer(engine.rebuild());
     }
 
     public String getPositionTime(long delta) {
@@ -376,7 +396,10 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void toggleDecode() {
-        decode = isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
+        decode = engine.getType() == PlayerEngine.Type.MPV
+                ? (decode + 1) % (PlayerEngine.HARD_PERFORMANCE + 1)
+                : (isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
+        PlayerSetting.putDecode(liveMode, getEngine(), decode);
         boolean rebuild = engine.setDecode(decode);
         callback.onDecodeChanged();
         if (!rebuild) return;
@@ -394,7 +417,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     private boolean isHard() {
-        return decode == PlayerEngine.HARD;
+        return decode != PlayerEngine.SOFT;
     }
 
     private void onPlayTimeout() {
@@ -403,12 +426,15 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void ensureEngine(PlaySpec spec) {
-        if (PlayerEngineFactory.matches(engine, spec)) return;
+        if (PlayerEngineFactory.matches(engine, preferredEngine, spec)) return;
         PlayerEngine old = engine;
         player.removeListener(listener);
-        engine = PlayerEngineFactory.create(decode, spec, listener);
-        setPlayer(engine.getPlayer());
+        engine = PlayerEngineFactory.create(decode, preferredEngine, spec, listener);
+        // Release MPV while PlayerView still owns its valid Surface. Publishing the replacement
+        // first detaches that Surface and makes MPV's asynchronous shutdown rebuild a surface-less
+        // VO, which can leave the next channel black.
         old.release();
+        setPlayer(engine.getPlayer());
     }
 
     private boolean fallbackMpvToExo() {
@@ -420,8 +446,9 @@ public class PlayerManager implements ParseCallback {
         PlayerEngine old = engine;
         player.removeListener(listener);
         engine = PlayerEngineFactory.createExo(decode, listener);
-        setPlayer(engine.getPlayer());
+        // Keep the old render target attached until native MPV shutdown is complete.
         old.release();
+        setPlayer(engine.getPlayer());
         engine.start(spec, position);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, Constant.TIMEOUT_PLAY);

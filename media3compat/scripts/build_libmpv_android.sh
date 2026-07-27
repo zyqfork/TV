@@ -7,9 +7,13 @@ output_dir=$3
 requested_abis=${4:-arm64-v8a,armeabi-v7a,x86_64}
 ndk_version=29.0.14206865
 source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
+build_revision="${source_revision}-surface-guard-v1"
 
 mkdir -p "$cache_dir" "$output_dir"
-all_present=true
+all_present=false
+if [[ -f "$output_dir/.build-revision" ]] && [[ $(<"$output_dir/.build-revision") == "$build_revision" ]]; then
+    all_present=true
+fi
 IFS=, read -ra abi_list <<< "$requested_abis"
 for abi in "${abi_list[@]}"; do
     player_lib="$output_dir/$abi/libplayer.so"
@@ -67,6 +71,11 @@ git -C deps/freetype2 checkout --detach 0a0221a1347e2f1e07c395263540026e9a0aa7c7
 git -C deps/libass checkout --detach f9fd3d20dff1cd84b7c74c8ae7f79711ad7736fa
 git -C deps/libplacebo checkout --detach 4c426e466814536def653cb23f1d1c287ea7a7f5
 git -C deps/mpv checkout --detach 8c67647b50059406c5c0444903597281b81516cf
+# Android may destroy the Surface between Java's readiness check and the VO thread. Upstream's
+# debug assertion aborts the whole app in that legitimate lifecycle race. Fail VO initialization
+# instead so mpv reports an error and the Media3 wrapper can retry/fallback.
+sed -i 's/mp_assert(vo->opts->WinID != 0 && vo->opts->WinID != -1);/if (vo->opts->WinID == 0 || vo->opts->WinID == -1) { MP_ERR(vo, \"Android Surface unavailable\\\\n\"); av_buffer_unref(\\&device_ref); return NULL; }/' \
+    deps/mpv/video/out/vo_mediacodec_embed.c
 mkdir -p sdk
 ln -sfn /android-sdk/ndk/$ndk_version sdk/android-ndk-r29
 prefix_env=
@@ -98,3 +107,4 @@ for abi in "${abi_list[@]}"; do
     cp "$source_dir/app/src/main/libs/$abi/libplayer.so" "$output_dir/$abi/"
     cp "$sdk_dir/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so" "$output_dir/$abi/"
 done
+printf '%s\n' "$build_revision" > "$output_dir/.build-revision"

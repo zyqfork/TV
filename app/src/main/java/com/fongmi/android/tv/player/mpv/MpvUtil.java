@@ -36,6 +36,8 @@ public final class MpvUtil {
     private static final String VALUE_ANDROID = "android";
     private static final String VALUE_ANDROID_VK = "androidvk";
     private static final String VALUE_GPU = "gpu";
+    private static final String VALUE_MEDIACODEC = "mediacodec";
+    private static final String VALUE_MEDIACODEC_EMBED = "mediacodec_embed";
     private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
     private static final String OPT_PROXY_URL = "proxy-url";
@@ -49,7 +51,7 @@ public final class MpvUtil {
     }
 
     public static MpvPlayer buildPlayer(int decode, Player.Listener listener) {
-        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(decode).setConfig(buildConfig()).build();
+        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(decode).setConfig(buildConfig(decode)).build();
         player.addListener(listener);
         return player;
     }
@@ -58,12 +60,12 @@ public final class MpvUtil {
         player.setSubtitleOptions(buildSubtitleConfig());
     }
 
-    private static MpvPlayerConfig buildConfig() {
+    private static MpvPlayerConfig buildConfig(int decode) {
         Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
         MpvPlayerConfig.Builder builder = new MpvPlayerConfig.Builder();
-        addAndroidOptions(builder, userOptions);
+        addAndroidOptions(builder, userOptions, decode);
         addUserOptions(builder, userOptions);
-        addApplicationOptions(builder, userOptions);
+        addApplicationOptions(builder, userOptions, decode);
         addTrackLanguageOptions(builder);
         addSubtitleStyleOptions(builder);
         return builder.build();
@@ -75,18 +77,18 @@ public final class MpvUtil {
         return builder.build();
     }
 
-    private static void addAndroidOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
-        addAndroidDefaultOptions(builder, userOptions);
+    private static void addAndroidOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode) {
+        addAndroidDefaultOptions(builder, userOptions, decode);
         addTlsCaFile(builder);
     }
 
-    private static void addAndroidDefaultOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
+    private static void addAndroidDefaultOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode) {
         File configDir = Path.mpv();
         File cacheDir = Path.mpvCache();
         MpvConfigFiles.ensureAndroidFontsConfig(cacheDir);
         builder.addConfigDirectory(configDir)
                 .addAndroidFontConfig(configDir, cacheDir)
-                .addAndroidDefaults(getVideoOutputDriver(userOptions), cacheDir);
+                .addAndroidDefaults(getVideoOutputDriver(userOptions, decode), cacheDir);
     }
 
     private static void addTlsCaFile(MpvPlayerConfig.Builder builder) {
@@ -103,16 +105,22 @@ public final class MpvUtil {
         }
     }
 
-    private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
+    private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode) {
         builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
-        addVideoOutputOptions(builder, userOptions);
+        if (decode == com.fongmi.android.tv.player.engine.PlayerEngine.HARD_PERFORMANCE) {
+            builder.addPreInitStringOption("vo", VALUE_MEDIACODEC_EMBED)
+                    .addPreInitStringOption("hwdec", VALUE_MEDIACODEC);
+        } else {
+            addVideoOutputOptions(builder, userOptions);
+        }
         addPreloadOptions(builder);
     }
 
-    private static String getVideoOutputDriver(Map<String, String> userOptions) {
+    private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
+        if (decode == com.fongmi.android.tv.player.engine.PlayerEngine.HARD_PERFORMANCE) return VALUE_MEDIACODEC_EMBED;
         if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
         return userOptions.containsKey("vo") ? null : VALUE_GPU;
     }
