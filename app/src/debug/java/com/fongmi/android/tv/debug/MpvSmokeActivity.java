@@ -31,7 +31,8 @@ import is.xyz.mpv.MPVLib;
  * <p>Extras:
  * <ul>
  *   <li>{@code url} (required)</li>
- *   <li>{@code decode} 1=hard/mediacodec, 0=soft (default 1)</li>
+ *   <li>{@code decode} 1=hard/mediacodec, 0=soft, 2=performance (default 1)</li>
+ *   <li>{@code live} apply live IJK-behavior options via MpvUtil (default false)</li>
  *   <li>{@code start_ms} resume position in milliseconds</li>
  *   <li>{@code header_name}/{@code header_value} optional HTTP header</li>
  * </ul>
@@ -47,6 +48,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
     private String secondUrl;
     private long startMs;
     private int decode;
+    private boolean live;
 
     @Override
     protected void onCreate(@Nullable Bundle state) {
@@ -70,6 +72,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 + " dts=" + FfmpegLibrary.supportsFormat("audio/vnd.dts"));
         stopOnBackground = getIntent().getBooleanExtra("stop_on_background", false);
         decode = getIntent().getIntExtra("decode", 1);
+        live = getIntent().getBooleanExtra("live", false);
         startMs = Math.max(0, getIntent().getLongExtra("start_ms", 0L));
 
         setContentView(R.layout.activity_mpv_smoke);
@@ -79,7 +82,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         view.setArtworkDisplayMode(PlayerView.ARTWORK_DISPLAY_MODE_OFF);
         view.setUseController(false);
         if (getIntent().getBooleanExtra("formal_config", false)) {
-            player = MpvUtil.buildPlayer(decode, this);
+            player = MpvUtil.buildPlayer(decode, live, this);
         } else {
             player = new MpvPlayer.Builder(this)
                     .setDecode(decode)
@@ -140,6 +143,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 + " durationMs=" + duration
                 + " tracks=" + player.getCurrentTracks().getGroups().size()
                 + " decode=" + decode
+                + " live=" + live
                 + " nativeHwdec=" + MPVLib.getPropertyString("hwdec")
                 + " nativeVo=" + MPVLib.getPropertyString("current-vo")
                 + " startMs=" + startMs

@@ -663,8 +663,15 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void start(Result result, long startPositionMs) {
+        applyConfiguredEngine();
         mPlaybackKey = result.getRealUrl();
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
+    }
+
+    private void applyConfiguredEngine() {
+        int type = mChannel != null ? mChannel.getPlayerType() : -1;
+        if (type < 0) type = getHome().getPlayerType();
+        player().setEngine(PlayerSetting.resolveEngine(true, type), false);
     }
 
     private void stopPlayer() {

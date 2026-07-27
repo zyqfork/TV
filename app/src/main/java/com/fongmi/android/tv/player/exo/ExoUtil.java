@@ -11,8 +11,10 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.Renderer;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
@@ -39,13 +41,33 @@ import java.util.stream.Collectors;
 public class ExoUtil {
 
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener) {
-        ExoPlayer player = new ExoPlayer.Builder(App.get()).setTrackSelector(buildTrackSelector()).setRenderersFactory(buildPlaybackRenderersFactory(decode)).setMediaSourceFactory(buildMediaSourceFactory()).build();
+        ExoPlayer player = new ExoPlayer.Builder(App.get())
+                .setTrackSelector(buildTrackSelector())
+                .setLoadControl(buildLoadControl())
+                .setRenderersFactory(buildPlaybackRenderersFactory(decode))
+                .setMediaSourceFactory(buildMediaSourceFactory())
+                .build();
         if (BuildConfig.DEBUG) player.addAnalyticsListener(new EventLogger());
         player.setAudioAttributes(AudioAttributes.DEFAULT, true);
         player.setHandleAudioBecomingNoisy(true);
         player.setPlayWhenReady(true);
         player.addListener(listener);
         return player;
+    }
+
+    /**
+     * Map Setting buffer seconds (1–15) onto Media3 LoadControl durations.
+     * Mirrors fork/dev exo_buffer behavior for weak-network / IPTV resilience.
+     */
+    public static LoadControl buildLoadControl() {
+        int bufferMs = PlayerSetting.getBuffer() * 1000;
+        int minBufferMs = Math.max(bufferMs, 2500);
+        int maxBufferMs = Math.max(minBufferMs * 2, 50000);
+        int playbackMs = Math.min(2500, Math.max(1000, bufferMs / 2));
+        int rebufferMs = Math.min(5000, Math.max(playbackMs, bufferMs));
+        return new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
+                .build();
     }
 
     public static String getMimeType(int errorCode) {

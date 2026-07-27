@@ -96,6 +96,10 @@ public class Live {
     private Map<String, String> header;
 
     @Ignore
+    @SerializedName("playerType")
+    private Integer playerType;
+
+    @Ignore
     @SerializedName("catchup")
     private Catchup catchup;
 
@@ -241,6 +245,15 @@ public class Live {
 
     public Map<String, String> getHeader() {
         return header == null ? new HashMap<>() : header;
+    }
+
+    /** Legacy config: -1 follow global, 1→MPV, 2→EXO (old IJK maps to MPV). */
+    public int getPlayerType() {
+        return playerType == null ? -1 : playerType;
+    }
+
+    public void setPlayerType(Integer playerType) {
+        this.playerType = playerType;
     }
 
     public Catchup getCatchup() {

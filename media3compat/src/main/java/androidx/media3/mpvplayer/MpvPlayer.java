@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import is.xyz.mpv.MPVLib;
@@ -886,7 +887,7 @@ public final class MpvPlayer extends SimpleBasePlayer
                         : "mpv ended media without reaching EOF";
             }
             updateState(STATE_IDLE, false, new PlaybackException(detail, null,
-                    PlaybackException.ERROR_CODE_IO_UNSPECIFIED));
+                    mapMpvIoErrorCode(detail)));
             return;
         }
         if (currentMediaItemIndex + 1 < playlist.size()
@@ -898,6 +899,26 @@ public final class MpvPlayer extends SimpleBasePlayer
         } else if (state.playbackState != STATE_ENDED) {
             updateState(STATE_ENDED, false, null);
         }
+    }
+
+    private static int mapMpvIoErrorCode(@Nullable String detail) {
+        if (detail == null || detail.isBlank()) return PlaybackException.ERROR_CODE_IO_UNSPECIFIED;
+        String d = detail.toLowerCase(Locale.US);
+        if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("503")
+                || d.contains("502") || d.contains("500")) {
+            return PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS;
+        }
+        if (d.contains("timeout") || d.contains("timed out")) {
+            return PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT;
+        }
+        if (d.contains("unsupported") || d.contains("no demuxer") || d.contains("unrecognized")) {
+            return PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED;
+        }
+        if (d.contains("failed to open") || d.contains("connection") || d.contains("network")
+                || d.contains("loading failed")) {
+            return PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED;
+        }
+        return PlaybackException.ERROR_CODE_IO_UNSPECIFIED;
     }
 
     private void reportFirstFrame() {

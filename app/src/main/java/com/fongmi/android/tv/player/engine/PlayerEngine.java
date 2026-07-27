@@ -44,6 +44,8 @@ public interface PlayerEngine {
     ErrorAction handleError(PlaybackException e);
 
     enum ErrorAction {
+        /** Same URL, short backoff; used for transient network / HTTP errors. */
+        RETRY,
         RECOVERED,
         DECODE,
         FATAL

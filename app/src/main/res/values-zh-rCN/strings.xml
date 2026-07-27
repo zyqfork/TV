@@ -176,6 +176,9 @@
     <string name="player_mpv_vulkan">vulkan</string>
     <string name="player_mpv_conf_import_success">已导入 mpv.conf</string>
     <string name="player_ua">User-Agent</string>
+    <string name="player_buffer">缓冲时间</string>
+    <string name="player_buffer_value">%1$d 秒</string>
+    <string name="player_http">HTTP 方式</string>
 
     <!-- Danmaku -->
     <string name="danmaku_load">弹幕加载</string>
@@ -208,7 +211,12 @@
     <string name="error_play_url">播放地址加载失败</string>
     <string name="error_play_flag">暂无线路数据</string>
     <string name="error_play_timeout">连接超时</string>
-    <string name="error_decode_fallback">硬解失败，已切换软解</string>
+    <string name="error_play_source">线路暂时不可用</string>
+    <string name="error_play_http">线路返回错误状态</string>
+    <string name="error_play_network">网络连接失败</string>
+    <string name="error_play_format">不支持的媒体格式</string>
+    <string name="error_play_retry">线路异常，正在重试</string>
+    <string name="error_decode_fallback">硬解失败，已切换解码模式</string>
     <string name="error_play_tvbus">错误代码：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">暂无播放数据</string>
     <string name="error_empty">这里什麽都没有 👀</string>
@@ -236,9 +244,14 @@
     <string name="lines">行</string>
 
     <string-array name="select_decode">
-        <item>软解</item>
+        <item>软解(兜底)</item>
         <item>兼容硬解</item>
         <item>性能硬解</item>
+    </string-array>
+
+    <string-array name="select_exo_http">
+        <item>Default</item>
+        <item>OkHttp</item>
     </string-array>
 
     <string-array name="select_size">

@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.database.StandaloneDatabaseProvider;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.cache.Cache;
 import androidx.media3.datasource.cache.CacheDataSource;
@@ -23,6 +24,7 @@ import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.extractor.ts.TsExtractor;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.net.OkHttp;
@@ -48,7 +50,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     static DataSource.Factory createUpstreamDataSourceFactory(Map<String, String> headers) {
-        HttpDataSource.Factory factory = new OkHttpDataSource.Factory(OkHttp.player());
+        HttpDataSource.Factory factory = createHttpDataSourceFactory();
         factory.setDefaultRequestProperties(headers);
         return new DefaultDataSource.Factory(App.get(), factory);
     }
@@ -111,7 +113,14 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     private HttpDataSource.Factory getHttpDataSourceFactory() {
-        if (httpDataSourceFactory == null) httpDataSourceFactory = new OkHttpDataSource.Factory(OkHttp.player());
+        if (httpDataSourceFactory == null) httpDataSourceFactory = createHttpDataSourceFactory();
         return httpDataSourceFactory;
+    }
+
+    private static HttpDataSource.Factory createHttpDataSourceFactory() {
+        if (PlayerSetting.getHttp() == 0) {
+            return new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true);
+        }
+        return new OkHttpDataSource.Factory(OkHttp.player());
     }
 }

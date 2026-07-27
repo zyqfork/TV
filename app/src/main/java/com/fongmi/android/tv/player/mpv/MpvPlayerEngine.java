@@ -17,12 +17,18 @@ public class MpvPlayerEngine implements PlayerEngine {
     private final MpvErrorMsgProvider provider;
     private final Player.Listener listener;
     private MpvPlayer player;
+    private boolean live;
     private int decode;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
+        this(decode, false, listener);
+    }
+
+    public MpvPlayerEngine(int decode, boolean live, Player.Listener listener) {
         this.decode = decode;
+        this.live = live;
         this.listener = listener;
-        this.player = MpvUtil.buildPlayer(decode, listener);
+        this.player = MpvUtil.buildPlayer(decode, live, listener);
         this.provider = new MpvErrorMsgProvider();
     }
 
@@ -48,7 +54,11 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public Player rebuild() {
         player.release();
-        return player = MpvUtil.buildPlayer(decode, listener);
+        return player = MpvUtil.buildPlayer(decode, live, listener);
+    }
+
+    public void setLive(boolean live) {
+        this.live = live;
     }
 
     @Override
@@ -99,7 +109,14 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public ErrorAction handleError(PlaybackException e) {
         return switch (e.errorCode) {
-            case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;
+            case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                 PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+                 PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;
+            case PlaybackException.ERROR_CODE_TIMEOUT,
+                 PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                 PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> ErrorAction.RETRY;
             default -> ErrorAction.FATAL;
         };
     }

@@ -35,6 +35,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
     private String[] render;
     private String[] scale;
     private String[] engine;
+    private String[] http;
 
     public static SettingPlayerFragment newInstance() {
         return new SettingPlayerFragment();
@@ -54,6 +55,8 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
         mBinding.adblockText.setText(Setting.getSwitch(Setting.isAdblock()));
         mBinding.mpvVulkanText.setText(Setting.getSwitch(PlayerSetting.isMpvVulkan()));
         mBinding.mpvGpuNextText.setText(Setting.getSwitch(PlayerSetting.isMpvGpuNext()));
+        mBinding.bufferText.setText(getString(R.string.player_buffer_value, PlayerSetting.getBuffer()));
+        mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[PlayerSetting.getHttp()]);
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         mBinding.backgroundText.setText((background = ResUtil.getStringArray(R.array.select_background))[PlayerSetting.getBackground()]);
@@ -72,6 +75,8 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
         mBinding.speed.setOnClickListener(this::onSpeed);
         mBinding.background.setOnClickListener(this::onBackground);
         mBinding.adblock.setOnClickListener(this::setAdblock);
+        mBinding.buffer.setOnClickListener(this::setBuffer);
+        mBinding.http.setOnClickListener(this::setHttp);
         mBinding.preload.setOnClickListener(this::onPreload);
         mBinding.decode.setOnClickListener(this::onDecode);
         mBinding.ua.setOnClickListener(this::onUa);
@@ -85,6 +90,8 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
         mBinding.mpvGpuNext.setVisibility(mpv ? View.VISIBLE : View.GONE);
         mBinding.decode.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.adblock.setVisibility(exo ? View.VISIBLE : View.GONE);
+        mBinding.buffer.setVisibility(exo ? View.VISIBLE : View.GONE);
+        mBinding.http.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.caption.setVisibility(PlayerSetting.hasCaption() ? View.VISIBLE : View.GONE);
     }
 
@@ -161,6 +168,18 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
     private void setAdblock(View view) {
         Setting.putAdblock(!Setting.isAdblock());
         mBinding.adblockText.setText(Setting.getSwitch(Setting.isAdblock()));
+    }
+
+    private void setBuffer(View view) {
+        int next = PlayerSetting.getBuffer() >= 15 ? 1 : PlayerSetting.getBuffer() + 1;
+        PlayerSetting.putBuffer(next);
+        mBinding.bufferText.setText(getString(R.string.player_buffer_value, next));
+    }
+
+    private void setHttp(View view) {
+        int index = (PlayerSetting.getHttp() + 1) % http.length;
+        PlayerSetting.putHttp(index);
+        mBinding.httpText.setText(http[index]);
     }
 
     private void onPreload(View view) {

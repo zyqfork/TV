@@ -56,6 +56,7 @@ public class PlayerManager implements ParseCallback {
     private boolean initTrack;
     private boolean mpvFallbackUsed;
     private int retry;
+    private int sourceRetry;
     private int decode;
     private int preferredEngine;
     private boolean liveMode;
@@ -65,7 +66,7 @@ public class PlayerManager implements ParseCallback {
         this.runnable = this::onPlayTimeout;
         this.preferredEngine = PlayerSetting.getVodEngine();
         this.decode = PlayerSetting.getDecode(false, preferredEngine);
-        this.engine = PlayerEngineFactory.create(decode, preferredEngine, listener);
+        this.engine = PlayerEngineFactory.create(decode, preferredEngine, false, listener);
         this.player = engine.getPlayer();
         this.pendingStartPositionMs = C.TIME_UNSET;
         this.danmakuConfig = DanmakuSetting.getConfig();
@@ -229,11 +230,20 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setEngine(int targetEngine) {
+        setEngine(targetEngine, true);
+    }
+
+    /**
+     * @param persist when false, apply for current playback only (config playerType override).
+     */
+    public void setEngine(int targetEngine, boolean persist) {
         targetEngine = Math.clamp(targetEngine, PlayerSetting.ENGINE_EXO, PlayerSetting.ENGINE_MPV);
         if (preferredEngine == targetEngine) return;
         preferredEngine = targetEngine;
-        if (liveMode) PlayerSetting.putLiveEngine(targetEngine);
-        else PlayerSetting.putVodEngine(targetEngine);
+        if (persist) {
+            if (liveMode) PlayerSetting.putLiveEngine(targetEngine);
+            else PlayerSetting.putVodEngine(targetEngine);
+        }
         decode = PlayerSetting.getDecode(liveMode, targetEngine);
         callback.onDecodeChanged();
         if (isEmpty()) return;
@@ -241,15 +251,22 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setLiveMode(boolean liveMode) {
+        boolean modeChanged = this.liveMode != liveMode;
         this.liveMode = liveMode;
         int target = liveMode ? PlayerSetting.getLiveEngine() : PlayerSetting.getVodEngine();
         int targetDecode = PlayerSetting.getDecode(liveMode, target);
         boolean engineChanged = preferredEngine != target;
         preferredEngine = target;
-        if (decode == targetDecode) return;
+        if (engine instanceof com.fongmi.android.tv.player.mpv.MpvPlayerEngine mpv) {
+            mpv.setLive(liveMode);
+        }
+        if (decode == targetDecode && !modeChanged) return;
+        boolean needRebuild = decode != targetDecode || (modeChanged && engine.getType() == PlayerEngine.Type.MPV);
         decode = targetDecode;
         if (engineChanged || engine == null) return;
-        if (engine.setDecode(decode)) setPlayer(engine.rebuild());
+        if (needRebuild && (engine.setDecode(decode) || modeChanged)) {
+            setPlayer(engine.rebuild());
+        }
     }
 
     public String getPositionTime(long delta) {
@@ -266,6 +283,7 @@ public class PlayerManager implements ParseCallback {
 
     public void setSub(Sub sub) {
         if (spec != null) spec.setSub(sub);
+        ensureDecodeForSubs(spec);
         if (engine.addSubtitle(sub)) play();
         else startCurrent();
     }
@@ -384,6 +402,7 @@ public class PlayerManager implements ParseCallback {
     public void reset() {
         App.removeCallbacks(runnable);
         retry = 0;
+        sourceRetry = 0;
         mpvFallbackUsed = false;
     }
 
@@ -396,9 +415,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void toggleDecode() {
-        decode = engine.getType() == PlayerEngine.Type.MPV
-                ? (decode + 1) % (PlayerEngine.HARD_PERFORMANCE + 1)
-                : (isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
+        decode = nextDecode(decode, engine.getType() == PlayerEngine.Type.MPV);
         PlayerSetting.putDecode(liveMode, getEngine(), decode);
         boolean rebuild = engine.setDecode(decode);
         callback.onDecodeChanged();
@@ -407,13 +424,59 @@ public class PlayerManager implements ParseCallback {
         startCurrent(getPosition());
     }
 
+    /**
+     * Hardware-first fallback: performance → compatible → soft (last resort).
+     * Manual cycling uses the same order so UI and error recovery stay consistent.
+     */
+    private static int nextDecode(int current, boolean mpv) {
+        if (!mpv) return current == PlayerEngine.HARD ? PlayerEngine.SOFT : PlayerEngine.HARD;
+        return switch (current) {
+            case PlayerEngine.HARD_PERFORMANCE -> PlayerEngine.HARD;
+            case PlayerEngine.HARD -> PlayerEngine.SOFT;
+            default -> PlayerEngine.HARD_PERFORMANCE;
+        };
+    }
+
     private void handleDecodeError(PlaybackException e) {
-        if (++retry > 1) {
+        if (++retry > 2) {
             callback.onError(engine.getErrorMessage(e));
         } else {
             Notify.show(R.string.error_decode_fallback);
             toggleDecode();
         }
+    }
+
+    private void handleSourceRetry(PlaybackException e) {
+        if (++sourceRetry > 2) {
+            handleFatalError(e);
+            return;
+        }
+        long delayMs = sourceRetry * 800L;
+        if (sourceRetry == 1) Notify.show(R.string.error_play_retry);
+        App.post(() -> {
+            if (spec == null || isReleased()) return;
+            startCurrent(Math.max(0, getPosition()));
+        }, delayMs);
+    }
+
+    private void handleFatalError(PlaybackException e) {
+        if (!fallbackMpvToExo()) callback.onError(engine.getErrorMessage(e));
+    }
+
+    /**
+     * External/soft subtitles need gpu(-next) path; zero-copy embed cannot render them.
+     */
+    private void ensureDecodeForSubs(PlaySpec playSpec) {
+        if (engine.getType() != PlayerEngine.Type.MPV) return;
+        if (decode != PlayerEngine.HARD_PERFORMANCE) return;
+        if (!hasExternalSubs(playSpec)) return;
+        decode = PlayerEngine.HARD;
+        if (engine.setDecode(decode)) setPlayer(engine.rebuild());
+        callback.onDecodeChanged();
+    }
+
+    private static boolean hasExternalSubs(PlaySpec playSpec) {
+        return playSpec != null && playSpec.getSubs() != null && !playSpec.getSubs().isEmpty();
     }
 
     private boolean isHard() {
@@ -429,7 +492,7 @@ public class PlayerManager implements ParseCallback {
         if (PlayerEngineFactory.matches(engine, preferredEngine, spec)) return;
         PlayerEngine old = engine;
         player.removeListener(listener);
-        engine = PlayerEngineFactory.create(decode, preferredEngine, spec, listener);
+        engine = PlayerEngineFactory.create(decode, preferredEngine, liveMode, spec, listener);
         // Release MPV while PlayerView still owns its valid Surface. Publishing the replacement
         // first detaches that Surface and makes MPV's asynchronous shutdown rebuild a surface-less
         // VO, which can leave the next channel black.
@@ -498,6 +561,7 @@ public class PlayerManager implements ParseCallback {
     private void setMediaItem(long timeout, long startPositionMs) {
         if (spec == null || spec.getUrl() == null) return;
         ensureEngine(spec.checkUa());
+        ensureDecodeForSubs(spec);
         engine.start(spec, startPositionMs);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, timeout);
@@ -610,11 +674,10 @@ public class PlayerManager implements ParseCallback {
             App.removeCallbacks(runnable);
             if (spec == null) return;
             switch (engine.handleError(e)) {
+                case RETRY -> handleSourceRetry(e);
                 case DECODE -> handleDecodeError(e);
                 case RECOVERED -> setDanmakus(spec.getDanmakus());
-                case FATAL -> {
-                    if (!fallbackMpvToExo()) callback.onError(engine.getErrorMessage(e));
-                }
+                case FATAL -> handleFatalError(e);
             }
         }
     };

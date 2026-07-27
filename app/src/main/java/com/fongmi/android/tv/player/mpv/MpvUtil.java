@@ -51,7 +51,11 @@ public final class MpvUtil {
     }
 
     public static MpvPlayer buildPlayer(int decode, Player.Listener listener) {
-        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(decode).setConfig(buildConfig(decode)).build();
+        return buildPlayer(decode, false, listener);
+    }
+
+    public static MpvPlayer buildPlayer(int decode, boolean live, Player.Listener listener) {
+        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(decode).setConfig(buildConfig(decode, live)).build();
         player.addListener(listener);
         return player;
     }
@@ -60,12 +64,12 @@ public final class MpvUtil {
         player.setSubtitleOptions(buildSubtitleConfig());
     }
 
-    private static MpvPlayerConfig buildConfig(int decode) {
+    private static MpvPlayerConfig buildConfig(int decode, boolean live) {
         Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
         MpvPlayerConfig.Builder builder = new MpvPlayerConfig.Builder();
         addAndroidOptions(builder, userOptions, decode);
         addUserOptions(builder, userOptions);
-        addApplicationOptions(builder, userOptions, decode);
+        addApplicationOptions(builder, userOptions, decode, live);
         addTrackLanguageOptions(builder);
         addSubtitleStyleOptions(builder);
         return builder.build();
@@ -105,7 +109,7 @@ public final class MpvUtil {
         }
     }
 
-    private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode) {
+    private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode, boolean live) {
         builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(true);
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
@@ -116,7 +120,45 @@ public final class MpvUtil {
         } else {
             addVideoOutputOptions(builder, userOptions);
         }
+        addIjkBehaviorOptions(builder, userOptions, live);
         addPreloadOptions(builder);
+    }
+
+    /**
+     * Port useful IJK live behaviors without bringing the IJK engine:
+     * reconnect, framedrop, low-latency demux / unbounded buffer for live.
+     */
+    private static void addIjkBehaviorOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
+        if (!userOptions.containsKey("framedrop")) {
+            builder.addPreInitStringOption("framedrop", "vo");
+        }
+        if (!userOptions.containsKey("video-sync") && live) {
+            builder.addPreInitStringOption("video-sync", "audio");
+        }
+        if (!userOptions.containsKey("demuxer-max-bytes")) {
+            int mb = Math.max(15, PlayerSetting.getBuffer() * 3);
+            builder.addPreInitStringOption("demuxer-max-bytes", mb + "MiB");
+        }
+        if (live) {
+            if (!userOptions.containsKey("cache-secs")) {
+                builder.addPreInitStringOption("cache-secs", Integer.toString(Math.max(1, PlayerSetting.getBuffer())));
+            }
+            // Prefer reconnect over aggressive nobuffer — mid-GOP live TS needs SPS/PPS.
+            // Mild analyzeduration helps first open without starving the live join.
+            if (!userOptions.containsKey("demuxer-lavf-o")) {
+                builder.addPreInitStringOption("demuxer-lavf-o",
+                        "analyzeduration=5000000,probesize=2000000");
+            }
+            if (!userOptions.containsKey("stream-lavf-o")) {
+                builder.addPreInitStringOption("stream-lavf-o",
+                        "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
+            }
+            if (!userOptions.containsKey("rtsp-transport")) {
+                builder.addPreInitStringOption("rtsp-transport", "tcp");
+            }
+        } else if (!userOptions.containsKey("stream-lavf-o")) {
+            builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
+        }
     }
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {

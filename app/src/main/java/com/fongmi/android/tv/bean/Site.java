@@ -69,6 +69,10 @@ public class Site implements Parcelable {
     private Integer type;
 
     @Ignore
+    @SerializedName("playerType")
+    private Integer playerType;
+
+    @Ignore
     @SerializedName("hide")
     private Integer hide;
 
@@ -200,6 +204,14 @@ public class Site implements Parcelable {
 
     public Integer getType() {
         return type == null ? 0 : type;
+    }
+
+    public int getPlayerType() {
+        return playerType == null ? -1 : playerType;
+    }
+
+    public void setPlayerType(Integer playerType) {
+        this.playerType = playerType;
     }
 
     public Integer getHide() {

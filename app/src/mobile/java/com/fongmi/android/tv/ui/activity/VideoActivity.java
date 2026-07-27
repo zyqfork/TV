@@ -544,6 +544,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     @Override
     public void startPlayback(Result result, boolean useParse, long startPositionMs, History history, Episode episode) {
+        player().setEngine(PlayerSetting.resolveEngine(false, getSite().getPlayerType()), false);
         startPlayer(getHistoryKey(), result, useParse, getSite().getTimeout(), startPositionMs, VodPlaybackMedia.metadata(history, episode));
     }
 

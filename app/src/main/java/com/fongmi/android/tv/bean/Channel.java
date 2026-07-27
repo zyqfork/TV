@@ -63,6 +63,8 @@ public class Channel {
     private Integer parse;
     @SerializedName("drm")
     private Drm drm;
+    @SerializedName("playerType")
+    private Integer playerType;
 
     private boolean selected;
     private Group group;
@@ -234,6 +236,14 @@ public class Channel {
         this.drm = drm;
     }
 
+    public int getPlayerType() {
+        return playerType == null ? -1 : playerType;
+    }
+
+    public void setPlayerType(Integer playerType) {
+        this.playerType = playerType;
+    }
+
     public Group getGroup() {
         return group;
     }
@@ -355,6 +365,7 @@ public class Channel {
         if (!live.getOrigin().isEmpty() && getOrigin().isEmpty()) setOrigin(live.getOrigin());
         if (!live.getCatchup().isEmpty() && getCatchup().isEmpty()) setCatchup(live.getCatchup());
         if (!live.getReferer().isEmpty() && getReferer().isEmpty()) setReferer(live.getReferer());
+        if (live.getPlayerType() != -1 && getPlayerType() == -1) setPlayerType(live.getPlayerType());
         if (live.getEpg().contains("{") && !getEpg().startsWith("http")) setEpg(live.getEpgApi().replace("{id}", getTvgId()).replace("{name}", getTvgName()).replace("{epg}", getEpg()));
         if (live.getLogo().contains("{") && !getLogo().startsWith("http")) setLogo(live.getLogo().replace("{id}", getTvgId()).replace("{name}", getTvgName()).replace("{logo}", getLogo()));
     }
@@ -384,6 +395,7 @@ public class Channel {
         setUrls(item.getUrls());
         setDataList(item.getDataList());
         setDrm(item.getDrm());
+        setPlayerType(item.getPlayerType());
         setEpg(item.getEpg());
         setUa(item.getUa());
         return this;

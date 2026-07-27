@@ -19,8 +19,39 @@ public class PlayerSetting {
     private static final int MIN_BACKGROUND = 0;
     private static final int MAX_BACKGROUND = 2;
     private static final int HARD_DEFAULT = 1;
+    private static final int HARD_PERFORMANCE_DEFAULT = 2;
+    private static final int MIN_BUFFER = 1;
+    private static final int MAX_BUFFER = 15;
+    private static final int DEFAULT_BUFFER = 5;
+    /** Legacy fork/dev: 0=SYS, 1=IJK, 2=EXO. Mapped to Exo/MPV below. */
+    public static final int PLAYER_TYPE_FOLLOW = -1;
+    public static final int PLAYER_TYPE_MPV = 1;
+    public static final int PLAYER_TYPE_EXO = 2;
     private static final float MIN_SPEED = 2.0f;
     private static final float MAX_SPEED = 5.0f;
+
+    /**
+     * One-shot migration: soft decode must not be the sticky default.
+     * Soft is only for unsupported codecs / hard-decode failure fallback.
+     */
+    public static void migrateDecodeDefaults() {
+        if (Prefers.getBoolean("decode_defaults_migrated_v3")) return;
+        if (Prefers.getInt("mpv_decode", HARD_DEFAULT) == 0) putMpvDecode(HARD_DEFAULT);
+        // Soft must not stick as a scene default; hard-first with soft as last fallback only.
+        if (Prefers.getInt("live_mpv_decode", HARD_PERFORMANCE_DEFAULT) == 0) {
+            Prefers.put("live_mpv_decode", HARD_PERFORMANCE_DEFAULT);
+        }
+        if (Prefers.getInt("vod_mpv_decode", HARD_PERFORMANCE_DEFAULT) == 0) {
+            Prefers.put("vod_mpv_decode", HARD_PERFORMANCE_DEFAULT);
+        }
+        // First install / no scene key: prefer performance hard for VOD MPV.
+        if (!Prefers.getPrefers().contains("vod_mpv_decode")) {
+            Prefers.put("vod_mpv_decode", HARD_PERFORMANCE_DEFAULT);
+        }
+        Prefers.put("decode_defaults_migrated_v3", true);
+        Prefers.put("decode_defaults_migrated_v2", true);
+        Prefers.put("decode_defaults_migrated", true);
+    }
 
     public static int getEngine() {
         int legacy = Prefers.getInt("player_engine", ENGINE_EXO);
@@ -75,13 +106,41 @@ public class PlayerSetting {
         String player = engine == ENGINE_MPV ? "mpv" : "exo";
         int fallback;
         if (engine == ENGINE_MPV) {
-            // Live benefits from zero-copy (mediacodec_embed); VOD may need gpu-next for subtitles
-            fallback = live ? 2 : getMpvDecode();
+            // Prefer zero-copy hard decode for both live and VOD; external subs force compatible later.
+            fallback = HARD_PERFORMANCE_DEFAULT;
         } else {
-            fallback = 1;
+            fallback = HARD_DEFAULT;
         }
         int max = engine == ENGINE_MPV ? 2 : 1;
         return Math.clamp(Prefers.getInt(scene + "_" + player + "_decode", fallback), 0, max);
+    }
+
+    /**
+     * Map config playerType (legacy SYS/IJK/EXO) onto current engines.
+     * 1 (IJK) → MPV; 2 (EXO) → EXO; otherwise follow scene default.
+     */
+    public static int resolveEngine(boolean live, int playerType) {
+        if (playerType == PLAYER_TYPE_MPV) return ENGINE_MPV;
+        if (playerType == PLAYER_TYPE_EXO) return ENGINE_EXO;
+        return live ? getLiveEngine() : getVodEngine();
+    }
+
+    public static int getBuffer() {
+        int value = Prefers.getInt("exo_buffer", DEFAULT_BUFFER);
+        return Math.clamp(value <= 0 ? DEFAULT_BUFFER : value, MIN_BUFFER, MAX_BUFFER);
+    }
+
+    public static void putBuffer(int buffer) {
+        Prefers.put("exo_buffer", Math.clamp(buffer, MIN_BUFFER, MAX_BUFFER));
+    }
+
+    /** 0 = DefaultHttpDataSource, 1 = OkHttp (default). */
+    public static int getHttp() {
+        return Math.clamp(Prefers.getInt("exo_http", 1), 0, 1);
+    }
+
+    public static void putHttp(int http) {
+        Prefers.put("exo_http", Math.clamp(http, 0, 1));
     }
 
     public static void putDecode(boolean live, int engine, int decode) {

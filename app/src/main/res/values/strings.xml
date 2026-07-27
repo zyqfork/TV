@@ -177,6 +177,9 @@
     <string name="player_mpv_vulkan">vulkan</string>
     <string name="player_mpv_conf_import_success">Imported mpv.conf</string>
     <string name="player_ua">User-Agent</string>
+    <string name="player_buffer">Buffer time</string>
+    <string name="player_buffer_value">%1$d s</string>
+    <string name="player_http">HTTP method</string>
 
     <!-- Danmaku -->
     <string name="danmaku_load">Danmaku load</string>
@@ -209,7 +212,12 @@
     <string name="error_play_url">Unable to load url</string>
     <string name="error_play_flag">No flag data</string>
     <string name="error_play_timeout">Timed out</string>
-    <string name="error_decode_fallback">Hardware decoding failed, switched to software decoding</string>
+    <string name="error_play_source">Source temporarily unavailable</string>
+    <string name="error_play_http">Bad HTTP status from source</string>
+    <string name="error_play_network">Network connection failed</string>
+    <string name="error_play_format">Unsupported media format</string>
+    <string name="error_play_retry">Source error, retrying</string>
+    <string name="error_decode_fallback">Hardware decode failed, switching decode mode</string>
     <string name="error_play_tvbus">Error code: <xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">No play data</string>
     <string name="error_empty">Nothing here 👀</string>
@@ -237,9 +245,14 @@
     <string name="lines">lines</string>
 
     <string-array name="select_decode">
-        <item>Soft</item>
+        <item>Soft (fallback)</item>
         <item>Hard compatible</item>
         <item>Hard performance</item>
+    </string-array>
+
+    <string-array name="select_exo_http">
+        <item>Default</item>
+        <item>OkHttp</item>
     </string-array>
 
     <string-array name="select_engine">
