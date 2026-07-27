@@ -11,11 +11,41 @@ permissions:
   contents: write
 
 jobs:
-  all-platforms:
+  signing:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Create shared CI release key
+        run: |
+          keytool -genkeypair -noprompt \
+            -keystore ci-release.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey -dname "CN=CI" \
+            -keyalg RSA -keysize 2048 -validity 10000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-release-signing
+          path: ci-release.keystore
+          retention-days: 1
+
+  build:
+    needs: signing
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            flavor: Arm64_v8a
+            apk_abi: arm64_v8a
+          - abi: armeabi-v7a
+            flavor: Armeabi_v7a
+            apk_abi: armeabi_v7a
+          - abi: x86_64
+            flavor: X86_64
+            apk_abi: x86_64
     env:
-      FONGMI_NATIVE_ABIS: arm64-v8a,armeabi-v7a,x86_64
+      FONGMI_NATIVE_ABIS: ${{ matrix.abi }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,13 +67,13 @@ jobs:
       - name: Install Android native toolchains
         run: sdkmanager "ndk;26.1.10909125" "ndk;29.0.14206865" "cmake;3.22.1"
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-release-signing
+          path: app
+
       - name: Configure CI release signing
         run: |
-          keytool -genkeypair -noprompt \
-            -keystore app/ci-release.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey -dname "CN=CI" \
-            -keyalg RSA -keysize 2048 -validity 10000
           {
             echo "sdk.dir=$ANDROID_HOME"
             echo "storeFile=ci-release.keystore"
@@ -57,11 +87,11 @@ jobs:
         with:
           path: |
             ~/.gradle/caches/fongmi-libmpv
-            ~/.gradle/caches/fongmi-ffmpeg-arm64-v8a
-            ~/.gradle/caches/fongmi-ffmpeg-armeabi-v7a
-            ~/.gradle/caches/fongmi-ffmpeg-x86_64
+            ~/.gradle/caches/fongmi-ffmpeg-${{ matrix.abi }}
             ~/.gradle/caches/fongmi-dav1d
-          key: native-all-abis-${{ runner.os }}-${{ hashFiles('media3compat/scripts/*.sh', 'media3compat/build.gradle') }}
+          key: native-${{ matrix.abi }}-${{ runner.os }}-${{ hashFiles('media3compat/scripts/*.sh', 'media3compat/build.gradle') }}
+          restore-keys: |
+            native-all-abis-${{ runner.os }}-
 
       - name: Verify no APK binary dependency
         run: |
@@ -80,46 +110,44 @@ jobs:
             :lib-ui-danmaku:publishToMavenLocal \
             :lib-ui:publishToMavenLocal --stacktrace
 
-      - name: Build all release APKs from source
+      - name: Build television and mobile APKs from source
         run: |
           ./gradlew \
-            :app:assembleLeanbackArm64_v8aRelease \
-            :app:assembleLeanbackArmeabi_v7aRelease \
-            :app:assembleLeanbackX86_64Release \
-            :app:assembleMobileArm64_v8aRelease \
-            :app:assembleMobileArmeabi_v7aRelease \
-            :app:assembleMobileX86_64Release --stacktrace
+            :app:assembleLeanback${{ matrix.flavor }}Release \
+            :app:assembleMobile${{ matrix.flavor }}Release --stacktrace
 
-      - name: Verify source-built AV1 extension and APK matrix
+      - name: Verify source-built player libraries
         run: |
           test -f media3compat/build/generated/av1/java/androidx/media3/decoder/av1/Libdav1dVideoRenderer.java
-          for abi in arm64-v8a armeabi-v7a x86_64; do
-            apk_abi=${abi//-/_}
-            for mode in leanback mobile; do
-              apk="app/build/outputs/apk/${mode}${apk_abi^}/release/${mode}-${apk_abi}.apk"
-              test -f "$apk"
-              unzip -l "$apk" | grep -q "lib/$abi/libdav1dJNI.so"
-              unzip -l "$apk" | grep -q "lib/$abi/libmpv.so"
-            done
+          for mode in leanback mobile; do
+            apk="app/build/outputs/apk/${mode}${{ matrix.flavor }}/release/${mode}-${{ matrix.apk_abi }}.apk"
+            test -f "$apk"
+            unzip -l "$apk" | grep -q "lib/${{ matrix.abi }}/libdav1dJNI.so"
+            unzip -l "$apk" | grep -q "lib/${{ matrix.abi }}/libmpv.so"
           done
-          cd app/build/outputs/apk
-          find . -path '*/release/*.apk' -type f -print0 |
-            sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: all-platform-source-release
-          path: |
-            app/build/outputs/apk/*/release/*.apk
-            app/build/outputs/apk/SHA256SUMS
+          name: apk-${{ matrix.apk_abi }}
+          path: app/build/outputs/apk/*${{ matrix.flavor }}/release/*.apk
           if-no-files-found: error
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum *.apk | sort -k2 > SHA256SUMS
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: |
-            app/build/outputs/apk/*/release/*.apk
-            app/build/outputs/apk/SHA256SUMS
+          files: release-assets/*
