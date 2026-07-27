@@ -51,7 +51,10 @@ fi
 
 mkdir -p "${BUILD_CACHE}" "${JNI_ROOT}" "$(dirname "${OUTPUT_SO}")"
 
-if [[ ! -f "${SOURCE_ROOT}/android-libs/${ABI}/libavcodec.a" ]]; then
+FFMPEG_LIB_DIR="${SOURCE_ROOT}/android-libs/${ABI}"
+if [[ ! -f "${FFMPEG_LIB_DIR}/libavcodec.a" ||
+      ! -f "${FFMPEG_LIB_DIR}/libavutil.a" ||
+      ! -f "${FFMPEG_LIB_DIR}/libswresample.a" ]]; then
   ARCHIVE="${BUILD_CACHE}/ffmpeg-${FFMPEG_REVISION}.tar.gz"
   if [[ ! -f "${ARCHIVE}" ]] ||
       [[ "$(sha256sum "${ARCHIVE}" | cut -d ' ' -f 1)" != "${FFMPEG_ARCHIVE_SHA256}" ]]; then
