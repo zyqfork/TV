@@ -15,12 +15,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Create shared CI release key
+        env:
+          CI_RELEASE_KEYSTORE_BASE64: ${{ secrets.CI_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkeypair -noprompt \
-            -keystore ci-release.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey -dname "CN=CI" \
-            -keyalg RSA -keysize 2048 -validity 10000
+          if [ -n "$CI_RELEASE_KEYSTORE_BASE64" ]; then
+            printf '%s' "$CI_RELEASE_KEYSTORE_BASE64" | base64 --decode > ci-release.keystore
+          else
+            keytool -genkeypair -noprompt \
+              -keystore ci-release.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey -dname "CN=CI" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ci-release-signing
@@ -46,6 +52,9 @@ jobs:
             apk_abi: x86_64
     env:
       FONGMI_NATIVE_ABIS: ${{ matrix.abi }}
+      CI_RELEASE_STORE_PASSWORD: ${{ secrets.CI_RELEASE_STORE_PASSWORD }}
+      CI_RELEASE_KEY_ALIAS: ${{ secrets.CI_RELEASE_KEY_ALIAS }}
+      CI_RELEASE_KEY_PASSWORD: ${{ secrets.CI_RELEASE_KEY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -77,9 +86,9 @@ jobs:
           {
             echo "sdk.dir=$ANDROID_HOME"
             echo "storeFile=ci-release.keystore"
-            echo "keyAlias=androiddebugkey"
-            echo "storePassword=android"
-            echo "keyPassword=android"
+            echo "keyAlias=${CI_RELEASE_KEY_ALIAS:-androiddebugkey}"
+            echo "storePassword=${CI_RELEASE_STORE_PASSWORD:-android}"
+            echo "keyPassword=${CI_RELEASE_KEY_PASSWORD:-android}"
           } > local.properties
 
       - name: Cache source-built native libraries
