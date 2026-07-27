@@ -18,6 +18,7 @@ public class PlayerSetting {
     private static final int MAX_SIZE = 3;
     private static final int MIN_BACKGROUND = 0;
     private static final int MAX_BACKGROUND = 2;
+    private static final int HARD_DEFAULT = 1;
     private static final float MIN_SPEED = 2.0f;
     private static final float MAX_SPEED = 5.0f;
 
@@ -62,7 +63,7 @@ public class PlayerSetting {
     }
 
     public static int getMpvDecode() {
-        return Math.clamp(Prefers.getInt("mpv_decode", 1), 0, 2);
+        return Math.clamp(Prefers.getInt("mpv_decode", HARD_DEFAULT), 0, 2);
     }
 
     public static void putMpvDecode(int decode) {
@@ -72,7 +73,13 @@ public class PlayerSetting {
     public static int getDecode(boolean live, int engine) {
         String scene = live ? "live" : "vod";
         String player = engine == ENGINE_MPV ? "mpv" : "exo";
-        int fallback = engine == ENGINE_MPV ? getMpvDecode() : 1;
+        int fallback;
+        if (engine == ENGINE_MPV) {
+            // Live benefits from zero-copy (mediacodec_embed); VOD may need gpu-next for subtitles
+            fallback = live ? 2 : getMpvDecode();
+        } else {
+            fallback = 1;
+        }
         int max = engine == ENGINE_MPV ? 2 : 1;
         return Math.clamp(Prefers.getInt(scene + "_" + player + "_decode", fallback), 0, max);
     }

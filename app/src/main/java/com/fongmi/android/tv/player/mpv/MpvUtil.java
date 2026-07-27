@@ -106,7 +106,7 @@ public final class MpvUtil {
     }
 
     private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode) {
-        builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
+        builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(true);
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
@@ -127,7 +127,7 @@ public final class MpvUtil {
 
     private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
         // Match mpv-android: Android GLES context is required for vo=gpu, otherwise audio-only.
-        if (PlayerSetting.isMpvVulkan()) {
+        if (PlayerSetting.isMpvVulkan() && isVulkanAvailable()) {
             builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN)
                     .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
             return;
@@ -164,6 +164,21 @@ public final class MpvUtil {
         float position = PlayerSetting.getSubtitlePosition();
         if (position == 0) return DEFAULT_SUB_POS;
         return Util.constrainValue(DEFAULT_SUB_POS - position * 100.0, MIN_SUB_POS, MAX_SUB_POS);
+    }
+
+    /**
+     * Vulkan VO requires both Android Vulkan hardware AND libmpv compiled with vulkan support.
+     * Current libmpv build does not include vulkan; this will return false until rebuilt with it.
+     */
+    private static boolean isVulkanAvailable() {
+        if (!App.get().getPackageManager().hasSystemFeature("android.hardware.vulkan.level")) return false;
+        try {
+            // After MPVLib.init(), mpv-version property embeds feature flags; but before init
+            // we cannot query. Instead rely on build-time constant from the media3compat module.
+            return is.xyz.mpv.MPVLib.hasFeature("vulkan");
+        } catch (Throwable e) {
+            return false;
+        }
     }
 
     private static double getSubtitleScale() {

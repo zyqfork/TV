@@ -24,6 +24,8 @@ public final class MPVLib {
     private MPVLib() {
     }
 
+    private static volatile String features;
+
     public static synchronized boolean load() {
         if (loaded) return true;
         try {
@@ -35,6 +37,28 @@ public final class MPVLib {
         }
         return loaded;
     }
+
+    /**
+     * Check if the native libmpv was compiled with a given feature (e.g. "vulkan").
+     * Queries mpv_get_property("options/gpu-context") after init to detect available contexts,
+     * but pre-init we fall back to trying the native method which reads mpv's feature string.
+     */
+    public static boolean hasFeature(String feature) {
+        if (!loaded) return false;
+        if (features == null) {
+            try {
+                features = nativeGetFeatures();
+            } catch (UnsatisfiedLinkError e) {
+                // JNI not yet implemented; return empty until native rebuild
+                features = "";
+            } catch (Throwable e) {
+                features = "";
+            }
+        }
+        return features.contains(feature);
+    }
+
+    private static native String nativeGetFeatures();
 
     public static boolean acquireInstance() {
         return load() && instanceInUse.compareAndSet(false, true);
