@@ -34,12 +34,16 @@ public final class PlayerEngineFactory {
     }
 
     public static PlayerEngine createExo(int decode, Player.Listener listener) {
-        return create(decode, EXO, false, listener);
+        return createExo(decode, false, listener);
+    }
+
+    public static PlayerEngine createExo(int decode, boolean live, Player.Listener listener) {
+        return create(decode, EXO, live, listener);
     }
 
     private static PlayerEngine create(int decode, PlayerEngine.Type type, boolean live, Player.Listener listener) {
         return switch (type) {
-            case EXO -> new ExoPlayerEngine(decode, listener);
+            case EXO -> new ExoPlayerEngine(decode, live, listener);
             case MPV -> new MpvPlayerEngine(decode, live, listener);
         };
     }

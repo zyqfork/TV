@@ -20,7 +20,7 @@ class LiveFallbackPolicy {
         Channel channel = state.getChannel();
         // Prefer next line when auto-change is on; otherwise host already showed the error toast.
         if (!LiveSetting.isChange() || channel == null || channel.isLast()) return;
-        controller.nextLine(true);
+        controller.nextBestLine(true);
     }
 
     void playbackEnded() {

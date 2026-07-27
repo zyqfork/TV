@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player;
 
 import android.net.Uri;
+import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -43,6 +44,7 @@ import java.util.Map;
 public class PlayerManager implements ParseCallback {
 
     private final Runnable runnable;
+    private final Runnable firstFrameRunnable;
     private final Callback callback;
     private PlayerEngine engine;
     private VideoSize videoSize;
@@ -55,6 +57,9 @@ public class PlayerManager implements ParseCallback {
     private boolean danmakuEnabled;
     private boolean initTrack;
     private boolean mpvFallbackUsed;
+    private boolean subtitleDecodeHintShown;
+    private boolean openReported;
+    private long playStartRealtimeMs;
     private int retry;
     private int sourceRetry;
     private int decode;
@@ -64,6 +69,7 @@ public class PlayerManager implements ParseCallback {
     public PlayerManager(Callback callback) {
         this.callback = callback;
         this.runnable = this::onPlayTimeout;
+        this.firstFrameRunnable = this::onFirstFrameTimeout;
         this.preferredEngine = PlayerSetting.getVodEngine();
         this.decode = PlayerSetting.getDecode(false, preferredEngine);
         this.engine = PlayerEngineFactory.create(decode, preferredEngine, false, listener);
@@ -79,7 +85,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void release() {
-        App.removeCallbacks(runnable);
+        App.removeCallbacks(runnable, firstFrameRunnable);
         if (player != null) player.removeListener(listener);
         if (engine != null) engine.release();
         engine = null;
@@ -260,8 +266,11 @@ public class PlayerManager implements ParseCallback {
         if (engine instanceof com.fongmi.android.tv.player.mpv.MpvPlayerEngine mpv) {
             mpv.setLive(liveMode);
         }
+        if (engine instanceof com.fongmi.android.tv.player.exo.ExoPlayerEngine exo) {
+            exo.setLive(liveMode);
+        }
         if (decode == targetDecode && !modeChanged) return;
-        boolean needRebuild = decode != targetDecode || (modeChanged && engine.getType() == PlayerEngine.Type.MPV);
+        boolean needRebuild = decode != targetDecode || modeChanged;
         decode = targetDecode;
         if (engineChanged || engine == null) return;
         if (needRebuild && (engine.setDecode(decode) || modeChanged)) {
@@ -400,10 +409,11 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void reset() {
-        App.removeCallbacks(runnable);
+        App.removeCallbacks(runnable, firstFrameRunnable);
         retry = 0;
         sourceRetry = 0;
         mpvFallbackUsed = false;
+        openReported = false;
     }
 
     public void clear() {
@@ -460,6 +470,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void handleFatalError(PlaybackException e) {
+        if (spec != null) LineQualityStore.recordFailure(spec.getUrl());
         if (!fallbackMpvToExo()) callback.onError(engine.getErrorMessage(e));
     }
 
@@ -472,6 +483,10 @@ public class PlayerManager implements ParseCallback {
         if (!hasExternalSubs(playSpec)) return;
         decode = PlayerEngine.HARD;
         if (engine.setDecode(decode)) setPlayer(engine.rebuild());
+        if (!subtitleDecodeHintShown) {
+            subtitleDecodeHintShown = true;
+            Notify.show(R.string.player_sub_decode_hint);
+        }
         callback.onDecodeChanged();
     }
 
@@ -485,7 +500,14 @@ public class PlayerManager implements ParseCallback {
 
     private void onPlayTimeout() {
         stop();
+        if (spec != null) LineQualityStore.recordFailure(spec.getUrl());
         callback.onError(ResUtil.getString(R.string.error_play_timeout));
+    }
+
+    private void onFirstFrameTimeout() {
+        if (openReported || spec == null || isReleased()) return;
+        if (engine.getType() == PlayerEngine.Type.MPV && fallbackMpvToExo()) return;
+        onPlayTimeout();
     }
 
     private void ensureEngine(PlaySpec spec) {
@@ -508,13 +530,14 @@ public class PlayerManager implements ParseCallback {
         long position = Math.max(0, getPosition());
         PlayerEngine old = engine;
         player.removeListener(listener);
-        engine = PlayerEngineFactory.createExo(decode, listener);
+        engine = PlayerEngineFactory.createExo(decode, liveMode, listener);
         // Keep the old render target attached until native MPV shutdown is complete.
         old.release();
         setPlayer(engine.getPlayer());
         engine.start(spec, position);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, Constant.TIMEOUT_PLAY);
+        scheduleFirstFrameTimeout();
         callback.onPrepare();
         initTrack = false;
         return true;
@@ -538,6 +561,7 @@ public class PlayerManager implements ParseCallback {
 
     public void start(PlaySpec spec, long timeout, long startPositionMs) {
         this.spec = spec;
+        this.subtitleDecodeHintShown = false;
         setMediaItem(timeout, startPositionMs);
     }
 
@@ -560,13 +584,22 @@ public class PlayerManager implements ParseCallback {
 
     private void setMediaItem(long timeout, long startPositionMs) {
         if (spec == null || spec.getUrl() == null) return;
+        sourceRetry = 0;
+        openReported = false;
+        playStartRealtimeMs = SystemClock.elapsedRealtime();
         ensureEngine(spec.checkUa());
         ensureDecodeForSubs(spec);
         engine.start(spec, startPositionMs);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, timeout);
+        scheduleFirstFrameTimeout();
         callback.onPrepare();
         initTrack = false;
+    }
+
+    private void scheduleFirstFrameTimeout() {
+        long timeout = liveMode ? Constant.TIMEOUT_FIRST_FRAME_LIVE : Constant.TIMEOUT_FIRST_FRAME_VOD;
+        App.post(firstFrameRunnable, timeout);
     }
 
     private void startCurrent() {
@@ -643,7 +676,16 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onPlaybackStateChanged(int state) {
-            if (state == Player.STATE_READY || state == Player.STATE_ENDED) App.removeCallbacks(runnable);
+            if (state == Player.STATE_READY) {
+                App.removeCallbacks(runnable, firstFrameRunnable);
+                if (!openReported && spec != null) {
+                    openReported = true;
+                    long openMs = Math.max(0, SystemClock.elapsedRealtime() - playStartRealtimeMs);
+                    LineQualityStore.recordSuccess(spec.getUrl(), openMs);
+                }
+            } else if (state == Player.STATE_ENDED) {
+                App.removeCallbacks(runnable, firstFrameRunnable);
+            }
         }
 
         @Override
@@ -671,7 +713,7 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onPlayerError(@NonNull PlaybackException e) {
-            App.removeCallbacks(runnable);
+            App.removeCallbacks(runnable, firstFrameRunnable);
             if (spec == null) return;
             switch (engine.handleError(e)) {
                 case RETRY -> handleSourceRetry(e);

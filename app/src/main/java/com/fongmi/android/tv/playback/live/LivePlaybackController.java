@@ -4,27 +4,37 @@ import android.text.TextUtils;
 
 import androidx.media3.common.C;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.player.LineQualityStore;
 
 public class LivePlaybackController {
+
+    private static final long SWITCH_DEBOUNCE_MS = 300L;
 
     private final LiveNavigationPolicy navigationPolicy;
     private final LiveFallbackPolicy fallbackPolicy;
     private final LivePlaybackState state;
     private final LivePlaybackHost host;
+    private final Runnable refreshRunnable;
+    private long pendingStartPositionMs;
+    private boolean pendingKeepLine;
 
     public LivePlaybackController(LivePlaybackHost host, LivePlaybackState state) {
         this.state = state;
         this.host = host;
         this.navigationPolicy = new LiveNavigationPolicy(this, state, host);
         this.fallbackPolicy = new LiveFallbackPolicy(this, state, host);
+        this.refreshRunnable = this::refreshNow;
+        this.pendingStartPositionMs = C.TIME_UNSET;
     }
 
     public void reset() {
+        App.removeCallbacks(refreshRunnable);
         state.reset();
     }
 
@@ -38,7 +48,7 @@ public class LivePlaybackController {
         if (channel == null) return;
         state.setChannel(channel);
         host.renderChannelSelection(channel);
-        refresh();
+        scheduleRefresh(C.TIME_UNSET, false);
     }
 
     public boolean selectEpg(EpgData data) {
@@ -61,18 +71,35 @@ public class LivePlaybackController {
     }
 
     public void refresh() {
-        refresh(C.TIME_UNSET);
+        scheduleRefresh(C.TIME_UNSET, false);
     }
 
     public void refresh(long startPositionMs) {
+        scheduleRefresh(startPositionMs, false);
+    }
+
+    private void scheduleRefresh(long startPositionMs, boolean keepLine) {
+        pendingStartPositionMs = startPositionMs;
+        pendingKeepLine = keepLine;
+        App.post(refreshRunnable, SWITCH_DEBOUNCE_MS);
+    }
+
+    private void refreshNow() {
         Channel channel = state.getChannel();
         if (channel == null) return;
+        if (!pendingKeepLine && !channel.isOnly()) {
+            int bestIndex = LineQualityStore.bestIndex(channel.getUrls(), channel.getIndex());
+            channel.setIndex(bestIndex);
+            host.renderLineSelection(channel, false);
+        }
         LiveConfig.get().setKeep(channel);
-        LivePlayRequest request = LivePlayRequest.live(channel, startPositionMs);
+        LivePlayRequest request = LivePlayRequest.live(channel, pendingStartPositionMs);
         state.setPendingRequest(request);
         host.requestUrl(request);
         host.showProgress();
         host.stopPlaybackForRefresh();
+        pendingStartPositionMs = C.TIME_UNSET;
+        pendingKeepLine = false;
     }
 
     public void onUrlResult(Result result) {
@@ -126,15 +153,27 @@ public class LivePlaybackController {
         switchLine(true, show);
     }
 
+    public void nextBestLine(boolean show) {
+        Channel channel = state.getChannel();
+        if (channel == null || channel.isOnly()) return;
+        int current = channel.getIndex();
+        int best = LineQualityStore.bestIndex(channel.getUrls(), current);
+        channel.setIndex(best);
+        if (channel.getIndex() == current) channel.switchLine(true);
+        host.renderLineSelection(channel, show);
+        scheduleRefresh(C.TIME_UNSET, true);
+    }
+
     private void switchLine(boolean next, boolean show) {
         Channel channel = state.getChannel();
         if (channel == null || channel.isOnly()) return;
         channel.switchLine(next);
         host.renderLineSelection(channel, show);
-        refresh();
+        scheduleRefresh(C.TIME_UNSET, true);
     }
 
     private void requestCatchup(EpgData data, long startPositionMs) {
+        App.removeCallbacks(refreshRunnable);
         Channel channel = state.getChannel();
         if (channel == null) return;
         LivePlayRequest request = LivePlayRequest.catchup(channel, data, startPositionMs);

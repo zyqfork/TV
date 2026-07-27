@@ -23,6 +23,8 @@ public class PlayerSetting {
     private static final int MIN_BUFFER = 1;
     private static final int MAX_BUFFER = 15;
     private static final int DEFAULT_BUFFER = 5;
+    public static final int LIVE_LATENCY_SMOOTH = 0;
+    public static final int LIVE_LATENCY_LOW = 1;
     /** Legacy fork/dev: 0=SYS, 1=IJK, 2=EXO. Mapped to Exo/MPV below. */
     public static final int PLAYER_TYPE_FOLLOW = -1;
     public static final int PLAYER_TYPE_MPV = 1;
@@ -172,7 +174,10 @@ public class PlayerSetting {
 
     public static void putRender(int render) {
         Prefers.put("render", Math.clamp(render, RENDER_SURFACE, RENDER_TEXTURE));
-        if (!isMpv() && isTunnel() && getRender() == RENDER_TEXTURE) Prefers.put("tunnel", false);
+        if (!isMpv() && getRender() == RENDER_TEXTURE) {
+            if (isTunnel()) Prefers.put("tunnel", false);
+            if (isLiveTunnel()) Prefers.put("live_tunnel", false);
+        }
     }
 
     public static boolean isTunnel() {
@@ -186,6 +191,32 @@ public class PlayerSetting {
 
     public static boolean isTunnelingEnabled() {
         return isTunnel() && getRender() == RENDER_SURFACE;
+    }
+
+    public static boolean isLiveTunnel() {
+        return Prefers.getBoolean("live_tunnel", true);
+    }
+
+    public static void putLiveTunnel(boolean enabled) {
+        Prefers.put("live_tunnel", enabled);
+        if (!isMpv() && enabled) Prefers.put("render", RENDER_SURFACE);
+    }
+
+    public static boolean isTunnelingEnabled(boolean live) {
+        boolean enabled = live ? isLiveTunnel() : isTunnel();
+        return enabled && getRender() == RENDER_SURFACE;
+    }
+
+    public static int getLiveLatency() {
+        return Math.clamp(Prefers.getInt("live_latency", LIVE_LATENCY_SMOOTH), LIVE_LATENCY_SMOOTH, LIVE_LATENCY_LOW);
+    }
+
+    public static void putLiveLatency(int mode) {
+        Prefers.put("live_latency", Math.clamp(mode, LIVE_LATENCY_SMOOTH, LIVE_LATENCY_LOW));
+    }
+
+    public static boolean isLiveLowLatency() {
+        return getLiveLatency() == LIVE_LATENCY_LOW;
     }
 
     public static int getSize() {

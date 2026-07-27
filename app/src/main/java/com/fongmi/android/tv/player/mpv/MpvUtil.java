@@ -136,12 +136,13 @@ public final class MpvUtil {
             builder.addPreInitStringOption("video-sync", "audio");
         }
         if (!userOptions.containsKey("demuxer-max-bytes")) {
-            int mb = Math.max(15, PlayerSetting.getBuffer() * 3);
+            int mb = PlayerSetting.isLiveLowLatency() ? Math.max(8, PlayerSetting.getBuffer() * 2) : Math.max(15, PlayerSetting.getBuffer() * 3);
             builder.addPreInitStringOption("demuxer-max-bytes", mb + "MiB");
         }
         if (live) {
             if (!userOptions.containsKey("cache-secs")) {
-                builder.addPreInitStringOption("cache-secs", Integer.toString(Math.max(1, PlayerSetting.getBuffer())));
+                int cacheSec = PlayerSetting.isLiveLowLatency() ? Math.min(2, Math.max(1, PlayerSetting.getBuffer() / 2)) : Math.max(1, PlayerSetting.getBuffer());
+                builder.addPreInitStringOption("cache-secs", Integer.toString(cacheSec));
             }
             // Prefer reconnect over aggressive nobuffer — mid-GOP live TS needs SPS/PPS.
             // Mild analyzeduration helps first open without starving the live join.

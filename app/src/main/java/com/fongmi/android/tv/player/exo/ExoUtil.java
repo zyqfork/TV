@@ -41,10 +41,14 @@ import java.util.stream.Collectors;
 public class ExoUtil {
 
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener) {
+        return buildPlayer(decode, false, PlayerSetting.isAudioPassThrough(), listener);
+    }
+
+    public static ExoPlayer buildPlayer(int decode, boolean live, boolean audioPassThrough, Player.Listener listener) {
         ExoPlayer player = new ExoPlayer.Builder(App.get())
-                .setTrackSelector(buildTrackSelector())
-                .setLoadControl(buildLoadControl())
-                .setRenderersFactory(buildPlaybackRenderersFactory(decode))
+                .setTrackSelector(buildTrackSelector(live))
+                .setLoadControl(buildLoadControl(live))
+                .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioPassThrough))
                 .setMediaSourceFactory(buildMediaSourceFactory())
                 .build();
         if (BuildConfig.DEBUG) player.addAnalyticsListener(new EventLogger());
@@ -60,11 +64,21 @@ public class ExoUtil {
      * Mirrors fork/dev exo_buffer behavior for weak-network / IPTV resilience.
      */
     public static LoadControl buildLoadControl() {
+        return buildLoadControl(false);
+    }
+
+    public static LoadControl buildLoadControl(boolean live) {
         int bufferMs = PlayerSetting.getBuffer() * 1000;
         int minBufferMs = Math.max(bufferMs, 2500);
         int maxBufferMs = Math.max(minBufferMs * 2, 50000);
         int playbackMs = Math.min(2500, Math.max(1000, bufferMs / 2));
         int rebufferMs = Math.min(5000, Math.max(playbackMs, bufferMs));
+        if (live && PlayerSetting.isLiveLowLatency()) {
+            minBufferMs = Math.max(1000, bufferMs / 2);
+            maxBufferMs = Math.max(minBufferMs * 2, 6000);
+            playbackMs = Math.min(1200, minBufferMs);
+            rebufferMs = Math.min(2500, Math.max(playbackMs, minBufferMs));
+        }
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
                 .build();
@@ -86,30 +100,30 @@ public class ExoUtil {
         return decode == PlayerEngine.HARD ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
     }
 
-    private static TrackSelector buildTrackSelector() {
+    private static TrackSelector buildTrackSelector(boolean live) {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
         if (PlayerSetting.isPreferAAC()) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
         builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
-        builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled());
+        builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled(live));
         trackSelector.setParameters(builder.build());
         return trackSelector;
     }
 
-    private static RenderersFactory buildPlaybackRenderersFactory(int decode) {
-        return buildRenderersFactory(getRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
+    private static RenderersFactory buildPlaybackRenderersFactory(int decode, boolean audioPassThrough) {
+        return buildRenderersFactory(getRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), audioPassThrough);
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
+        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerSetting.isAudioPassThrough());
     }
 
-    private static RenderersFactory buildRenderersFactory(int renderMode, boolean audioPrefer, boolean videoPrefer) {
+    private static RenderersFactory buildRenderersFactory(int renderMode, boolean audioPrefer, boolean videoPrefer, boolean audioPassThrough) {
         boolean preferByDecode = renderMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, audioPassThrough);
             }
 
             @Override
@@ -146,9 +160,9 @@ public class ExoUtil {
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
     }
 
-    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
+    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, boolean audioPassThrough) {
         DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
-        if (!PlayerSetting.isAudioPassThrough()) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+        if (!audioPassThrough) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
         return builder.build();
     }
 

@@ -162,6 +162,8 @@
     <string name="player_dv7_fallback">DV7回退</string>
     <string name="player_adblock">智能去广</string>
     <string name="player_tunnel">隧道模式</string>
+    <string name="player_live_tunnel">直播隧道模式</string>
+    <string name="player_live_latency">直播延迟</string>
     <string name="player_speed">长按倍速</string>
     <string name="player_decode_setting">解码设置</string>
     <string name="player_preload_setting">预载设置</string>
@@ -217,6 +219,8 @@
     <string name="error_play_format">不支持的媒体格式</string>
     <string name="error_play_retry">线路异常，正在重试</string>
     <string name="error_decode_fallback">硬解失败，已切换解码模式</string>
+    <string name="player_sub_decode_hint">检测到外挂字幕，已切换为兼容硬解</string>
+    <string name="player_audio_passthrough_fallback">音频直通失败，已切换为 PCM 输出</string>
     <string name="error_play_tvbus">错误代码：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">暂无播放数据</string>
     <string name="error_empty">这里什麽都没有 👀</string>
@@ -252,6 +256,11 @@
     <string-array name="select_exo_http">
         <item>Default</item>
         <item>OkHttp</item>
+    </string-array>
+
+    <string-array name="select_live_latency">
+        <item>流畅</item>
+        <item>低延迟</item>
     </string-array>
 
     <string-array name="select_size">

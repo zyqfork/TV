@@ -31,6 +31,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
     private String[] scale;
     private String[] engine;
     private String[] http;
+    private String[] latency;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingPlayerActivity.class));
@@ -54,6 +55,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
         mBinding.backgroundText.setText(Setting.getSwitch(PlayerSetting.isBackgroundOn()));
         mBinding.bufferText.setText(getString(R.string.player_buffer_value, PlayerSetting.getBuffer()));
         mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[PlayerSetting.getHttp()]);
+        mBinding.liveLatencyText.setText((latency = ResUtil.getStringArray(R.array.select_live_latency))[PlayerSetting.getLiveLatency()]);
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
     }
@@ -73,6 +75,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
         mBinding.adblock.setOnClickListener(this::setAdblock);
         mBinding.buffer.setOnClickListener(this::setBuffer);
         mBinding.http.setOnClickListener(this::setHttp);
+        mBinding.liveLatency.setOnClickListener(this::setLiveLatency);
         mBinding.preload.setOnClickListener(this::onPreloadSetting);
         mBinding.decode.setOnClickListener(this::onDecodeSetting);
         mBinding.ua.setOnClickListener(this::onUa);
@@ -172,6 +175,12 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
         int index = (PlayerSetting.getHttp() + 1) % http.length;
         PlayerSetting.putHttp(index);
         mBinding.httpText.setText(http[index]);
+    }
+
+    private void setLiveLatency(View view) {
+        int index = (PlayerSetting.getLiveLatency() + 1) % latency.length;
+        PlayerSetting.putLiveLatency(index);
+        mBinding.liveLatencyText.setText(latency[index]);
     }
 
     private void onPreloadSetting(View view) {

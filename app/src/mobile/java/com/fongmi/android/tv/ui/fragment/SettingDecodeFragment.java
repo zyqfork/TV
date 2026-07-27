@@ -35,6 +35,7 @@ public class SettingDecodeFragment extends BaseFragment {
     protected void initEvent() {
         mBinding.aac.setOnClickListener(this::setAAC);
         mBinding.tunnel.setOnClickListener(this::setTunnel);
+        mBinding.liveTunnel.setOnClickListener(this::setLiveTunnel);
         mBinding.audioPrefer.setOnClickListener(this::setAudioPrefer);
         mBinding.videoPrefer.setOnClickListener(this::setVideoPrefer);
         mBinding.dv7Fallback.setOnClickListener(this::setDv7HevcFallback);
@@ -44,6 +45,7 @@ public class SettingDecodeFragment extends BaseFragment {
     private void refresh() {
         mBinding.aacText.setText(Setting.getSwitch(PlayerSetting.isPreferAAC()));
         mBinding.tunnelText.setText(Setting.getSwitch(PlayerSetting.isTunnel()));
+        mBinding.liveTunnelText.setText(Setting.getSwitch(PlayerSetting.isLiveTunnel()));
         mBinding.audioPreferText.setText(Setting.getSwitch(PlayerSetting.isAudioPrefer()));
         mBinding.videoPreferText.setText(Setting.getSwitch(PlayerSetting.isVideoPrefer()));
         mBinding.dv7FallbackText.setText(Setting.getSwitch(PlayerSetting.isDv7HevcFallback()));
@@ -54,6 +56,12 @@ public class SettingDecodeFragment extends BaseFragment {
         if (PlayerSetting.isMpv()) return;
         PlayerSetting.putTunnel(!PlayerSetting.isTunnel());
         mBinding.tunnelText.setText(Setting.getSwitch(PlayerSetting.isTunnel()));
+    }
+
+    private void setLiveTunnel(View view) {
+        if (PlayerSetting.isMpv()) return;
+        PlayerSetting.putLiveTunnel(!PlayerSetting.isLiveTunnel());
+        mBinding.liveTunnelText.setText(Setting.getSwitch(PlayerSetting.isLiveTunnel()));
     }
 
     private void setAudioPassThrough(View view) {

@@ -5,9 +5,11 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
+import com.fongmi.android.tv.utils.Notify;
 
 import java.util.concurrent.TimeUnit;
 
@@ -16,13 +18,22 @@ public class ExoPlayerEngine implements PlayerEngine {
     private final ErrorMsgProvider provider;
     private final Player.Listener listener;
     private final PreCache preCache;
+    private boolean live;
+    private boolean audioPassThrough;
+    private boolean audioPassThroughFallbackUsed;
     private ExoPlayer player;
     private PlaySpec spec;
     private int decode;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
+        this(decode, false, listener);
+    }
+
+    public ExoPlayerEngine(int decode, boolean live, Player.Listener listener) {
         decode = decode == SOFT ? SOFT : HARD;
-        this.player = ExoUtil.buildPlayer(decode, listener);
+        this.live = live;
+        this.audioPassThrough = com.fongmi.android.tv.setting.PlayerSetting.isAudioPassThrough();
+        this.player = ExoUtil.buildPlayer(decode, live, audioPassThrough, listener);
         this.provider = new ErrorMsgProvider();
         this.preCache = new PreCache();
         this.listener = listener;
@@ -49,13 +60,17 @@ public class ExoPlayerEngine implements PlayerEngine {
     public Player rebuild() {
         preCache.stop();
         player.release();
-        return player = ExoUtil.buildPlayer(decode, listener);
+        return player = ExoUtil.buildPlayer(decode, live, audioPassThrough, listener);
     }
 
     @Override
     public boolean setDecode(int decode) {
         this.decode = decode;
         return true;
+    }
+
+    public void setLive(boolean live) {
+        this.live = live;
     }
 
     @Override
@@ -101,6 +116,8 @@ public class ExoPlayerEngine implements PlayerEngine {
                  PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
                  PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
                  PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> retryFormat(e.errorCode);
+            case PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+                 PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED -> fallbackAudioPassThrough();
             default -> ErrorAction.FATAL;
         };
     }
@@ -122,6 +139,19 @@ public class ExoPlayerEngine implements PlayerEngine {
     private ErrorAction retryFormat(int errorCode) {
         spec.setFormat(ExoUtil.getMimeType(errorCode));
         startInternal(player.getCurrentPosition());
+        return ErrorAction.RECOVERED;
+    }
+
+    private ErrorAction fallbackAudioPassThrough() {
+        if (!audioPassThrough || audioPassThroughFallbackUsed || spec == null) return ErrorAction.FATAL;
+        audioPassThroughFallbackUsed = true;
+        audioPassThrough = false;
+        Notify.show(R.string.player_audio_passthrough_fallback);
+        long position = Math.max(0, player.getCurrentPosition());
+        preCache.stop();
+        player.release();
+        player = ExoUtil.buildPlayer(decode, live, audioPassThrough, listener);
+        startInternal(position);
         return ErrorAction.RECOVERED;
     }
 }
