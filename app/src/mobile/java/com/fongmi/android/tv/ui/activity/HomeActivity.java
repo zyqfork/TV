@@ -34,6 +34,7 @@ import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
 import com.fongmi.android.tv.ui.fragment.SettingDanmakuFragment;
@@ -234,8 +235,12 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         } else if (mManager.isVisible(1)) {
             change(0);
         } else if (mManager.canBack(0)) {
-            if (PlaybackService.isRunning()) moveTaskToBack(true);
-            else super.onBackInvoked();
+            if (PlaybackService.isRunning() && PlayerSetting.isBackgroundOn()) {
+                moveTaskToBack(true);
+            } else {
+                PlaybackService.requestShutdown(this);
+                super.onBackInvoked();
+            }
         }
     }
 

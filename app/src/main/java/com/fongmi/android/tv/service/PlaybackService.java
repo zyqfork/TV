@@ -51,6 +51,7 @@ import java.util.function.Consumer;
 public class PlaybackService extends MediaLibraryService implements MediaLibrarySession.Callback, PlayerManager.Callback {
 
     public static final String LOCAL_BIND_ACTION = BuildConfig.APPLICATION_ID.concat(".LOCAL_BIND");
+    public static final String ACTION_SHUTDOWN = BuildConfig.APPLICATION_ID.concat(".SHUTDOWN");
 
     private static final SessionCommand COMMAND_REPEAT = new SessionCommand(ActionEvent.REPEAT, Bundle.EMPTY);
     private static final String ACTION_MEDIA_BROWSER_SERVICE = "android.media.browse.MediaBrowserService";
@@ -135,6 +136,13 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         else if (ActionEvent.AUDIO.equals(action)) dispatchAudio();
         else if (ActionEvent.REPEAT.equals(action)) dispatchRepeat();
         else if (ActionEvent.REPLAY.equals(action)) dispatchReplay();
+        else if (ACTION_SHUTDOWN.equals(action)) shutdown();
+    }
+
+    /** Explicit exit from Home / task switcher when background play is disabled. */
+    public static void requestShutdown(android.content.Context context) {
+        if (!running) return;
+        context.startService(new Intent(context, PlaybackService.class).setAction(ACTION_SHUTDOWN));
     }
 
     private boolean isLocalBind(Intent intent) {
@@ -190,7 +198,8 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     public void suspend() {
-        stopAndClear();
+        // Live / background-off: release decoder resources, keep service idle for reclaim.
+        player.suspend();
         removeForeground();
     }
 

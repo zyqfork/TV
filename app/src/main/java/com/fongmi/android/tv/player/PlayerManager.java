@@ -370,6 +370,22 @@ public class PlayerManager implements ParseCallback {
         stopParse();
     }
 
+    /**
+     * Stop playback and release decoder / native player resources while keeping PlayerManager
+     * usable. Used when Live leaves the foreground or the app exits with background play off.
+     */
+    public void suspend() {
+        App.removeCallbacks(runnable, firstFrameRunnable);
+        stopParse();
+        if (engine != null && !isReleased()) {
+            engine.stop();
+            // Rebuild fully frees MediaCodec / MPV hwdec that stop alone may retain.
+            setPlayer(engine.rebuild());
+        }
+        clear();
+        reset();
+    }
+
     public void clearMediaItems() {
         player.clearMediaItems();
     }

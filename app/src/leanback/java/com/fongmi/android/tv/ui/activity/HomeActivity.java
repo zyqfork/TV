@@ -48,6 +48,7 @@ import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
@@ -471,8 +472,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
         } else {
-            if (PlaybackService.isRunning()) moveTaskToBack(true);
-            else super.onBackInvoked();
+            if (PlaybackService.isRunning() && PlayerSetting.isBackgroundOn()) {
+                moveTaskToBack(true);
+            } else {
+                // Background play off: tear down decoder/service instead of parking the task.
+                PlaybackService.requestShutdown(this);
+                super.onBackInvoked();
+            }
         }
     }
 

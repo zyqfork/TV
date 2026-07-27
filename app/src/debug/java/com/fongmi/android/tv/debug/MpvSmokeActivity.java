@@ -186,13 +186,20 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         if (stopOnBackground && player != null) {
             Log.i(TAG, "BACKGROUND_STOP");
             player.stop();
+            // Mirror production suspend: stop alone leaves MediaCodec on Rockchip.
+            player.release();
+            player = null;
+            Log.i(TAG, "BACKGROUND_RELEASED");
         }
     }
 
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        if (player != null) player.release();
+        if (player != null) {
+            player.release();
+            Log.i(TAG, "DESTROY_RELEASED");
+        }
         player = null;
         super.onDestroy();
     }

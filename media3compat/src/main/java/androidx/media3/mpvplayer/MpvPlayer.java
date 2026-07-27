@@ -601,6 +601,10 @@ public final class MpvPlayer extends SimpleBasePlayer
         fileLoaded = false;
         MPVLib.setPropertyBoolean("pause", true);
         MPVLib.command(new String[]{"stop"});
+        // stop alone keeps MediaCodec hwdec allocated on many SoCs (Rockchip/Amlogic). Tear
+        // down VO/hwdec while the Android surface is still valid; loadFile/attach restore them.
+        if (surfaceReady) MPVLib.setPropertyString("vo", "null");
+        MPVLib.setPropertyString("hwdec", "no");
         positionMs = 0;
         updateState(STATE_IDLE, false, null);
         audioManager.abandonAudioFocusRequest(audioFocusRequest);
