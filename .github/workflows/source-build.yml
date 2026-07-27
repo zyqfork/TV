@@ -145,7 +145,11 @@ jobs:
           merge-multiple: true
       - name: Create checksums
         working-directory: release-assets
-        run: sha256sum *.apk | sort -k2 > SHA256SUMS
+        run: |
+          find . -mindepth 2 -type f -name '*.apk' -exec mv -t . {} +
+          test "$(find . -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 6
+          sha256sum *.apk | sort -k2 > SHA256SUMS
+          test -s SHA256SUMS
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
