@@ -3,19 +3,19 @@ name: Source-built player Android release
 on:
   workflow_dispatch:
   push:
-    branches: [fongmi]
+    tags: ["v*"]
   pull_request:
     branches: [fongmi]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  leanback-arm64:
+  all-platforms:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      FONGMI_NATIVE_ABIS: arm64-v8a
+      FONGMI_NATIVE_ABIS: arm64-v8a,armeabi-v7a,x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -58,8 +58,10 @@ jobs:
           path: |
             ~/.gradle/caches/fongmi-libmpv
             ~/.gradle/caches/fongmi-ffmpeg-arm64-v8a
+            ~/.gradle/caches/fongmi-ffmpeg-armeabi-v7a
+            ~/.gradle/caches/fongmi-ffmpeg-x86_64
             ~/.gradle/caches/fongmi-dav1d
-          key: native-arm64-${{ runner.os }}-${{ hashFiles('media3compat/scripts/*.sh', 'media3compat/build.gradle') }}
+          key: native-all-abis-${{ runner.os }}-${{ hashFiles('media3compat/scripts/*.sh', 'media3compat/build.gradle') }}
 
       - name: Verify no APK binary dependency
         run: |
@@ -78,18 +80,46 @@ jobs:
             :lib-ui-danmaku:publishToMavenLocal \
             :lib-ui:publishToMavenLocal --stacktrace
 
-      - name: Build release APK from source
-        run: ./gradlew :app:assembleLeanbackArm64_v8aRelease --stacktrace
+      - name: Build all release APKs from source
+        run: |
+          ./gradlew \
+            :app:assembleLeanbackArm64_v8aRelease \
+            :app:assembleLeanbackArmeabi_v7aRelease \
+            :app:assembleLeanbackX86_64Release \
+            :app:assembleMobileArm64_v8aRelease \
+            :app:assembleMobileArmeabi_v7aRelease \
+            :app:assembleMobileX86_64Release --stacktrace
 
-      - name: Verify source-built AV1 extension
+      - name: Verify source-built AV1 extension and APK matrix
         run: |
           test -f media3compat/build/generated/av1/java/androidx/media3/decoder/av1/Libdav1dVideoRenderer.java
-          unzip -l app/build/outputs/apk/leanbackArm64_v8a/release/*.apk |
-            grep -q 'lib/arm64-v8a/libdav1dJNI.so'
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            apk_abi=${abi//-/_}
+            for mode in leanback mobile; do
+              apk="app/build/outputs/apk/${mode}${apk_abi^}/release/${mode}-${apk_abi}.apk"
+              test -f "$apk"
+              unzip -l "$apk" | grep -q "lib/$abi/libdav1dJNI.so"
+              unzip -l "$apk" | grep -q "lib/$abi/libmpv.so"
+            done
+          done
+          cd app/build/outputs/apk
+          find . -path '*/release/*.apk' -type f -print0 |
+            sort -z | xargs -0 sha256sum > SHA256SUMS
 
-      - name: Upload APK
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: leanback-arm64-source-release
-          path: app/build/outputs/apk/leanbackArm64_v8a/release/*.apk
+          name: all-platform-source-release
+          path: |
+            app/build/outputs/apk/*/release/*.apk
+            app/build/outputs/apk/SHA256SUMS
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/*/release/*.apk
+            app/build/outputs/apk/SHA256SUMS
