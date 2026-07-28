@@ -66,6 +66,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     private MediaLibrarySession session;
     private Runnable onNewBinding;
     private PlayerManager player;
+    private boolean resourcesReleased;
     private String navigationKey;
     private Player sessionPlayer;
 
@@ -183,13 +184,19 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     @Override
     public void onDestroy() {
         running = false;
+        releaseResources();
+        super.onDestroy();
+    }
+
+    private void releaseResources() {
+        if (resourcesReleased) return;
+        resourcesReleased = true;
         releaseSession();
         player.stop();
         player.release();
         removeForeground();
         Server.get().setService(null);
         EventBus.getDefault().unregister(this);
-        super.onDestroy();
     }
 
     private void stopAndClear() {
@@ -207,6 +214,11 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         if (!running) return;
         running = false;
         stopAndClear();
+        // A MediaBrowser connection owned by the launcher/system UI may keep this Service bound
+        // after the app task has exited. stopSelf() alone then leaves an idle native MPV instance,
+        // its threads and the MediaSession alive indefinitely. Explicit exit must release them
+        // immediately; releaseResources() is idempotent for the later onDestroy callback.
+        releaseResources();
         stopSelf();
     }
 
