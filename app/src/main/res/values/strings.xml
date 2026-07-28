@@ -255,6 +255,11 @@
         <item>Hard performance</item>
     </string-array>
 
+    <string-array name="select_decode_exo">
+        <item>Compatible (hardware first)</item>
+        <item>Hardware</item>
+    </string-array>
+
     <string-array name="select_exo_http">
         <item>Default</item>
         <item>OkHttp</item>

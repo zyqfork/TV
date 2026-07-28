@@ -110,7 +110,9 @@ public final class MpvUtil {
     }
 
     private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode, boolean live) {
-        builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(true);
+        // Several VOD CDNs close/rebind segment connections aggressively. This matches the
+        // upstream player and avoids FFmpeg reusing a dead HLS HTTP/TLS connection.
+        builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }

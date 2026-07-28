@@ -268,6 +268,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     @Override
     protected void onServiceConnected() {
+        setPlaybackMode();
         checkLand();
         checkId();
     }

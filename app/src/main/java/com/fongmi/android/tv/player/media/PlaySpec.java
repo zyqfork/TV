@@ -53,6 +53,10 @@ public class PlaySpec {
         return new PlaySpec(key, null, null, result.getFormat(), result.getDrm(), result.getSubs(), result.getDanmaku(), metadata);
     }
 
+    public PlaySpec copyWithSource(String url, Map<String, String> headers) {
+        return new PlaySpec(key, url, headers, format, drm, subs, danmakus, metadata);
+    }
+
     public String getKey() {
         return key;
     }

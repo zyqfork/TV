@@ -64,11 +64,13 @@ public class PlayerManager implements ParseCallback {
     private int decode;
     private int preferredEngine;
     private boolean liveMode;
+    private final Runnable sourceRetryRunnable;
 
     public PlayerManager(Callback callback) {
         this.callback = callback;
         this.runnable = this::onPlayTimeout;
         this.firstFrameRunnable = this::onFirstFrameTimeout;
+        this.sourceRetryRunnable = this::onSourceRetry;
         this.preferredEngine = PlayerSetting.getVodEngine();
         this.decode = PlayerSetting.getDecode(false, preferredEngine);
         this.engine = PlayerEngineFactory.create(decode, preferredEngine, false, listener);
@@ -84,7 +86,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void release() {
-        App.removeCallbacks(runnable, firstFrameRunnable);
+        App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         if (player != null) player.removeListener(listener);
         if (engine != null) engine.release();
         engine = null;
@@ -227,7 +229,8 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getDecodeText() {
-        return ResUtil.getStringArray(R.array.select_decode)[decode];
+        String[] labels = ResUtil.getStringArray(getEngine() == PlayerSetting.ENGINE_EXO ? R.array.select_decode_exo : R.array.select_decode);
+        return labels[Math.min(decode, labels.length - 1)];
     }
 
     public int getEngine() {
@@ -251,13 +254,33 @@ public class PlayerManager implements ParseCallback {
         }
         decode = PlayerSetting.getDecode(liveMode, targetEngine);
         callback.onDecodeChanged();
-        if (isEmpty()) return;
+        if (isEmpty()) {
+            // A background suspend or a failed/unfinished parse clears the current PlaySpec.
+            // Persisting the preference alone leaves the old engine alive, so the playback page
+            // continues to report MPV even after the user selected Exo (and vice versa).
+            // Replace the idle engine now; the next resolved URL will then use the visible choice.
+            if (getEngine() != targetEngine) {
+                replaceIdleEngine(targetEngine);
+                // The first notification ran while the old engine was still active.
+                callback.onDecodeChanged();
+            }
+            return;
+        }
         if (samePreference && getEngine() == targetEngine) return;
         if (targetEngine == PlayerSetting.ENGINE_MPV && spec != null
                 && PlayerEngineFactory.requiresExo(spec)) {
             Notify.show(R.string.player_engine_requires_exo);
         }
+        beginFreshAttempt();
         startCurrent();
+    }
+
+    private void replaceIdleEngine(int targetEngine) {
+        PlayerEngine old = engine;
+        player.removeListener(listener);
+        engine = PlayerEngineFactory.create(decode, targetEngine, liveMode, listener);
+        old.release();
+        setPlayer(engine.getPlayer());
     }
 
     public void setLiveMode(boolean liveMode) {
@@ -429,7 +452,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void reset() {
-        App.removeCallbacks(runnable, firstFrameRunnable);
+        App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         retry = 0;
         sourceRetry = 0;
         openReported = false;
@@ -444,12 +467,17 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void toggleDecode() {
+        toggleDecode(true);
+    }
+
+    private void toggleDecode(boolean freshAttempt) {
         decode = nextDecode(decode, engine.getType() == PlayerEngine.Type.MPV);
         PlayerSetting.putDecode(liveMode, getEngine(), decode);
         boolean rebuild = engine.setDecode(decode);
         callback.onDecodeChanged();
         if (!rebuild) return;
         setPlayer(engine.rebuild());
+        if (freshAttempt) beginFreshAttempt();
         startCurrent(getPosition());
     }
 
@@ -471,21 +499,27 @@ public class PlayerManager implements ParseCallback {
             callback.onError(engine.getErrorMessage(e));
         } else {
             Notify.show(R.string.error_decode_fallback);
-            toggleDecode();
+            // Keep the decode retry count while cycling performance -> compatible -> software.
+            toggleDecode(false);
         }
     }
 
     private void handleSourceRetry(PlaybackException e) {
         if (++sourceRetry > 2) {
+            App.removeCallbacks(sourceRetryRunnable);
             handleFatalError(e);
             return;
         }
         long delayMs = sourceRetry * 800L;
         if (sourceRetry == 1) Notify.show(R.string.error_play_retry);
-        App.post(() -> {
-            if (spec == null || isReleased()) return;
-            startCurrent(Math.max(0, getPosition()));
-        }, delayMs);
+        App.removeCallbacks(sourceRetryRunnable);
+        App.post(sourceRetryRunnable, delayMs);
+    }
+
+    private void onSourceRetry() {
+        if (spec == null || isReleased()) return;
+        // Keep sourceRetry across the restart; setMediaItem must not clear it or retries never end.
+        startCurrent(Math.max(0, getPosition()));
     }
 
     private void handleFatalError(PlaybackException e) {
@@ -565,6 +599,7 @@ public class PlayerManager implements ParseCallback {
     public void start(PlaySpec spec, long timeout, long startPositionMs) {
         this.spec = spec;
         this.subtitleDecodeHintShown = false;
+        beginFreshAttempt();
         setMediaItem(timeout, startPositionMs);
     }
 
@@ -587,7 +622,6 @@ public class PlayerManager implements ParseCallback {
 
     private void setMediaItem(long timeout, long startPositionMs) {
         if (spec == null || spec.getUrl() == null) return;
-        sourceRetry = 0;
         openReported = false;
         playStartRealtimeMs = SystemClock.elapsedRealtime();
         ensureEngine(spec.checkUa());
@@ -611,6 +645,13 @@ public class PlayerManager implements ParseCallback {
 
     private void startCurrent(long startPositionMs) {
         setMediaItem(Constant.TIMEOUT_PLAY, startPositionMs);
+    }
+
+    /** Clear IO/decode retry state for a user- or parse-initiated (re)start — not for sourceRetry loops. */
+    private void beginFreshAttempt() {
+        App.removeCallbacks(sourceRetryRunnable);
+        retry = 0;
+        sourceRetry = 0;
     }
 
     private Danmaku getSelectedDanmaku(List<Danmaku> items) {
@@ -642,6 +683,7 @@ public class PlayerManager implements ParseCallback {
         if (headers != null) headers.remove(HttpHeaders.RANGE);
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
+        beginFreshAttempt();
         startCurrent(pendingStartPositionMs);
         pendingStartPositionMs = C.TIME_UNSET;
     }

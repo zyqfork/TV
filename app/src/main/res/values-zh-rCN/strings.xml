@@ -254,6 +254,11 @@
         <item>性能硬解</item>
     </string-array>
 
+    <string-array name="select_decode_exo">
+        <item>兼容模式(硬解优先)</item>
+        <item>硬解</item>
+    </string-array>
+
     <string-array name="select_exo_http">
         <item>Default</item>
         <item>OkHttp</item>

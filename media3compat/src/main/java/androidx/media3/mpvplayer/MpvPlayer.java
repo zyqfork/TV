@@ -395,6 +395,12 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private State buildState(int playbackState, boolean playWhenReady,
                              @Nullable PlaybackException error) {
+        // Media3 forbids an empty timeline in transient states. Native events may still arrive
+        // after stop()/clearMediaItems(), so coerce those stale callbacks back to IDLE.
+        if (playlist.isEmpty() && playbackState != STATE_IDLE && playbackState != STATE_ENDED) {
+            playbackState = STATE_IDLE;
+            playWhenReady = false;
+        }
         State.Builder builder = new State.Builder()
                 .setAvailableCommands(commands)
                 .setPlayWhenReady(playWhenReady, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
@@ -480,14 +486,33 @@ public final class MpvPlayer extends SimpleBasePlayer
         updateState(STATE_BUFFERING, state.playWhenReady, null);
         applyHttpHeaders(mediaItem);
         String uri = mediaItem.localConfiguration.uri.toString();
-        // mpv-android waits for Surface before the first loadfile; loading earlier often
-        // leaves video without an output (audio-only) especially with MediaCodec hwdec.
-        if (surfaceReady) {
+        applyDemuxerOptions(uri);
+        // mediacodec_embed creates its decoder against the current ANativeWindow. Loading before
+        // a Surface is bound makes device creation fail and silently falls back to software
+        // decoding. Other modes use vo=gpu and can safely begin demuxing immediately.
+        if (decode != 2 || surfaceReady) {
             loadFile(uri);
         } else {
             pendingLoadUri = uri;
+            // SurfaceView callbacks can race prepare() or be delivered before the player output
+            // is registered. Re-offer the current valid output instead of waiting indefinitely.
+            applicationHandler.postDelayed(this::reofferCurrentVideoOutput, 200);
         }
         return done();
+    }
+
+    private void applyDemuxerOptions(String uri) {
+        String configured = config.preInitOptions.getOrDefault("demuxer-lavf-o", "");
+        String lower = uri == null ? "" : uri.toLowerCase(Locale.US);
+        boolean hls = lower.contains(".m3u8") || lower.contains("=m3u8")
+                || lower.endsWith(".php") || lower.contains(".php?");
+        String options = configured;
+        if (hls && !configured.toLowerCase(Locale.US).contains("http_persistent=")) {
+            options = configured.isBlank()
+                    ? "http_persistent=0"
+                    : configured + ",http_persistent=0";
+        }
+        MPVLib.setPropertyString("demuxer-lavf-o", options);
     }
 
     private void loadFile(String uri) {
@@ -521,18 +546,32 @@ public final class MpvPlayer extends SimpleBasePlayer
         Bundle extras = item.requestMetadata.extras;
         if (extras == null || extras.isEmpty()) {
             MPVLib.setPropertyString("http-header-fields", "");
+            MPVLib.setPropertyString("user-agent", "");
+            MPVLib.setPropertyString("referrer", "");
             return;
         }
         List<String> fields = new ArrayList<>();
+        String userAgent = null;
+        String referrer = null;
         for (String key : extras.keySet()) {
             Object value = extras.get(key);
-            if (value != null) {
-                String safeKey = key.replace("\r", "").replace("\n", "");
-                String safeValue = value.toString().replace("\r", "").replace("\n", "")
-                        .replace("\\", "\\\\").replace(",", "\\,");
-                fields.add(safeKey + ": " + safeValue);
+            if (value == null) continue;
+            String safeKey = key.replace("\r", "").replace("\n", "");
+            String safeValue = value.toString().replace("\r", "").replace("\n", "")
+                    .replace("\\", "\\\\").replace(",", "\\,");
+            if ("User-Agent".equalsIgnoreCase(safeKey)) {
+                userAgent = safeValue;
+                continue;
             }
+            if ("Referer".equalsIgnoreCase(safeKey)) {
+                referrer = safeValue;
+                continue;
+            }
+            fields.add(safeKey + ": " + safeValue);
         }
+        // Upstream FongMi sets UA/Referer as dedicated mpv props (ffmpeg reads these).
+        MPVLib.setPropertyString("user-agent", userAgent == null ? "" : userAgent);
+        MPVLib.setPropertyString("referrer", referrer == null ? "" : referrer);
         MPVLib.setPropertyString("http-header-fields", String.join(",", fields));
     }
 
@@ -753,41 +792,20 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     /**
-     * mediacodec_embed binds MediaCodec directly to the ANativeWindow. A Surface that is about to
-     * be destroyed by orientation change (common: portrait buffer then landscape) yields
-     * "Android Surface unavailable". Debounce embed attaches and reject portrait-sized buffers
-     * so we keep zero-copy instead of falling back to CPU-costly mediacodec-copy.
+     * mediacodec_embed binds MediaCodec directly to the ANativeWindow. Debounce rapid
+     * Surface churn (PlayerView recreate / rotation) so we do not bind to a window that is
+     * about to be destroyed. Upstream FongMi attaches immediately with no orientation filter;
+     * a previous aspect check against ApplicationContext orientation permanently rejected valid
+     * Surfaces and blocked loadfile.
      */
     private boolean needsSurfaceSettle() {
         return decode == 2 && !embedVoDisabled;
     }
 
-    /**
-     * Reject only a Surface that disagrees with the current UI orientation. That filters the phone
-     * race where a landscape Activity briefly gets a portrait buffer (or vice versa) without
-     * blocking real portrait VOD playback.
-     */
-    private boolean isEmbedSurfaceAcceptable(int width, int height) {
-        if (width <= 0 || height <= 0) return false;
-        int orientation = context.getResources().getConfiguration().orientation;
-        if (orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
-            return width >= height;
-        }
-        if (orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
-            return height >= width;
-        }
-        return true;
-    }
-
     private void offerSurface(Surface surface, boolean ownsSurface, int width, int height) {
-        if (needsSurfaceSettle()) {
-            // Skip a Surface whose aspect disagrees with the current UI orientation (startup race).
-            if (!isEmbedSurfaceAcceptable(width, height)) {
-                if (ownsSurface && surface != attachedSurface && surface != settlingSurface) {
-                    surface.release();
-                }
-                return;
-            }
+        // Debounce only the first window. Once mediacodec_embed is running, delaying a
+        // replacement leaves the decoder bound to the old window after Android invalidates it.
+        if (needsSurfaceSettle() && !surfaceReady && width > 0 && height > 0) {
             queueSurfaceSettle(surface, ownsSurface, width, height);
             return;
         }
@@ -804,7 +822,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         settlingWidth = width;
         settlingHeight = height;
         applicationHandler.removeCallbacks(settleSurfaceRunnable);
-        // Extra settle after landscape appears: rotation can still replace the buffer once more.
+        // Short debounce only — do not reject by orientation/aspect.
         applicationHandler.postDelayed(settleSurfaceRunnable, 120);
     }
 
@@ -832,11 +850,6 @@ public final class MpvPlayer extends SimpleBasePlayer
             if (owns) surface.release();
             return;
         }
-        // Size may have changed again during the delay; refuse portrait / 0x0.
-        if (needsSurfaceSettle() && !isEmbedSurfaceAcceptable(width, height)) {
-            if (owns) surface.release();
-            return;
-        }
         attachNativeSurface(surface, owns, width, height);
     }
 
@@ -846,8 +859,10 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private void attachNativeSurface(Surface surface, boolean ownsSurface, int width, int height) {
         if (attachedSurface == surface && surfaceReady) {
-            MPVLib.setPropertyString("force-window", "yes");
-            MPVLib.setPropertyString("vo", getVo());
+            // surfaceChanged() is also emitted for layout/inset changes. Re-setting vo while
+            // mediacodec_embed is active destroys its current hwdevice and leaves MediaCodec
+            // bound to an unavailable ANativeWindow. The window itself has not changed here;
+            // only publish its new dimensions.
             if (width > 0 && height > 0) {
                 MPVLib.setPropertyString("android-surface-size", width + "x" + height);
             }
@@ -881,11 +896,35 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (pendingLoadUri != null) {
             String uri = pendingLoadUri;
             pendingLoadUri = null;
-            loadFile(uri);
+            // Prefer reload when demux already started (prepare no longer waits for Surface).
+            if (fileLoaded) {
+                reloadVideoAfterSurface();
+            } else {
+                loadFile(uri);
+            }
         } else if (fileLoaded) {
             // Surface came back after a transient detach: restore VO and reload video decoder.
             // mediacodec_embed is poisoned once its window disappears mid-stream (black + audio).
             reloadVideoAfterSurface();
+        }
+    }
+
+    private void reofferCurrentVideoOutput() {
+        if (released || surfaceReady || videoOutput == null) return;
+        Object output = videoOutput;
+        if (output instanceof Surface surface) {
+            if (surface.isValid()) offerSurface(surface, false, 0, 0);
+        } else if (output instanceof SurfaceHolder holder) {
+            if (holder.getSurface().isValid()) attachSurfaceHolder(holder);
+        } else if (output instanceof SurfaceView view) {
+            SurfaceHolder holder = view.getHolder();
+            if (holder.getSurface().isValid()) attachSurfaceHolder(holder);
+        } else if (output instanceof TextureView view) {
+            if (view.isAvailable() && view.getSurfaceTexture() != null
+                    && view.getWidth() > 0 && view.getHeight() > 0) {
+                offerSurface(new Surface(view.getSurfaceTexture()), true,
+                        view.getWidth(), view.getHeight());
+            }
         }
     }
 
@@ -1090,23 +1129,32 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (released || mediaItem == null || mediaItem.localConfiguration == null) return false;
         if (decode != 2) return false;
         String d = detail == null ? "" : detail.toLowerCase(Locale.US);
+        // HTTP/auth failures also end as "loading failed" — do not treat them as Surface races.
+        if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("402")
+                || d.contains("401") || d.contains("503") || d.contains("502") || d.contains("500")
+                || d.contains("failed to open https") || d.contains("failed to open http")
+                || d.contains("png") || d.contains("no demuxer")) {
+            return false;
+        }
         boolean worthRetry = recentSurfaceFailure
-                || d.contains("surface") || d.contains("no audio or video")
-                || d.contains("mediacodec_embed") || d.contains("hwdevice")
-                || d.contains("loading failed") || d.isBlank();
+                || d.contains("surface") || d.contains("mediacodec_embed") || d.contains("hwdevice")
+                || ((d.contains("no audio or video") || d.contains("loading failed") || d.isBlank())
+                && (recentSurfaceFailure || d.contains("surface") || d.contains("mediacodec")));
         if (!worthRetry) return false;
         recentSurfaceFailure = false;
         surfaceNeedsVideoReload = true;
         firstFrameReported = false;
         fileLoaded = false;
         String uri = mediaItem.localConfiguration.uri.toString();
-        // Prefer staying on zero-copy embed: drop the poisoned window and wait for a landscape
-        // Surface. Only after repeated failures fall back to mediacodec-copy (higher CPU).
+        // Prefer staying on zero-copy embed: drop the poisoned window and re-bind. Only after
+        // repeated failures fall back to mediacodec-copy (higher CPU).
         if (!embedVoDisabled && embedSurfaceRetries < EMBED_SURFACE_RETRY_LIMIT) {
             embedSurfaceRetries++;
             if (surfaceReady) detachNativeSurface();
             pendingLoadUri = uri;
             updateState(STATE_BUFFERING, state.playWhenReady, null);
+            // Do not wait forever for a new Surface callback — re-offer the current view.
+            applicationHandler.postDelayed(this::reofferCurrentVideoOutput, 200);
             return true;
         }
         if (embedVoDisabled) return false;
@@ -1128,17 +1176,27 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (detail == null || detail.isBlank()) return PlaybackException.ERROR_CODE_IO_UNSPECIFIED;
         String d = detail.toLowerCase(Locale.US);
         if (d.contains("surface unavailable") || d.contains("missing surface")
-                || d.contains("no audio or video") || d.contains("mediacodec_embed")) {
+                || d.contains("mediacodec_embed")) {
             return PlaybackException.ERROR_CODE_DECODING_FAILED;
         }
-        if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("503")
-                || d.contains("502") || d.contains("500")) {
+        // "no audio or video data played" is often a demux/format issue (e.g. PNG-wrapped TS),
+        // not a MediaCodec failure — only treat as decode when Surface/hwdec is implicated.
+        if (d.contains("no audio or video")
+                && (d.contains("surface") || d.contains("mediacodec") || d.contains("hwdec"))) {
+            return PlaybackException.ERROR_CODE_DECODING_FAILED;
+        }
+        if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("402")
+                || d.contains("401") || d.contains("503") || d.contains("502") || d.contains("500")) {
             return PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS;
         }
         if (d.contains("timeout") || d.contains("timed out")) {
             return PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT;
         }
-        if (d.contains("unsupported") || d.contains("no demuxer") || d.contains("unrecognized")) {
+        if (d.contains("png") || d.contains("no demuxer") || d.contains("unrecognized")
+                || d.contains("no audio or video")) {
+            return PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED;
+        }
+        if (d.contains("unsupported")) {
             return PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED;
         }
         if (d.contains("failed to open") || d.contains("connection") || d.contains("network")
@@ -1174,7 +1232,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         lastNativeError = reason;
         boolean wasEmbed = decode == 2 && !embedVoDisabled;
         if (wasEmbed && embedSurfaceRetries < EMBED_SURFACE_RETRY_LIMIT) {
-            // Keep zero-copy: drop poisoned Surface binding and wait for a landscape window.
+            // Keep zero-copy: drop poisoned Surface binding and re-offer the current window.
             embedSurfaceRetries++;
             if (surfaceReady) detachNativeSurface();
             surfaceNeedsVideoReload = true;
@@ -1185,6 +1243,7 @@ public final class MpvPlayer extends SimpleBasePlayer
             fileLoaded = false;
             surfaceRecovering = false;
             updateState(STATE_BUFFERING, state.playWhenReady, null);
+            applicationHandler.postDelayed(this::reofferCurrentVideoOutput, 200);
             return;
         }
         // Exhausted embed retries — copy-back is the last resort (higher CPU).

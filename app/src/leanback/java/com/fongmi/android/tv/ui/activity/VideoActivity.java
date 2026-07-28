@@ -248,6 +248,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     protected void onServiceConnected() {
+        setPlaybackMode();
         checkId();
     }
 

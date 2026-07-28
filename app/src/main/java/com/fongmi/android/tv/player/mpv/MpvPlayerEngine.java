@@ -5,10 +5,12 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.mpvplayer.MpvPlayer;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
+import com.fongmi.android.tv.utils.Task;
 
 import java.util.concurrent.TimeUnit;
 
@@ -19,6 +21,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     private MpvPlayer player;
     private boolean live;
     private int decode;
+    private int startGeneration;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
         this(decode, false, listener);
@@ -48,11 +51,13 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public void release() {
+        startGeneration++;
         player.release();
     }
 
     @Override
     public Player rebuild() {
+        startGeneration++;
         player.release();
         return player = MpvUtil.buildPlayer(decode, live, listener);
     }
@@ -86,9 +91,16 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public void start(PlaySpec spec, long startPositionMs) {
         long position = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
-        player.setMediaItem(MediaItemFactory.from(spec), position);
-        player.prepare();
-        player.play();
+        int gen = ++startGeneration;
+        Task.submit(() -> {
+            PlaySpec play = MpvHlsPngTs.prepare(spec);
+            App.post(() -> {
+                if (gen != startGeneration) return;
+                player.setMediaItem(MediaItemFactory.from(play), position);
+                player.prepare();
+                player.play();
+            });
+        });
     }
 
     @Override
