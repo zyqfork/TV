@@ -521,7 +521,16 @@ public final class MpvPlayer extends SimpleBasePlayer
         renderFallbackUsed = false;
         surfaceRecovering = false;
         applicationHandler.removeCallbacks(blackScreenWatchdog);
-        // A previous stream may have activated the per-file copy-back fallback.
+        // handleStop() deliberately tears down VO/hwdec to release MediaCodec. Channel/episode
+        // switches reuse the same Player and Surface, so no new surface callback will restore VO.
+        // Rebind the existing Android window before every load or decoded frames go to vo=null
+        // while SurfaceView keeps displaying the previous stream's final buffer.
+        if (surfaceReady) {
+            MPVLib.setPropertyString("force-window", "yes");
+            MPVLib.setPropertyString("vo", getVo());
+        }
+        // A previous stream may have activated the per-file copy-back fallback, or stop() may
+        // have disabled hardware decoding while releasing the old decoder.
         MPVLib.setPropertyString("hwdec", getDecodeOption());
         // Avoid loadfile options entirely: mpv 0.38+ inserted an integer index argument, and
         // KEYVALUELIST parsing differs across builds. Resume via seek after FILE_LOADED instead.
