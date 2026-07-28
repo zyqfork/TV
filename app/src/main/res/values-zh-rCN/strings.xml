@@ -219,6 +219,7 @@
     <string name="error_play_format">不支持的媒体格式</string>
     <string name="error_play_retry">线路异常，正在重试</string>
     <string name="error_decode_fallback">硬解失败，已切换解码模式</string>
+    <string name="player_engine_requires_exo">该源需要 Exo（DASH/DRM/SMB）</string>
     <string name="player_sub_decode_hint">检测到外挂字幕，已切换为兼容硬解</string>
     <string name="player_audio_passthrough_fallback">音频直通失败，已切换为 PCM 输出</string>
     <string name="error_play_tvbus">错误代码：<xliff:g name="name">%s</xliff:g></string>

@@ -62,7 +62,7 @@ public final class PlayerEngineFactory {
         return isMpvReady(preferredEngine) ? MPV : EXO;
     }
 
-    private static boolean requiresExo(PlaySpec spec) {
+    public static boolean requiresExo(PlaySpec spec) {
         if (spec == null) return false;
         if (spec.getDrm() != null) return true;
         String url = spec.getUrl();

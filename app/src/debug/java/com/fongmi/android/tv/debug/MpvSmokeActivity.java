@@ -75,6 +75,9 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         live = getIntent().getBooleanExtra("live", false);
         startMs = Math.max(0, getIntent().getLongExtra("start_ms", 0L));
 
+        // Ensure SurfaceView is created after landscape is applied (avoids a transient portrait
+        // buffer that poisons mediacodec_embed on phones).
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         setContentView(R.layout.activity_mpv_smoke);
         PlayerView view = findViewById(R.id.player);
         // Exercise the same surface_type=none -> dynamic SurfaceView path as PlaybackActivity.
@@ -93,8 +96,8 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                             .addPreInitStringOption("ytdl", "no")
                             .build())
                     .build();
-            player.addListener(this);
         }
+        player.addListener(this);
         view.setPlayer(player);
 
         MediaItem.RequestMetadata.Builder request = new MediaItem.RequestMetadata.Builder();
@@ -104,14 +107,20 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
             request.setExtras(extras);
         }
         Log.i(TAG, "START url=" + url + " decode=" + decode + " startMs=" + startMs);
-        player.setMediaItem(new MediaItem.Builder()
+        final MediaItem item = new MediaItem.Builder()
                 .setUri(url)
                 .setRequestMetadata(request.build())
-                .build(), startMs);
-        player.prepare();
-        player.play();
+                .build();
+        // Defer first load until PlayerView has laid out a non-zero Surface (phone rotation race).
+        view.post(() -> {
+            if (player == null) return;
+            player.setMediaItem(item, startMs);
+            player.prepare();
+            player.play();
+        });
         if (secondUrl != null) handler.postDelayed(this::switchMedia, 5_000);
-        handler.postDelayed(this::reportProgress, secondUrl == null ? 10_000 : 15_000);
+        long reportAt = getIntent().getLongExtra("report_ms", secondUrl == null ? 18_000L : 22_000L);
+        handler.postDelayed(this::reportProgress, Math.max(5_000L, reportAt));
     }
 
     private void switchMedia() {
@@ -149,6 +158,10 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 + " startMs=" + startMs
                 + " renderedFirstFrame=" + renderedFirstFrame
                 + " video=" + videoW + "x" + videoH);
+        // Avoid leaving a black, controller-less Activity on screen after ADB smoke runs.
+        if (getIntent().getBooleanExtra("finish_after_report", true)) {
+            handler.postDelayed(this::finish, 500);
+        }
     }
 
     @Override
@@ -172,6 +185,11 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
     @Override
     public void onPlayerError(PlaybackException error) {
         Log.e(TAG, "ERROR code=" + error.errorCode + " message=" + error.getMessage(), error);
+        // Decode/surface recovery may emit a transient error then reload; wait for RESULT.
+        if (error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED) return;
+        if (getIntent().getBooleanExtra("finish_after_report", true) && secondUrl == null) {
+            handler.postDelayed(this::finish, 1_500);
+        }
     }
 
     @Override

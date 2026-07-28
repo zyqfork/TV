@@ -118,12 +118,14 @@ public class PlayerSetting {
     }
 
     /**
-     * Map config playerType (legacy SYS/IJK/EXO) onto current engines.
-     * 1 (IJK) → MPV; 2 (EXO) → EXO; otherwise follow scene default.
+     * Map config playerType onto current engines.
+     * 1 (legacy IJK) → MPV; otherwise follow the user's live/vod engine setting.
+     * Site {@code playerType=2 (EXO)} is no longer forced here: it fought the user's MPV
+     * preference and mid-play engine switches. Hard requirements (DASH/DRM/SMB) still force
+     * Exo in {@link com.fongmi.android.tv.player.engine.PlayerEngineFactory}.
      */
     public static int resolveEngine(boolean live, int playerType) {
         if (playerType == PLAYER_TYPE_MPV) return ENGINE_MPV;
-        if (playerType == PLAYER_TYPE_EXO) return ENGINE_EXO;
         return live ? getLiveEngine() : getVodEngine();
     }
 

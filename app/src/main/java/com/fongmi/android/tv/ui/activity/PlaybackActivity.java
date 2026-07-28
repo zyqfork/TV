@@ -376,6 +376,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
                 // frame. MPV owns the visible Surface, so remove that overlay deterministically.
                 View shutter = getPlayerView().findViewById(androidx.media3.ui.R.id.exo_shutter);
                 if (shutter != null) shutter.setVisibility(View.INVISIBLE);
+                // Keep hiding after layout passes: SurfaceView recreation on phones can restore
+                // the shutter and present a permanent black cover while audio continues.
+                getPlayerView().post(() -> {
+                    View again = getPlayerView().findViewById(androidx.media3.ui.R.id.exo_shutter);
+                    if (again != null) again.setVisibility(View.INVISIBLE);
+                });
             }
         }
         applyDanmaku();

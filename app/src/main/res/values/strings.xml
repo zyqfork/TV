@@ -220,6 +220,7 @@
     <string name="error_play_format">Unsupported media format</string>
     <string name="error_play_retry">Source error, retrying</string>
     <string name="error_decode_fallback">Hardware decode failed, switching decode mode</string>
+    <string name="player_engine_requires_exo">This source requires Exo (DASH/DRM/SMB)</string>
     <string name="player_sub_decode_hint">External subtitle detected, switched to compatible hardware decode</string>
     <string name="player_audio_passthrough_fallback">Audio passthrough failed, switched to PCM output</string>
     <string name="error_play_tvbus">Error code: <xliff:g name="name">%s</xliff:g></string>
