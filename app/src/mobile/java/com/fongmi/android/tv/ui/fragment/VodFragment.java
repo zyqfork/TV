@@ -217,6 +217,10 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         mBinding.pager.setAdapter(new PageAdapter(getChildFragmentManager()));
     }
 
+    public void refreshHome() {
+        homeContent();
+    }
+
     public Result getResult() {
         return mResult == null ? new Result() : mResult;
     }

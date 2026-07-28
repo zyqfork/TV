@@ -85,6 +85,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private ArrayObjectAdapter mHistoryAdapter;
     private ArrayObjectAdapter mFuncAdapter;
     private ArrayObjectAdapter mAdapter;
+    private int actionPosition = -1;
     private HistoryPresenter mPresenter;
     private SiteViewModel mViewModel;
     private Result mResult;
@@ -181,7 +182,25 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             mAdapter.remove("progress");
             addVideo(mResult = result);
             Cache.clear().put(result);
+            restoreActionPosition();
         });
+        mViewModel.getAction().observe(this, this::onActionResult);
+    }
+
+    private void onActionResult(Result result) {
+        if (result == null) return;
+        mViewModel.clearAction();
+        Notify.show(result.getMsg());
+        if (!result.shouldRefreshAction()) return;
+        actionPosition = mBinding.recycler.getSelectedPosition();
+        getVideo();
+    }
+
+    private void restoreActionPosition() {
+        if (actionPosition < 0) return;
+        int position = Math.min(actionPosition, Math.max(0, mAdapter.size() - 1));
+        mBinding.recycler.post(() -> mBinding.recycler.setSelectedPosition(position));
+        actionPosition = -1;
     }
 
     private void setAdapter() {

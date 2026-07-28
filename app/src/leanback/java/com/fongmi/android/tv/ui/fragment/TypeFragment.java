@@ -55,6 +55,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private List<Filter> mFilters;
     private boolean headerVisible;
     private boolean filterVisible;
+    private int actionPosition = -1;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
@@ -136,7 +137,16 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(getViewLifecycleOwner(), this::setAdapter);
-        mViewModel.getAction().observe(getViewLifecycleOwner(), result -> Notify.show(result.getMsg()));
+        mViewModel.getAction().observe(getViewLifecycleOwner(), this::onActionResult);
+    }
+
+    private void onActionResult(Result result) {
+        if (result == null) return;
+        mViewModel.clearAction();
+        Notify.show(result.getMsg());
+        if (!result.shouldRefreshAction()) return;
+        actionPosition = mBinding.recycler.getSelectedPosition();
+        getVideo();
     }
 
     private void setFilters() {
@@ -174,6 +184,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mBinding.swipeLayout.setRefreshing(false);
         mScroller.endLoading(result);
         if (size > 0) addVideo(result);
+        restoreActionPosition(first);
+    }
+
+    private void restoreActionPosition(boolean first) {
+        if (!first || actionPosition < 0) return;
+        int position = Math.min(actionPosition, Math.max(0, mAdapter.size() - 1));
+        mBinding.recycler.post(() -> mBinding.recycler.setSelectedPosition(position));
+        actionPosition = -1;
     }
 
     private void addVideo(Result result) {

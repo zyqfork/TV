@@ -71,6 +71,10 @@ public class SiteViewModel extends ViewModel {
         execute(TaskType.ACTION, action, () -> SiteApi.action(key, act));
     }
 
+    public void clearAction() {
+        action.setValue(null);
+    }
+
     public void detailContent(String key, String id) {
         execute(TaskType.RESULT, result, () -> SiteApi.detailContent(key, id));
     }

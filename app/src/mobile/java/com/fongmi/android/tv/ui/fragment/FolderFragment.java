@@ -84,6 +84,10 @@ public class FolderFragment extends BaseFragment {
         return getParent().getResult();
     }
 
+    public void refreshHome() {
+        getParent().refreshHome();
+    }
+
     public void onRefresh() {
         Optional.ofNullable(getChild()).ifPresent(TypeFragment::onRefresh);
     }

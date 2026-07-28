@@ -92,6 +92,8 @@ public class Result implements Parcelable {
     private Integer parse;
     @SerializedName("code")
     private Integer code;
+    @SerializedName("refresh")
+    private Boolean refresh;
     @SerializedName("jx")
     private Integer jx;
     @SerializedName("drm")
@@ -302,6 +304,10 @@ public class Result implements Parcelable {
 
     public Integer getCode() {
         return code == null ? 0 : code;
+    }
+
+    public boolean shouldRefreshAction() {
+        return refresh != null ? refresh : getCode() == 0 && hasMsg();
     }
 
     public Integer getJx() {

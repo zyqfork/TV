@@ -74,6 +74,11 @@ public abstract class Spider {
         return null;
     }
 
+    /**
+     * Handles an action item and returns a result JSON object. Action results may
+     * include {@code "refresh": true|false}; legacy successful results with a
+     * non-empty message are refreshed automatically by the app.
+     */
     public String action(String action) throws Exception {
         return null;
     }
