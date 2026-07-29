@@ -638,7 +638,15 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void scheduleFirstFrameTimeout() {
-        long timeout = liveMode ? Constant.TIMEOUT_FIRST_FRAME_LIVE : Constant.TIMEOUT_FIRST_FRAME_VOD;
+        // FFmpeg-backed MPV may need to inspect every rendition in an HLS master playlist before
+        // it can select and decode the first segment. On higher-latency mobile networks that can
+        // legitimately exceed the normal 8-second live limit. Keep Exo's fast failure behavior,
+        // but give MPV up to the existing overall play timeout instead of aborting a healthy load.
+        long timeout = liveMode
+                ? (engine.getType() == PlayerEngine.Type.MPV
+                ? Constant.TIMEOUT_PLAY
+                : Constant.TIMEOUT_FIRST_FRAME_LIVE)
+                : Constant.TIMEOUT_FIRST_FRAME_VOD;
         App.post(firstFrameRunnable, timeout);
     }
 

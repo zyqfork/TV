@@ -1380,7 +1380,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
         Integer editionCount = MPVLib.getPropertyInt("edition-list/count");
         List<MediaEdition> refreshedEditions = new ArrayList<>();
-        int selectedEdition = valueOr(MPVLib.getPropertyInt("edition"), -1);
+        // mpv returns the literal "auto" until a concrete edition is selected. Requesting that
+        // property as MPV_FORMAT_INT64 logs "unsupported format" for ordinary HLS/MP4 files.
+        int selectedEdition = parseInt(MPVLib.getPropertyString("edition"), -1);
         for (int i = 0; i < valueOr(editionCount, 0); i++) {
             Integer id = MPVLib.getPropertyInt("edition-list/" + i + "/id");
             String title = MPVLib.getPropertyString("edition-list/" + i + "/title");
@@ -1394,6 +1396,15 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private static int valueOr(@Nullable Integer value, int fallback) {
         return value == null ? fallback : value;
+    }
+
+    private static int parseInt(@Nullable String value, int fallback) {
+        if (value == null) return fallback;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     @Override
