@@ -53,6 +53,24 @@ android {
         viewBinding = true
     }
 
+    packaging {
+        jniLibs {
+            // The bundled mpv/FFmpeg libraries are already stripped by their source build.
+            // Running llvm-strip again has produced zero-filled arm64 FFmpeg libraries when
+            // multiple APK variants are assembled in parallel.
+            keepDebugSymbols += [
+                    "**/libavcodec.so",
+                    "**/libavdevice.so",
+                    "**/libavfilter.so",
+                    "**/libavformat.so",
+                    "**/libavutil.so",
+                    "**/libswresample.so",
+                    "**/libswscale.so",
+                    "**/libmpv.so"
+            ]
+        }
+    }
+
     signingConfigs {
         release {
             storeFile file(localProps['storeFile'])

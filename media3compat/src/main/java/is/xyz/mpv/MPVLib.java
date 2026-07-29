@@ -2,6 +2,7 @@ package is.xyz.mpv;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.util.Log;
 import android.view.Surface;
 
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class MPVLib {
 
+    private static final String TAG = "MPVLib";
     private static final CopyOnWriteArrayList<EventObserver> observers = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<LogObserver> logObservers = new CopyOnWriteArrayList<>();
     private static volatile boolean loaded;
@@ -34,6 +36,7 @@ public final class MPVLib {
             loaded = true;
         } catch (LinkageError e) {
             loaded = false;
+            Log.e(TAG, "Unable to load native MPV libraries", e);
         }
         return loaded;
     }

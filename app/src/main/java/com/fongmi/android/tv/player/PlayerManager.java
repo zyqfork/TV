@@ -72,8 +72,11 @@ public class PlayerManager implements ParseCallback {
         this.firstFrameRunnable = this::onFirstFrameTimeout;
         this.sourceRetryRunnable = this::onSourceRetry;
         this.preferredEngine = PlayerSetting.getVodEngine();
-        this.decode = PlayerSetting.getDecode(false, preferredEngine);
-        this.engine = PlayerEngineFactory.create(decode, preferredEngine, false, listener);
+        // MediaBrowser clients (launcher/system UI) may create PlaybackService without starting
+        // playback. Do not reserve the process-wide native MPV instance for that idle service.
+        // The playback Activity applies the configured live/VOD engine before loading a source.
+        this.decode = PlayerSetting.getDecode(false, PlayerSetting.ENGINE_EXO);
+        this.engine = PlayerEngineFactory.createExo(decode, false, listener);
         this.player = engine.getPlayer();
         this.pendingStartPositionMs = C.TIME_UNSET;
         this.danmakuConfig = DanmakuSetting.getConfig();
