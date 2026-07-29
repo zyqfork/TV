@@ -142,6 +142,12 @@ public final class MpvUtil {
             builder.addPreInitStringOption("demuxer-max-bytes", mb + "MiB");
         }
         if (live) {
+            // A live edge has no useful history to seek into. mpv otherwise retains a sizeable
+            // backward demux cache in addition to MediaCodec and GPU buffers; copy-back hardware
+            // decoding makes that duplication especially expensive on TV boxes.
+            if (!userOptions.containsKey("demuxer-max-back-bytes")) {
+                builder.addPreInitStringOption("demuxer-max-back-bytes", "0");
+            }
             if (!userOptions.containsKey("cache-secs")) {
                 int cacheSec = PlayerSetting.isLiveLowLatency() ? Math.min(2, Math.max(1, PlayerSetting.getBuffer() / 2)) : Math.max(1, PlayerSetting.getBuffer());
                 builder.addPreInitStringOption("cache-secs", Integer.toString(cacheSec));

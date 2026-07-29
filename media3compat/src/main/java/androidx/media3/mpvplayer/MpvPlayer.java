@@ -70,6 +70,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
     private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "seekable"};
     private static final String[] OBSERVED_INT = {"video-params/w", "video-params/h"};
+    private static final long END_FILE_ERROR_DEBOUNCE_MS = 500;
 
     private final Context context;
     private final Handler applicationHandler;
@@ -127,6 +128,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private List<MediaChapter> chapters = List.of();
     private List<MediaEdition> editions = List.of();
     @Nullable private String lastNativeError;
+    @Nullable private Runnable pendingEndFileError;
 
     private final SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
         @Override
@@ -516,6 +518,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void loadFile(String uri) {
+        cancelPendingEndFileError();
         fileLoaded = false;
         firstFrameReported = false;
         renderFallbackUsed = false;
@@ -979,6 +982,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (released) return done();
         released = true;
         applicationHandler.removeCallbacks(blackScreenWatchdog);
+        cancelPendingEndFileError();
         cancelSurfaceSettle();
         MPVLib.removeObserver(this);
         MPVLib.removeLogObserver(this);
@@ -1069,9 +1073,14 @@ public final class MpvPlayer extends SimpleBasePlayer
     public void event(int eventId) {
         onApplicationThread(() -> {
             switch (eventId) {
-                case MPVLib.MpvEvent.START_FILE ->
-                        updateState(STATE_BUFFERING, state.playWhenReady, null);
+                case MPVLib.MpvEvent.START_FILE -> {
+                    // An HLS master can expose several renditions as native playlist entries.
+                    // Starting the next one means the preceding END_FILE error was not terminal.
+                    cancelPendingEndFileError();
+                    updateState(STATE_BUFFERING, state.playWhenReady, null);
+                }
                 case MPVLib.MpvEvent.FILE_LOADED -> {
+                    cancelPendingEndFileError();
                     fileLoaded = true;
                     applyPendingSeekAndSubtitles();
                     refreshTracks();
@@ -1107,6 +1116,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (reason == MPVLib.MpvEndFileReason.STOP
                 || reason == MPVLib.MpvEndFileReason.QUIT
                 || reason == MPVLib.MpvEndFileReason.REDIRECT) {
+            cancelPendingEndFileError();
             return;
         }
         if (reason != MPVLib.MpvEndFileReason.EOF || error < 0) {
@@ -1119,10 +1129,10 @@ public final class MpvPlayer extends SimpleBasePlayer
             // First-load surface races (common on phones) must not stick on a black Activity:
             // disable embed VO and reload once with copy-back instead of surfacing a fatal error.
             if (maybeRetryAfterSurfaceFailure(detail)) return;
-            updateState(STATE_IDLE, false, new PlaybackException(detail, null,
-                    mapMpvIoErrorCode(detail)));
+            scheduleEndFileError(detail);
             return;
         }
+        cancelPendingEndFileError();
         if (currentMediaItemIndex + 1 < playlist.size()
                 && state.repeatMode != REPEAT_MODE_ONE) {
             currentMediaItemIndex++;
@@ -1132,6 +1142,23 @@ public final class MpvPlayer extends SimpleBasePlayer
         } else if (state.playbackState != STATE_ENDED) {
             updateState(STATE_ENDED, false, null);
         }
+    }
+
+    private void scheduleEndFileError(String detail) {
+        cancelPendingEndFileError();
+        pendingEndFileError = () -> {
+            pendingEndFileError = null;
+            if (released) return;
+            updateState(STATE_IDLE, false, new PlaybackException(detail, null,
+                    mapMpvIoErrorCode(detail)));
+        };
+        applicationHandler.postDelayed(pendingEndFileError, END_FILE_ERROR_DEBOUNCE_MS);
+    }
+
+    private void cancelPendingEndFileError() {
+        if (pendingEndFileError == null) return;
+        applicationHandler.removeCallbacks(pendingEndFileError);
+        pendingEndFileError = null;
     }
 
     private boolean maybeRetryAfterSurfaceFailure(String detail) {
