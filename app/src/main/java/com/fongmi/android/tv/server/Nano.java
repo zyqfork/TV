@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.server;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.server.impl.Process;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 import fi.iki.elonen.NanoHTTPD;
 
@@ -63,10 +65,19 @@ public class Nano extends NanoHTTPD {
         String url = session.getUri().trim();
         Map<String, String> files = new HashMap<>();
         if (session.getMethod() == Method.POST) parse(session, files);
+        if (url.equals("/locale")) return ok(getLocale());
         if (url.startsWith("/tvbus")) return ok(LiveConfig.getResp());
         if (url.startsWith("/device")) return ok(Device.get().toString());
         for (Process process : process) if (process.isRequest(session, url)) return process.doResponse(session, url, files);
         return getAssets(url.substring(1));
+    }
+
+    private String getLocale() {
+        Locale locale = App.get().getResources().getConfiguration().getLocales().get(0);
+        if (!"zh".equals(locale.getLanguage())) return "en";
+        String country = locale.getCountry();
+        String script = locale.getScript();
+        return country.equals("TW") || country.equals("HK") || country.equals("MO") || script.equals("Hant") ? "zh-TW" : "zh-CN";
     }
 
     private void parse(IHTTPSession session, Map<String, String> files) {

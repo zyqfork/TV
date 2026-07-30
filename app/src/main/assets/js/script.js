@@ -11,6 +11,49 @@ let danmakuMode = 1;
 let danmakuSize = 25;
 let dialogClosing = false;
 
+const translations = {
+    'zh-CN': {
+        '影視': '影视', '請輸入關鍵字...': '请输入关键词...', '確定': '确定', '請輸入播放網址...': '请输入播放地址...',
+        '滾動': '滚动', '預設': '默认', '請輸入彈幕內容...': '请输入弹幕内容...', '發送': '发送', '名稱': '名称',
+        '設定': '设置', '上傳檔案': '上传文件', '新增資料夾': '新建文件夹', '搜尋': '搜索', '彈幕': '弹幕', '本地': '本地',
+        '模式': '模式', '頂部': '顶部', '底部': '底部', '反向': '反向', '大小': '大小', '小': '小', '大': '大',
+        '本地路徑': '本地路径', '關閉': '关闭', '使用': '使用', '確認上傳？': '确认上传？', '取消': '取消',
+        '請輸入資料夾名稱...': '请输入文件夹名称...', '刪除資料夾': '删除文件夹', '刪除': '删除', '刪除檔案': '删除文件',
+        '回應格式錯誤': '响应格式错误', '可能沒有存儲權限': '可能没有存储权限', '載入失敗': '加载失败',
+        '新增失敗': '新建失败', '是否刪除 ': '是否删除 ', '刪除失敗': '删除失败'
+    },
+    en: {
+        '影視': 'TV', '請輸入關鍵字...': 'Enter keywords...', '確定': 'Confirm', '請輸入播放網址...': 'Enter playback URL...',
+        '滾動': 'Scroll', '預設': 'Default', '請輸入彈幕內容...': 'Enter comment...', '發送': 'Send', '名稱': 'Name',
+        '配置': 'Configuration', '設定': 'Settings', '上傳檔案': 'Upload files', '新增資料夾': 'New folder', '搜尋': 'Search',
+        '推送': 'Push', '彈幕': 'Comments', '本地': 'Local', '模式': 'Mode', '頂部': 'Top', '底部': 'Bottom',
+        '反向': 'Reverse', '大小': 'Size', '小': 'Small', '大': 'Large', '本地路徑': 'Local path', '關閉': 'Close',
+        '使用': 'Use', '確認上傳？': 'Confirm upload?', '取消': 'Cancel', '請輸入資料夾名稱...': 'Enter folder name...',
+        '刪除資料夾': 'Delete folder', '刪除': 'Delete', '刪除檔案': 'Delete file', '回應格式錯誤': 'Invalid response format',
+        '可能沒有存儲權限': 'Storage permission may be missing', '載入失敗': 'Load failed', '新增失敗': 'Create failed',
+        '是否刪除 ': 'Delete ', '刪除失敗': 'Delete failed'
+    }
+};
+let locale = 'zh-TW';
+
+function t(text) {
+    return translations[locale]?.[text] || text;
+}
+
+function applyLocale(value) {
+    locale = translations[value] ? value : 'en';
+    document.documentElement.lang = locale;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+        const value = node.nodeValue;
+        const trimmed = value.trim();
+        if (trimmed && t(trimmed) !== trimmed) node.nodeValue = value.replace(trimmed, t(trimmed));
+    });
+    document.querySelectorAll('[placeholder]').forEach(node => node.placeholder = t(node.placeholder));
+}
+
 function search() {
     doAction('search', { word: $('#keyword').val() });
 }
@@ -38,7 +81,7 @@ function showDanmakuModeDialog() {
 
 function setDanmakuMode(val, label) {
     danmakuMode = val;
-    $('#danmaku_mode_label').text(label);
+    $('#danmaku_mode_label').text(t(label));
     closeDialog('danmakuModeDialog');
 }
 
@@ -50,7 +93,7 @@ function showDanmakuSizeDialog() {
 
 function setDanmakuSize(val, label) {
     danmakuSize = val;
-    $('#danmaku_size_label').text(label);
+    $('#danmaku_size_label').text(t(label));
     closeDialog('danmakuSizeDialog');
 }
 
@@ -136,14 +179,14 @@ function listFile(path, addHistory = false) {
             info = JSON.parse(res);
         } catch (e) {
             $('#loadingToast').hide();
-            warnToast('回應格式錯誤');
+            warnToast(t('回應格式錯誤'));
             return;
         }
         const parent = info.parent;
         currentRoot = path;
         currentParent = parent;
         const array = info.files;
-        if (path === '' && array.length === 0) warnToast('可能沒有存儲權限');
+        if (path === '' && array.length === 0) warnToast(t('可能沒有存儲權限'));
         $('#file_list').html('');
         if (parent !== '.') addFile(buildParentItem());
         array.forEach(node => {
@@ -155,7 +198,7 @@ function listFile(path, addHistory = false) {
     }).fail(function () {
         clearTimeout(loadingTimer);
         $('#loadingToast').hide();
-        warnToast('載入失敗');
+        warnToast(t('載入失敗'));
     });
 }
 
@@ -209,13 +252,13 @@ function confirmNewFolder(yes) {
         listFile(currentRoot);
     }).fail(function () {
         $('#loadingToast').hide();
-        warnToast('新增失敗');
+        warnToast(t('新增失敗'));
     });
 }
 
 function showDelFolderDialog(path, refreshPath) {
     pendingDelFolder = { path, refreshPath };
-    $('#delFolderContent').text('是否刪除 ' + path);
+    $('#delFolderContent').text(t('是否刪除 ') + path);
     openDialog('delFolder');
 }
 
@@ -230,13 +273,13 @@ function confirmDelFolder(yes) {
         listFile(refreshPath);
     }).fail(function () {
         $('#loadingToast').hide();
-        warnToast('刪除失敗');
+        warnToast(t('刪除失敗'));
     });
 }
 
 function showDelFileDialog(path) {
     currentFile = path;
-    $('#delFileContent').text('是否刪除 ' + path);
+    $('#delFileContent').text(t('是否刪除 ') + path);
     openDialog('delFile');
 }
 
@@ -249,7 +292,7 @@ function confirmDelFile(yes) {
         listFile(currentRoot);
     }).fail(function () {
         $('#loadingToast').hide();
-        warnToast('刪除失敗');
+        warnToast(t('刪除失敗'));
     });
 }
 
@@ -280,6 +323,7 @@ window.addEventListener('popstate', function () {
 });
 
 $(function () {
+    $.get('/locale').done(applyLocale).fail(() => applyLocale('en'));
     $('#keyword').on('keydown', function (e) { if (e.key === 'Enter') { this.blur(); search(); } });
     $('#push_url').on('keydown', function (e) { if (e.key === 'Enter') { this.blur(); push(); } });
     $('#danmaku_text').on('keydown', function (e) { if (e.key === 'Enter') { this.blur(); sendDanmaku(); } });
