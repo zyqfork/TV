@@ -90,7 +90,7 @@ def prepareAv1Sources = tasks.register("prepareAv1Sources") {
     }
 }
 
-def libmpvVersion = "source-46ef59a1-surface-guard-vulkan-experimental-2026-07-30"
+def libmpvVersion = "source-46ef59a1-surface-guard-vulkan-v8-2026-07-30"
 def prepareLibmpv = tasks.register("prepareLibmpv") {
     def outputDir = layout.buildDirectory.dir("generated/libmpv/jniLibs")
     def ffmpegBuildScript = layout.projectDirectory.file("scripts/build_ffmpeg_x86_64.sh")

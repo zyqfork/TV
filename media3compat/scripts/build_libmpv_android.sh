@@ -7,7 +7,7 @@ output_dir=$3
 requested_abis=${4:-arm64-v8a,armeabi-v7a,x86_64}
 ndk_version=29.0.14206865
 source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
-build_revision="${source_revision}-surface-guard-vulkan-experimental-v7"
+build_revision="${source_revision}-surface-guard-vulkan-v8"
 
 mkdir -p "$cache_dir" "$output_dir"
 all_present=false
@@ -102,16 +102,23 @@ for abi in ${requested_abis//,/ }; do
     # The NDK exposes Vulkan headers and the system loader, but does not ship a pkg-config
     # descriptor. Give Meson cross dependency discovery the missing metadata; -lvulkan still
     # resolves against the Android sysroot and no desktop Vulkan loader is bundled.
-    mkdir -p \"/src/buildscripts/prefix/\$prefix/lib/pkgconfig\"
+    prefix_root=\"/src/buildscripts/prefix/\$prefix\"
+    # buildall.sh normally creates these flattening links when it creates the prefix. Since the
+    # Vulkan descriptor must exist before dependency discovery, preserve that layout explicitly
+    # instead of accidentally making usr/local a real nested directory on a clean CI runner.
+    mkdir -p \"\$prefix_root\"
+    [[ -e \"\$prefix_root/usr\" ]] || ln -s . \"\$prefix_root/usr\"
+    [[ -e \"\$prefix_root/local\" ]] || ln -s . \"\$prefix_root/local\"
+    mkdir -p \"\$prefix_root/lib/pkgconfig\"
     cp \"/android-sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/\$triple/24/libvulkan.so\" \
-        \"/src/buildscripts/prefix/\$prefix/lib/libvulkan.so\"
+        \"\$prefix_root/lib/libvulkan.so\"
     printf '%s\n' \
         'Name: Vulkan' \
         'Description: Android NDK Vulkan loader' \
         'Version: 1.3.280' \
         'Libs: -L/lib -lvulkan' \
         'Cflags:' \
-        > \"/src/buildscripts/prefix/\$prefix/lib/pkgconfig/vulkan.pc\"
+        > \"\$prefix_root/lib/pkgconfig/vulkan.pc\"
     ./buildall.sh --arch \$arch mpv
 done
 env \$prefix_env /android-sdk/ndk/$ndk_version/ndk-build \
