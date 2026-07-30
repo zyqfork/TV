@@ -54,16 +54,16 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
     /**
-     * Use MediaCodec copy-back by default on Android TV.
+     * Keep decoded frames in Android graphic buffers.
      *
-     * <p>The zero-copy MediaCodec path keeps vendor AImageReader/GraphicBuffer state across
-     * {@code loadfile replace}. A number of TV decoders then expose the old YUV buffer as a green
-     * frame, or block while releasing it during rapid episode changes. Copy-back still uses the
-     * hardware decoder, but gives mpv ownership of the output frames and makes file replacement
-     * independent from the previous codec surface. An explicit hwdec value in mpv.conf continues
-     * to override this compatibility default.
+     * <p>Rockchip's 10-bit HEVC decoder advertises a linear YUV420 byte-buffer for copy-back while
+     * returning vendor-aligned/tiled data and inconsistent crop bounds. FFmpeg accepts it as a
+     * successful frame, so mpv renders solid green without raising a decode error. Direct
+     * MediaCodec works with both gpu/android and mediacodec_embed and avoids interpreting that
+     * vendor buffer layout in system RAM. An explicit hwdec in mpv.conf still overrides the
+     * compatible-hard mode.
      */
-    private static final String HWDEC_HARD = "mediacodec-copy";
+    private static final String HWDEC_HARD = "mediacodec";
     private static final String HWDEC_PERFORMANCE = "mediacodec";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
@@ -89,9 +89,9 @@ public final class MpvPlayer extends SimpleBasePlayer
     private boolean surfaceReady;
     /** True after surfaceDestroyed while a file was (or is being) played; needs video-reload. */
     private boolean surfaceNeedsVideoReload;
-    /** Performance embed VO failed permanently for this instance; stay on gpu + copy. */
+    /** Performance embed VO failed permanently for this instance; stay on direct gpu output. */
     private boolean embedVoDisabled;
-    /** How many times we already retried embed after a surface race (before copy fallback). */
+    /** How many times we already retried embed after a surface race (before gpu fallback). */
     private int embedSurfaceRetries;
     private static final int EMBED_SURFACE_RETRY_LIMIT = 2;
     /** Set when mediacodec_embed reports Surface unavailable; used by end-file retry. */
@@ -110,6 +110,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     /** Event-driven black-screen recovery (scheduled from time-pos, not a blind timer). */
     private final Runnable blackScreenWatchdog = this::checkBlackScreen;
     private long positionMs;
+    private long firstFrameStartPositionMs;
     private long pendingSeekMs = C.TIME_UNSET;
     private long durationMs = C.TIME_UNSET;
     private long bufferedPositionMs;
@@ -333,7 +334,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private String getDecodeOption() {
         // mediacodec_embed requires a live Android Surface; after Surface-unavailable we stay on
-        // copy-back so audio-only / black-screen sessions can recover without a full rebuild.
+        // direct gpu output so audio-only / black-screen sessions can recover without a rebuild.
         if (decode == 2 && !embedVoDisabled) return HWDEC_PERFORMANCE;
         if (decode == 2) return HWDEC_HARD;
         if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD);
@@ -521,19 +522,20 @@ public final class MpvPlayer extends SimpleBasePlayer
         cancelPendingEndFileError();
         fileLoaded = false;
         firstFrameReported = false;
+        firstFrameStartPositionMs = positionMs;
         renderFallbackUsed = false;
         surfaceRecovering = false;
         applicationHandler.removeCallbacks(blackScreenWatchdog);
-        // handleStop() deliberately tears down VO/hwdec to release MediaCodec. Channel/episode
-        // switches reuse the same Player and Surface, so no new surface callback will restore VO.
-        // Rebind the existing Android window before every load or decoded frames go to vo=null
-        // while SurfaceView keeps displaying the previous stream's final buffer.
+        // Tear down the preceding VO before every item. Rockchip can otherwise retain the old
+        // codec GraphicBuffer and present it as a green first frame after loadfile replace or
+        // after returning to the Activity.
         if (surfaceReady) {
+            MPVLib.setPropertyString("vo", "null");
             MPVLib.setPropertyString("force-window", "yes");
             MPVLib.setPropertyString("vo", getVo());
         }
-        // A previous stream may have activated the per-file copy-back fallback, or stop() may
-        // have disabled hardware decoding while releasing the old decoder.
+        // A previous stream may have activated the per-file gpu fallback, or stop() may have
+        // disabled hardware decoding while releasing the old decoder.
         MPVLib.setPropertyString("hwdec", getDecodeOption());
         // Avoid loadfile options entirely: mpv 0.38+ inserted an integer index argument, and
         // KEYVALUELIST parsing differs across builds. Resume via seek after FILE_LOADED instead.
@@ -1050,11 +1052,12 @@ public final class MpvPlayer extends SimpleBasePlayer
             switch (property) {
                 case "time-pos" -> {
                     positionMs = Math.max(0, (long) (value * 1000));
-                    // Event-driven: only arm recovery after demux/audio actually advances without a
-                    // first frame. Avoids a blind 2.5s timer on every healthy open.
-                    if (!firstFrameReported && fileLoaded && surfaceReady && positionMs >= 300) {
+                    // Compare against this load's starting position. A resumed item must not look
+                    // stuck merely because its absolute position is already greater than 300 ms.
+                    if (!firstFrameReported && fileLoaded && surfaceReady
+                            && Math.abs(positionMs - firstFrameStartPositionMs) >= 300) {
                         applicationHandler.removeCallbacks(blackScreenWatchdog);
-                        applicationHandler.postDelayed(blackScreenWatchdog, 500);
+                        applicationHandler.postDelayed(blackScreenWatchdog, 1_000);
                     }
                 }
                 case "duration" -> durationMs = value > 0 ? (long) (value * 1000) : C.TIME_UNSET;
@@ -1127,7 +1130,7 @@ public final class MpvPlayer extends SimpleBasePlayer
                         : "mpv ended media without reaching EOF";
             }
             // First-load surface races (common on phones) must not stick on a black Activity:
-            // disable embed VO and reload once with copy-back instead of surfacing a fatal error.
+            // disable embed VO and reload once with gpu/android instead of surfacing a fatal error.
             if (maybeRetryAfterSurfaceFailure(detail)) return;
             scheduleEndFileError(detail);
             return;
@@ -1183,7 +1186,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         fileLoaded = false;
         String uri = mediaItem.localConfiguration.uri.toString();
         // Prefer staying on zero-copy embed: drop the poisoned window and re-bind. Only after
-        // repeated failures fall back to mediacodec-copy (higher CPU).
+        // repeated failures fall back to mediacodec with gpu/android.
         if (!embedVoDisabled && embedSurfaceRetries < EMBED_SURFACE_RETRY_LIMIT) {
             embedSurfaceRetries++;
             if (surfaceReady) detachNativeSurface();
@@ -1250,12 +1253,12 @@ public final class MpvPlayer extends SimpleBasePlayer
     private void checkBlackScreen() {
         if (released || firstFrameReported || !fileLoaded || !surfaceReady) return;
         // Demuxer/audio advanced but no frame reached the Android window → classic black screen.
-        if (positionMs < 300) return;
+        if (Math.abs(positionMs - firstFrameStartPositionMs) < 300) return;
         if (decode == 2 && !embedVoDisabled) {
             recoverVideoOutput("progress without first frame");
             return;
         }
-        // Copy-back / soft path still black: escalate so PlayerManager can toggle decode / Exo.
+        // Compatible-hard / soft path still black: escalate for a per-item decode fallback.
         updateState(STATE_IDLE, false, new PlaybackException(
                 "video output stuck without first frame", null,
                 PlaybackException.ERROR_CODE_DECODING_FAILED));
@@ -1282,7 +1285,7 @@ public final class MpvPlayer extends SimpleBasePlayer
             applicationHandler.postDelayed(this::reofferCurrentVideoOutput, 200);
             return;
         }
-        // Exhausted embed retries — copy-back is the last resort (higher CPU).
+        // Exhausted embed retries — use mediacodec with gpu/android, never copy-back.
         if (wasEmbed) embedVoDisabled = true;
         if (!surfaceReady) {
             surfaceNeedsVideoReload = true;

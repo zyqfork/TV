@@ -470,18 +470,20 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void toggleDecode() {
-        toggleDecode(true);
+        switchDecode(true, true);
     }
 
-    private void toggleDecode(boolean freshAttempt) {
+    private void switchDecode(boolean persist, boolean freshAttempt) {
+        long position = getPosition();
         decode = nextDecode(decode, engine.getType() == PlayerEngine.Type.MPV);
-        PlayerSetting.putDecode(liveMode, getEngine(), decode);
+        if (persist) PlayerSetting.putDecode(liveMode, getEngine(), decode);
         boolean rebuild = engine.setDecode(decode);
         callback.onDecodeChanged();
-        if (!rebuild) return;
-        setPlayer(engine.rebuild());
+        if (rebuild) setPlayer(engine.rebuild());
         if (freshAttempt) beginFreshAttempt();
-        startCurrent(getPosition());
+        // Changing hwdec does not replace a decoder that is already open. Reload the current item
+        // even when the engine itself can be reused (compatible-hard <-> software).
+        startCurrent(position);
     }
 
     /**
@@ -502,8 +504,9 @@ public class PlayerManager implements ParseCallback {
             callback.onError(engine.getErrorMessage(e));
         } else {
             Notify.show(R.string.error_decode_fallback);
-            // Keep the decode retry count while cycling performance -> compatible -> software.
-            toggleDecode(false);
+            // Automatic recovery is temporary for this item. Only an explicit user action writes
+            // PlayerSetting, so the next item starts with the user's preferred decode mode.
+            switchDecode(false, false);
         }
     }
 
@@ -583,6 +586,14 @@ public class PlayerManager implements ParseCallback {
         setPlayer(engine.getPlayer());
     }
 
+    private void restorePreferredDecode() {
+        int preferred = PlayerSetting.getDecode(liveMode, getEngine());
+        if (decode == preferred) return;
+        decode = preferred;
+        if (engine.setDecode(decode)) setPlayer(engine.rebuild());
+        callback.onDecodeChanged();
+    }
+
     private void setPlayer(Player player) {
         this.player = player;
         callback.onPlayerRebuild(player);
@@ -603,6 +614,8 @@ public class PlayerManager implements ParseCallback {
         this.spec = spec;
         this.subtitleDecodeHintShown = false;
         beginFreshAttempt();
+        ensureEngine(spec.checkUa());
+        restorePreferredDecode();
         setMediaItem(timeout, startPositionMs);
     }
 
@@ -695,6 +708,10 @@ public class PlayerManager implements ParseCallback {
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
         beginFreshAttempt();
+        if (spec != null) {
+            ensureEngine(spec.checkUa());
+            restorePreferredDecode();
+        }
         startCurrent(pendingStartPositionMs);
         pendingStartPositionMs = C.TIME_UNSET;
     }
