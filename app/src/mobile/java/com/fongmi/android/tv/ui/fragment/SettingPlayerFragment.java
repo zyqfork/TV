@@ -14,6 +14,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPlayerBinding;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.UaListener;
+import com.fongmi.android.tv.player.mpv.MpvUtil;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
@@ -89,7 +90,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
         boolean mpv = PlayerSetting.isMpv();
         boolean exo = !mpv;
         mBinding.mpvConf.setVisibility(mpv ? View.VISIBLE : View.GONE);
-        mBinding.mpvVulkan.setVisibility(mpv ? View.VISIBLE : View.GONE);
+        mBinding.mpvVulkan.setVisibility(mpv && MpvUtil.isVulkanAvailable() ? View.VISIBLE : View.GONE);
         mBinding.mpvGpuNext.setVisibility(mpv ? View.VISIBLE : View.GONE);
         mBinding.decode.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.adblock.setVisibility(exo ? View.VISIBLE : View.GONE);

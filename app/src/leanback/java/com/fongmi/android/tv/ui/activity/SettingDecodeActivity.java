@@ -28,6 +28,8 @@ public class SettingDecodeActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.tunnel.requestFocus();
+        // This build has no DV7→HEVC fallback implementation. Do not expose a no-op switch.
+        mBinding.dv7Fallback.setVisibility(View.GONE);
         refresh();
     }
 

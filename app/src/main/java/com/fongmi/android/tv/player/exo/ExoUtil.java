@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player.exo;
 
 import android.content.Context;
+import android.app.ActivityManager;
 import android.os.Bundle;
 import android.os.Handler;
 
@@ -49,7 +50,7 @@ public class ExoUtil {
                 .setTrackSelector(buildTrackSelector(live))
                 .setLoadControl(buildLoadControl(live))
                 .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioPassThrough))
-                .setMediaSourceFactory(buildMediaSourceFactory())
+                .setMediaSourceFactory(buildMediaSourceFactory(live))
                 .build();
         if (BuildConfig.DEBUG) player.addAnalyticsListener(new EventLogger());
         player.setAudioAttributes(AudioAttributes.DEFAULT, true);
@@ -69,19 +70,35 @@ public class ExoUtil {
 
     public static LoadControl buildLoadControl(boolean live) {
         int bufferMs = PlayerSetting.getBuffer() * 1000;
-        int minBufferMs = Math.max(bufferMs, 2500);
-        int maxBufferMs = Math.max(minBufferMs * 2, 50000);
+        int minBufferMs = Math.max(bufferMs, live ? 3000 : 5000);
+        int maxBufferMs = Math.clamp(minBufferMs * 3, live ? 8000 : 15000,
+                live ? 15000 : 30000);
         int playbackMs = Math.min(2500, Math.max(1000, bufferMs / 2));
         int rebufferMs = Math.min(5000, Math.max(playbackMs, bufferMs));
+        int targetBufferBytes = getTargetBufferBytes(live);
         if (live && PlayerSetting.isLiveLowLatency()) {
             minBufferMs = Math.max(1000, bufferMs / 2);
             maxBufferMs = Math.max(minBufferMs * 2, 6000);
             playbackMs = Math.min(1200, minBufferMs);
             rebufferMs = Math.min(2500, Math.max(playbackMs, minBufferMs));
+            targetBufferBytes = 8 * 1024 * 1024;
         }
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
+                .setTargetBufferBytes(targetBufferBytes)
+                .setBackBuffer(0, false)
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
+    }
+
+    /** Scale memory buffering to the actual device class rather than reserving 32 MiB everywhere. */
+    private static int getTargetBufferBytes(boolean live) {
+        ActivityManager manager = (ActivityManager) App.get().getSystemService(Context.ACTIVITY_SERVICE);
+        int memoryClass = manager == null ? 256 : manager.getMemoryClass();
+        if (live) return memoryClass <= 256 ? 8 * 1024 * 1024 : 16 * 1024 * 1024;
+        if (memoryClass <= 256) return 16 * 1024 * 1024;
+        if (memoryClass <= 512) return 24 * 1024 * 1024;
+        return 32 * 1024 * 1024;
     }
 
     public static String getMimeType(int errorCode) {
@@ -111,7 +128,10 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode, boolean audioPassThrough) {
-        return buildRenderersFactory(getRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), audioPassThrough);
+        // Decode mode is the explicit user choice. Advanced extension preferences apply only in
+        // compatibility mode and must never silently override “系统硬解优先”.
+        boolean compatibility = decode != PlayerEngine.HARD;
+        return buildRenderersFactory(getRenderMode(decode), compatibility && PlayerSetting.isAudioPrefer(), compatibility && PlayerSetting.isVideoPrefer(), audioPassThrough);
     }
 
     static RenderersFactory buildRenderersFactory() {
@@ -166,7 +186,8 @@ public class ExoUtil {
         return builder.build();
     }
 
-    private static MediaSource.Factory buildMediaSourceFactory() {
-        return new MediaSourceFactory();
+    private static MediaSource.Factory buildMediaSourceFactory(boolean live) {
+        // VOD benefits from a bounded read/write cache. Live bypasses it entirely.
+        return new MediaSourceFactory(!live, !live);
     }
 }

@@ -12,6 +12,7 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.cache.Cache;
 import androidx.media3.datasource.cache.CacheDataSource;
+import androidx.media3.datasource.cache.CacheDataSink;
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
@@ -36,16 +37,22 @@ import java.util.Map;
 public class MediaSourceFactory implements MediaSource.Factory {
 
     private static final int CACHE_SPACE_PERCENT = 80;
+    /** Do not let media cache consume the last usable space on TV boxes. */
+    private static final long CACHE_STORAGE_RESERVE_BYTES = 1024L * 1024L * 1024L;
 
     private static StandaloneDatabaseProvider databaseProvider;
     private static Cache cache;
 
     private final DefaultMediaSourceFactory defaultMediaSourceFactory;
+    private final boolean cacheEnabled;
+    private final boolean cacheWrites;
     private HttpDataSource.Factory httpDataSourceFactory;
     private DataSource.Factory dataSourceFactory;
     private ExtractorsFactory extractorsFactory;
 
-    public MediaSourceFactory() {
+    public MediaSourceFactory(boolean cacheEnabled, boolean cacheWrites) {
+        this.cacheEnabled = cacheEnabled;
+        this.cacheWrites = cacheWrites;
         defaultMediaSourceFactory = new DefaultMediaSourceFactory(getDataSourceFactory(), getExtractorsFactory());
     }
 
@@ -53,6 +60,16 @@ public class MediaSourceFactory implements MediaSource.Factory {
         HttpDataSource.Factory factory = createHttpDataSourceFactory();
         factory.setDefaultRequestProperties(headers);
         return new DefaultDataSource.Factory(App.get(), factory);
+    }
+
+    /**
+     * Creates a bounded-download source that reads and writes the same VOD cache as playback.
+     * Live media deliberately never calls this method: caching a moving live edge wastes storage
+     * and competes with the foreground stream for network and disk I/O.
+     */
+    static CacheDataSource createDownloadDataSource(Map<String, String> headers) {
+        return createCacheDataSource(createUpstreamDataSourceFactory(headers), true, true)
+                .createDataSourceForDownloading();
     }
 
     static synchronized Cache getCache() {
@@ -69,7 +86,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
     private static long getMaxCacheSize(File dir) {
         long usedBytes = FileUtil.getDirectorySize(dir);
         long availableBytes = Math.max(0, FileUtil.getAvailableStorageSpace(dir));
-        long storageBudget = (usedBytes + availableBytes) * CACHE_SPACE_PERCENT / 100;
+        long usableBytes = Math.max(0, usedBytes + availableBytes - CACHE_STORAGE_RESERVE_BYTES);
+        long storageBudget = usableBytes * CACHE_SPACE_PERCENT / 100;
         return Math.min(PreloadSetting.getPreloadSizeBytes(), storageBudget);
     }
 
@@ -104,12 +122,29 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     private DataSource.Factory getDataSourceFactory() {
-        if (dataSourceFactory == null) dataSourceFactory = () -> getCacheDataSource(new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory())).createDataSource();
+        if (dataSourceFactory == null) {
+            DataSource.Factory upstream = new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory());
+            // Stable live URLs may point to a new edge after reconnect, so disabling writes alone
+            // is insufficient: live playback bypasses both cache reads and writes.
+            dataSourceFactory = cacheEnabled
+                    ? () -> createCacheDataSource(upstream, cacheWrites, false).createDataSource()
+                    : upstream;
+        }
         return dataSourceFactory;
     }
 
-    private CacheDataSource.Factory getCacheDataSource(DataSource.Factory upstreamFactory) {
-        return new CacheDataSource.Factory().setCache(getCache()).setUpstreamDataSourceFactory(upstreamFactory).setCacheWriteDataSinkFactory(null).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
+    private static CacheDataSource.Factory createCacheDataSource(DataSource.Factory upstreamFactory,
+                                                                  boolean writeCache,
+                                                                  boolean blockOnCache) {
+        CacheDataSource.Factory factory = new CacheDataSource.Factory()
+                .setCache(getCache())
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
+                        | (blockOnCache ? CacheDataSource.FLAG_BLOCK_ON_CACHE : 0));
+        if (writeCache) {
+            factory.setCacheWriteDataSinkFactory(new CacheDataSink.Factory().setCache(getCache()));
+        }
+        return factory;
     }
 
     private HttpDataSource.Factory getHttpDataSourceFactory() {

@@ -5,6 +5,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
@@ -24,6 +25,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     private ExoPlayer player;
     private PlaySpec spec;
     private int decode;
+    private final Runnable preCacheRunnable = this::startPreCache;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
         this(decode, false, listener);
@@ -52,12 +54,14 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public void release() {
+        App.removeCallbacks(preCacheRunnable);
         preCache.release();
         player.release();
     }
 
     @Override
     public Player rebuild() {
+        App.removeCallbacks(preCacheRunnable);
         preCache.stop();
         player.release();
         return player = ExoUtil.buildPlayer(decode, live, audioPassThrough, listener);
@@ -81,6 +85,7 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public void stop() {
+        App.removeCallbacks(preCacheRunnable);
         preCache.stop();
         player.stop();
     }
@@ -124,10 +129,20 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     private void startInternal(long position) {
         MediaItem item = MediaItemFactory.from(spec, decode);
+        App.removeCallbacks(preCacheRunnable);
+        preCache.stop();
         player.setMediaItem(item, position);
-        preCache.start(player, item);
         player.prepare();
         player.play();
+        // Foreground startup gets the connection and initial buffer first. Pre-cache remains
+        // opportunistic and is cancelled on every switch, stop, rebuild or release.
+        if (!live) App.post(preCacheRunnable, 1_500);
+    }
+
+    private void startPreCache() {
+        if (!live && player.getPlaybackState() != Player.STATE_IDLE && player.getCurrentMediaItem() != null) {
+            preCache.start(player.getCurrentMediaItem());
+        }
     }
 
     private ErrorAction seekToDefaultPosition() {

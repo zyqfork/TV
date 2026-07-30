@@ -15,6 +15,7 @@ import android.view.WindowManager;
 import android.view.accessibility.CaptioningManager;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
@@ -147,6 +148,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     public void toggleDebugView() {
+        if (mService == null || !isOwner()) return;
+        new AlertDialog.Builder(this)
+                .setTitle("播放诊断")
+                .setMessage(player().getDiagnosticText())
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     public void hideDebugView() {

@@ -28,6 +28,8 @@ public class SettingDecodeFragment extends BaseFragment {
 
     @Override
     protected void initView() {
+        // This build has no DV7→HEVC fallback implementation. Do not expose a no-op switch.
+        mBinding.dv7Fallback.setVisibility(View.GONE);
         refresh();
     }
 

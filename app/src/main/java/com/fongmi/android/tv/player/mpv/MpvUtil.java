@@ -18,6 +18,8 @@ import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
 
 public final class MpvUtil {
@@ -110,8 +112,9 @@ public final class MpvUtil {
     }
 
     private static void addApplicationOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, int decode, boolean live) {
-        // Several VOD CDNs close/rebind segment connections aggressively. This matches the
-        // upstream player and avoids FFmpeg reusing a dead HLS HTTP/TLS connection.
+        // Some VOD CDNs close/rebind segment connections aggressively. Keep the conservative
+        // setting until a per-host retry cache is available; an unconditional flip to persistent
+        // connections would trade a small TLS saving for intermittent VOD failures.
         builder.setDefaultUserAgent(getDefaultUserAgent()).setHlsHttpPersistent(false);
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
@@ -123,7 +126,7 @@ public final class MpvUtil {
             addVideoOutputOptions(builder, userOptions);
         }
         addIjkBehaviorOptions(builder, userOptions, live);
-        addPreloadOptions(builder);
+        addPreloadOptions(builder, live);
     }
 
     /**
@@ -131,6 +134,11 @@ public final class MpvUtil {
      * reconnect, framedrop, low-latency demux / unbounded buffer for live.
      */
     private static void addIjkBehaviorOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
+        if (!userOptions.containsKey("network-timeout")) {
+            // A dead live source should fail/retry promptly; VOD gets enough time for slow CDN
+            // connects and seek reads. User mpv.conf remains authoritative.
+            builder.addPreInitStringOption("network-timeout", live ? "15" : "30");
+        }
         if (!userOptions.containsKey("framedrop")) {
             builder.addPreInitStringOption("framedrop", "vo");
         }
@@ -153,10 +161,13 @@ public final class MpvUtil {
                 builder.addPreInitStringOption("cache-secs", Integer.toString(cacheSec));
             }
             // Prefer reconnect over aggressive nobuffer — mid-GOP live TS needs SPS/PPS.
-            // Mild analyzeduration helps first open without starving the live join.
+            // A modest probe avoids a multi-second first open on ordinary H264/AAC TS while
+            // still accepting streams whose headers arrive after the first packet.
             if (!userOptions.containsKey("demuxer-lavf-o")) {
                 builder.addPreInitStringOption("demuxer-lavf-o",
-                        "analyzeduration=5000000,probesize=2000000");
+                        PlayerSetting.isLiveLowLatency()
+                                ? "analyzeduration=1000000,probesize=524288"
+                                : "analyzeduration=2500000,probesize=1048576");
             }
             if (!userOptions.containsKey("stream-lavf-o")) {
                 builder.addPreInitStringOption("stream-lavf-o",
@@ -165,8 +176,15 @@ public final class MpvUtil {
             if (!userOptions.containsKey("rtsp-transport")) {
                 builder.addPreInitStringOption("rtsp-transport", "tcp");
             }
-        } else if (!userOptions.containsKey("stream-lavf-o")) {
-            builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
+        } else {
+            // A small backward VOD history improves short rewinds without duplicating the large
+            // forward cache. Live deliberately remains at zero above.
+            if (!userOptions.containsKey("demuxer-max-back-bytes")) {
+                builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
+            }
+            if (!userOptions.containsKey("stream-lavf-o")) {
+                builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
+            }
         }
     }
 
@@ -197,9 +215,53 @@ public final class MpvUtil {
         }
     }
 
-    private static void addPreloadOptions(MpvPlayerConfig.Builder builder) {
+    private static void addPreloadOptions(MpvPlayerConfig.Builder builder, boolean live) {
+        // A moving live edge has no replay value. Persisting it competes with decoder I/O and can
+        // fill flash storage with expired TS/HLS segments, so disk cache is VOD-only.
+        if (live) return;
         if (!PreloadSetting.isPreload()) return;
-        builder.addDiskCacheOptions(Path.mpvCache(), PreloadSetting.getPreloadTimeSeconds(), PreloadSetting.getPreloadSizeMb());
+        File mediaCache = new File(Path.mpvCache(), "media");
+        trimDiskCache(mediaCache, PreloadSetting.getPreloadSizeBytes());
+        // Keep demux data separate from mpv's font/shader cache, so cache eviction can never
+        // remove rendering artifacts or force expensive shader recompilation on every launch.
+        builder.addDiskCacheOptions(mediaCache, PreloadSetting.getPreloadTimeSeconds(), PreloadSetting.getPreloadSizeMb());
+    }
+
+    private static void trimDiskCache(File directory, long maxBytes) {
+        if (!directory.exists()) {
+            directory.mkdirs();
+            return;
+        }
+        File[] files = directory.listFiles();
+        if (files == null || files.length == 0) return;
+        Arrays.sort(files, Comparator.comparingLong(File::lastModified));
+        long total = directorySize(files);
+        for (File file : files) {
+            if (total <= maxBytes) break;
+            long size = directorySize(file);
+            deleteRecursively(file);
+            total -= size;
+        }
+    }
+
+    private static long directorySize(File file) {
+        if (!file.isDirectory()) return file.length();
+        File[] files = file.listFiles();
+        return files == null ? 0 : directorySize(files);
+    }
+
+    private static long directorySize(File[] files) {
+        long total = 0;
+        for (File file : files) total += directorySize(file);
+        return total;
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] files = file.listFiles();
+            if (files != null) for (File child : files) deleteRecursively(child);
+        }
+        file.delete();
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {
@@ -221,7 +283,7 @@ public final class MpvUtil {
      * Vulkan VO requires both Android Vulkan hardware AND libmpv compiled with vulkan support.
      * Current libmpv build does not include vulkan; this will return false until rebuilt with it.
      */
-    private static boolean isVulkanAvailable() {
+    public static boolean isVulkanAvailable() {
         if (!App.get().getPackageManager().hasSystemFeature("android.hardware.vulkan.level")) return false;
         try {
             // After MPVLib.init(), mpv-version property embeds feature flags; but before init

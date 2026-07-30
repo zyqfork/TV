@@ -156,8 +156,8 @@
     <string name="player_caption">字幕樣式</string>
     <string name="player_background">背景播放</string>
     <string name="player_audio_pass_through">音訊直通</string>
-    <string name="player_audio_decode">音訊軟解</string>
-    <string name="player_video_decode">視訊軟解</string>
+    <string name="player_audio_decode">音訊擴充解碼優先</string>
+    <string name="player_video_decode">視訊擴充解碼優先</string>
     <string name="player_aac_track">AAC優先</string>
     <string name="player_dv7_fallback">DV7回退</string>
     <string name="player_adblock">智慧去廣</string>
@@ -255,8 +255,8 @@
     </string-array>
 
     <string-array name="select_decode_exo">
-        <item>相容模式(硬解優先)</item>
-        <item>硬解</item>
+        <item>相容模式(擴充解碼優先)</item>
+        <item>系統硬解優先</item>
     </string-array>
 
     <string-array name="select_exo_http">

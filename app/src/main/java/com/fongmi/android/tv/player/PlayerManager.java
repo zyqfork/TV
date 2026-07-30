@@ -6,6 +6,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaChapter;
 import androidx.media3.common.MediaEdition;
 import androidx.media3.common.MediaItem;
@@ -234,6 +235,42 @@ public class PlayerManager implements ParseCallback {
     public String getDecodeText() {
         String[] labels = ResUtil.getStringArray(getEngine() == PlayerSetting.ENGINE_EXO ? R.array.select_decode_exo : R.array.select_decode);
         return labels[Math.min(decode, labels.length - 1)];
+    }
+
+    /** A lightweight runtime snapshot for the user-facing player diagnostic dialog. */
+    public String getDiagnosticText() {
+        StringBuilder text = new StringBuilder();
+        text.append("播放器: ").append(getEngine() == PlayerSetting.ENGINE_MPV ? "MPV" : "ExoPlayer");
+        text.append("\n解码模式: ").append(getDecodeText());
+        text.append("\n视频尺寸: ").append(getSizeText().isEmpty() ? "正在探测" : getSizeText());
+        text.append("\n状态: ").append(getPlaybackStateText());
+        text.append("\n播放位置: ").append(getPosition() / 1000).append("s");
+        text.append("\n内存缓冲: ").append(Math.max(0, player.getBufferedPosition() - getPosition()) / 1000).append("s");
+        Format format = getSelectedVideoFormat();
+        if (format != null) {
+            text.append("\n编码: ").append(format.sampleMimeType == null ? "未知" : format.sampleMimeType);
+            if (format.bitrate > 0) text.append("  ").append(format.bitrate / 1000).append(" kbps");
+            if (format.frameRate > 0) text.append("  ").append(String.format(Locale.getDefault(), "%.0f fps", format.frameRate));
+        }
+        text.append("\n缓存策略: ").append(liveMode ? "直播：仅内存，不读写磁盘" : "点播：Exo 可缓存；MPV 仅直链文件");
+        return text.toString();
+    }
+
+    private String getPlaybackStateText() {
+        return switch (player.getPlaybackState()) {
+            case Player.STATE_BUFFERING -> "缓冲中";
+            case Player.STATE_READY -> player.isPlaying() ? "播放中" : "已暂停";
+            case Player.STATE_ENDED -> "已结束";
+            default -> "空闲";
+        };
+    }
+
+    private Format getSelectedVideoFormat() {
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_VIDEO) continue;
+            for (int i = 0; i < group.length; i++) if (group.isTrackSelected(i)) return group.getTrackFormat(i);
+        }
+        return null;
     }
 
     public int getEngine() {

@@ -156,8 +156,8 @@
     <string name="player_caption">字幕样式</string>
     <string name="player_background">后台播放</string>
     <string name="player_audio_pass_through">音频直通</string>
-    <string name="player_audio_decode">音频软解</string>
-    <string name="player_video_decode">视频软解</string>
+    <string name="player_audio_decode">音频扩展解码优先</string>
+    <string name="player_video_decode">视频扩展解码优先</string>
     <string name="player_aac_track">AAC优先</string>
     <string name="player_dv7_fallback">DV7回退</string>
     <string name="player_adblock">智能去广</string>
@@ -255,8 +255,8 @@
     </string-array>
 
     <string-array name="select_decode_exo">
-        <item>兼容模式(硬解优先)</item>
-        <item>硬解</item>
+        <item>兼容模式(扩展解码优先)</item>
+        <item>系统硬解优先</item>
     </string-array>
 
     <string-array name="select_exo_http">

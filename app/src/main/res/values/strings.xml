@@ -157,8 +157,8 @@
     <string name="player_caption">Caption style</string>
     <string name="player_background">Background play</string>
     <string name="player_audio_pass_through">Audio passthrough</string>
-    <string name="player_audio_decode">Audio software decode</string>
-    <string name="player_video_decode">Video software decode</string>
+    <string name="player_audio_decode">Prefer audio extension decoder</string>
+    <string name="player_video_decode">Prefer video extension decoder</string>
     <string name="player_aac_track">Prefer aac track</string>
     <string name="player_dv7_fallback">DV7 fallback</string>
     <string name="player_adblock">Remove ads</string>
@@ -256,8 +256,8 @@
     </string-array>
 
     <string-array name="select_decode_exo">
-        <item>Compatible (hardware first)</item>
-        <item>Hardware</item>
+        <item>Compatible (extension decoder first)</item>
+        <item>System hardware decode first</item>
     </string-array>
 
     <string-array name="select_exo_http">

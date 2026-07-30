@@ -12,6 +12,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingPlayerBinding;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.UaListener;
+import com.fongmi.android.tv.player.mpv.MpvUtil;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -86,7 +87,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
         boolean exo = !mpv;
         if (PlayerSetting.isBackgroundPiP()) PlayerSetting.putBackground(1);
         mBinding.mpvConf.setVisibility(mpv ? View.VISIBLE : View.GONE);
-        mBinding.mpvVulkan.setVisibility(mpv ? View.VISIBLE : View.GONE);
+        mBinding.mpvVulkan.setVisibility(mpv && MpvUtil.isVulkanAvailable() ? View.VISIBLE : View.GONE);
         mBinding.mpvGpuNext.setVisibility(mpv ? View.VISIBLE : View.GONE);
         mBinding.decode.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.adblock.setVisibility(exo ? View.VISIBLE : View.GONE);

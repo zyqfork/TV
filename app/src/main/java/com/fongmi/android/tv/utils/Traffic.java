@@ -27,6 +27,13 @@ public class Traffic {
     private static String getSpeed() {
         long nowTimeStamp = System.currentTimeMillis();
         long nowTotalRxBytes = TrafficStats.getUidRxBytes(UID) / 1024;
+        // The first sample after a player switch establishes a baseline. Calculating from zero
+        // makes the loading overlay briefly report the app's entire lifetime traffic as MB/s.
+        if (lastTimeStamp == 0) {
+            lastTimeStamp = nowTimeStamp;
+            lastTotalRxBytes = nowTotalRxBytes;
+            return "0" + UNIT_KB;
+        }
         long speed = (nowTotalRxBytes - lastTotalRxBytes) * 1000 / Math.max(nowTimeStamp - lastTimeStamp, 1);
         lastTimeStamp = nowTimeStamp;
         lastTotalRxBytes = nowTotalRxBytes;
@@ -34,7 +41,8 @@ public class Traffic {
     }
 
     public static void reset() {
-        lastTotalRxBytes = 0;
-        lastTimeStamp = 0;
+        long total = TrafficStats.getUidRxBytes(UID);
+        lastTotalRxBytes = total == TrafficStats.UNSUPPORTED ? 0 : total / 1024;
+        lastTimeStamp = total == TrafficStats.UNSUPPORTED ? 0 : System.currentTimeMillis();
     }
 }
