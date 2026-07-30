@@ -7,7 +7,7 @@ output_dir=$3
 requested_abis=${4:-arm64-v8a,armeabi-v7a,x86_64}
 ndk_version=29.0.14206865
 source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
-build_revision="${source_revision}-surface-guard-v1"
+build_revision="${source_revision}-surface-guard-vulkan-experimental-v7"
 
 mkdir -p "$cache_dir" "$output_dir"
 all_present=false
@@ -49,7 +49,8 @@ docker run --rm \
 export DEBIAN_FRONTEND=noninteractive
 apt-get update >/dev/null
 apt-get install -y autoconf automake build-essential ca-certificates cmake git gperf \
-    libtool nasm ninja-build pkg-config python3 python3-pip unzip wget xz-utils >/dev/null
+    libtool nasm ninja-build pkg-config python3 python3-pip unzip wget xz-utils \
+    glslang-tools libvulkan-dev >/dev/null
 pip3 install --break-system-packages 'meson>=1.6.1' >/dev/null
 git config --global --add safe.directory '*'
 if [[ ! -d deps/mpv ]]; then
@@ -71,6 +72,18 @@ git -C deps/freetype2 checkout --detach 0a0221a1347e2f1e07c395263540026e9a0aa7c7
 git -C deps/libass checkout --detach f9fd3d20dff1cd84b7c74c8ae7f79711ad7736fa
 git -C deps/libplacebo checkout --detach 4c426e466814536def653cb23f1d1c287ea7a7f5
 git -C deps/mpv checkout --detach 8c67647b50059406c5c0444903597281b81516cf
+# Build libplacebo's Vulkan backend. FFmpeg Vulkan filters remain disabled because MPV's
+# gpu-next renderer only needs libplacebo/Vulkan; this keeps the experimental APK smaller.
+sed -i 's/-Dvulkan=disabled/-Dvulkan=enabled/' scripts/libplacebo.sh
+sed -i 's/-Dvulkan=enabled -Ddemos=false/-Dvulkan=enabled -Dvk-proc-addr=enabled -Ddemos=false/' scripts/libplacebo.sh
+sed -i '/unset CC CXX/a rm -rf \"\$build\"' scripts/libplacebo.sh
+# MPV has its own Vulkan context feature gate in addition to libplacebo's backend.
+# Without this, libplacebo contains Vulkan symbols but gpu-api=vulkan silently remains
+# unavailable and the Android renderer continues to probe OpenGL.
+sed -i 's/-Dlibmpv=true -Dcplayer=false/-Dlibmpv=true -Dcplayer=false -Dvulkan=enabled/' scripts/mpv.sh
+# Dependency discovery is stored in MPV's Meson build directory. Reconfigure from scratch so a
+# newly generated Android Vulkan pkg-config file cannot be shadowed by an older negative result.
+sed -i '/unset CC CXX/a rm -rf \"\$build\"' scripts/mpv.sh
 # Android may destroy the Surface between Java's readiness check and the VO thread. Upstream's
 # debug assertion aborts the whole app in that legitimate lifecycle race. Fail VO initialization
 # instead so mpv reports an error and the Media3 wrapper can retry/fallback.
@@ -81,11 +94,24 @@ ln -sfn /android-sdk/ndk/$ndk_version sdk/android-ndk-r29
 prefix_env=
 for abi in ${requested_abis//,/ }; do
     case \$abi in
-        arm64-v8a) arch=arm64; prefix_env=\"\$prefix_env PREFIX64=/src/buildscripts/prefix/arm64\" ;;
-        armeabi-v7a) arch=armv7l; prefix_env=\"\$prefix_env PREFIX32=/src/buildscripts/prefix/armv7l\" ;;
-        x86_64) arch=x86_64; prefix_env=\"\$prefix_env PREFIX_X64=/src/buildscripts/prefix/x86_64\" ;;
+        arm64-v8a) arch=arm64; prefix=arm64; triple=aarch64-linux-android; prefix_env=\"\$prefix_env PREFIX64=/src/buildscripts/prefix/arm64\" ;;
+        armeabi-v7a) arch=armv7l; prefix=armv7l; triple=arm-linux-androideabi; prefix_env=\"\$prefix_env PREFIX32=/src/buildscripts/prefix/armv7l\" ;;
+        x86_64) arch=x86_64; prefix=x86_64; triple=x86_64-linux-android; prefix_env=\"\$prefix_env PREFIX_X64=/src/buildscripts/prefix/x86_64\" ;;
         *) echo \"Unsupported ABI: \$abi\" >&2; exit 2 ;;
     esac
+    # The NDK exposes Vulkan headers and the system loader, but does not ship a pkg-config
+    # descriptor. Give Meson cross dependency discovery the missing metadata; -lvulkan still
+    # resolves against the Android sysroot and no desktop Vulkan loader is bundled.
+    mkdir -p \"/src/buildscripts/prefix/\$prefix/lib/pkgconfig\"
+    cp \"/android-sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/\$triple/24/libvulkan.so\" \
+        \"/src/buildscripts/prefix/\$prefix/lib/libvulkan.so\"
+    printf '%s\n' \
+        'Name: Vulkan' \
+        'Description: Android NDK Vulkan loader' \
+        'Version: 1.3.280' \
+        'Libs: -L/lib -lvulkan' \
+        'Cflags:' \
+        > \"/src/buildscripts/prefix/\$prefix/lib/pkgconfig/vulkan.pc\"
     ./buildall.sh --arch \$arch mpv
 done
 env \$prefix_env /android-sdk/ndk/$ndk_version/ndk-build \

@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.mpv;
 
+import android.content.pm.PackageManager;
 import android.text.TextUtils;
 
 import androidx.media3.common.Player;
@@ -43,6 +44,8 @@ public final class MpvUtil {
     private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
     private static final String OPT_PROXY_URL = "proxy-url";
+    // libplacebo v7 rejects Vulkan instances below 1.2 at runtime.
+    private static final int VULKAN_1_2 = 0x00402000;
 
     public static boolean isAvailable() {
         try {
@@ -280,18 +283,14 @@ public final class MpvUtil {
     }
 
     /**
-     * Vulkan VO requires both Android Vulkan hardware AND libmpv compiled with vulkan support.
-     * Current libmpv build does not include vulkan; this will return false until rebuilt with it.
+     * Vulkan VO requires both Android Vulkan hardware and a Vulkan-enabled libmpv build.
+     * This method is also called before MPVLib.init(), so querying native runtime features here
+     * would incorrectly hide the setting until the first playback.
      */
     public static boolean isVulkanAvailable() {
-        if (!App.get().getPackageManager().hasSystemFeature("android.hardware.vulkan.level")) return false;
-        try {
-            // After MPVLib.init(), mpv-version property embeds feature flags; but before init
-            // we cannot query. Instead rely on build-time constant from the media3compat module.
-            return is.xyz.mpv.MPVLib.hasFeature("vulkan");
-        } catch (Throwable e) {
-            return false;
-        }
+        PackageManager manager = App.get().getPackageManager();
+        return com.fongmi.media3.compat.BuildConfig.LIBMPV_VULKAN
+                && manager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_2);
     }
 
     private static double getSubtitleScale() {

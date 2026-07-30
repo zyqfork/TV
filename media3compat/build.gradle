@@ -9,6 +9,11 @@ android {
 
     defaultConfig {
         minSdk libs.versions.minSdk.get().toInteger()
+        buildConfigField "boolean", "LIBMPV_VULKAN", "true"
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     sourceSets {
@@ -85,7 +90,7 @@ def prepareAv1Sources = tasks.register("prepareAv1Sources") {
     }
 }
 
-def libmpvVersion = "source-46ef59a1-surface-guard-2026-07-27"
+def libmpvVersion = "source-46ef59a1-surface-guard-vulkan-experimental-2026-07-30"
 def prepareLibmpv = tasks.register("prepareLibmpv") {
     def outputDir = layout.buildDirectory.dir("generated/libmpv/jniLibs")
     def ffmpegBuildScript = layout.projectDirectory.file("scripts/build_ffmpeg_x86_64.sh")
