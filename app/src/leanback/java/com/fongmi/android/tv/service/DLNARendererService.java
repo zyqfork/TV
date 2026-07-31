@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.media3.common.C;
@@ -45,6 +46,8 @@ import java.util.UUID;
 
 public class DLNARendererService extends AndroidUpnpServiceImpl implements ServiceConnection {
 
+    private static final String TAG = "DLNARenderer";
+
     private final IBinder binder = new LocalBinder();
 
     private volatile PlayerManager player;
@@ -78,6 +81,11 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         registerLocalDevice();
     }
 
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
+    }
+
     private void registerLocalDevice() {
         LocalService<DLNAAvTransportImpl> avTransport = createAvTransport();
         LocalService<ConnectionManagerService> connManager = createConnectionManager();
@@ -88,7 +96,8 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         try {
             LocalDevice device = new LocalDevice(identity, type, details, new LocalService[]{avTransport, connManager, renderControl});
             upnpService.getRegistry().addDevice(device);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to register DLNA renderer", e);
         }
     }
 

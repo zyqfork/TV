@@ -4,6 +4,7 @@ python = "17.0.0"
 minSdk = "24"
 targetSdk = "37"
 compileSdk = "37"
+kotlin = "2.2.10"
 
 annotation = "1.10.0"
 appcompat = "1.7.1"
@@ -111,6 +112,7 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCo
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 chaquo-python = { id = "com.chaquo.python", version.ref = "python" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 [bundles]
 glide = ["glide", "glide-annotations", "glide-avif-integration", "glide-okhttp3-integration"]

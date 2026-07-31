@@ -26,4 +26,5 @@ include ':catvod'
 include ':chaquo'
 include ':quickjs'
 include ':media3compat'
+include ':airplay'
 rootProject.name = "TV"

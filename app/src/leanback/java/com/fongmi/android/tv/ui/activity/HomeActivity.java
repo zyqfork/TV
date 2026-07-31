@@ -10,6 +10,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.FocusHighlight;
@@ -79,6 +80,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import io.github.jqssun.airplay.service.AirPlayService;
+
 public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener {
 
     private ActivityHomeBinding mBinding;
@@ -123,6 +126,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.progressLayout.showProgress();
         PermissionUtil.requestNotify(this);
         DLNARendererService.start(this);
+        ContextCompat.startForegroundService(this, new Intent(this, AirPlayService.class).setAction(AirPlayService.ACTION_START_SERVER));
         Updater.create().start(this);
         setRecyclerView();
         setViewModel();
@@ -503,7 +507,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void onDestroy() {
-        DLNARendererService.stop(this);
         LiveConfig.get().clear();
         VodConfig.get().clear();
         AppDatabase.backup();

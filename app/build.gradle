@@ -127,6 +127,7 @@ dependencies {
     implementation project(':chaquo')
     implementation project(':quickjs')
     implementation project(':media3compat')
+    leanbackImplementation project(':airplay')
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media

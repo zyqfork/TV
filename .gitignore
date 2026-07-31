@@ -1,6 +1,7 @@
 .idea
 .vscode
 .gradle
+.cxx
 .settings
 *build
 *.jks

@@ -1,0 +1,6 @@
+[submodule "airplay/src/main/cpp/third_party/ffmpeg"]
+	path = airplay/src/main/cpp/third_party/ffmpeg
+	url = https://github.com/FFmpeg/FFmpeg.git
+[submodule "airplay/src/main/cpp/third_party/libplist"]
+	path = airplay/src/main/cpp/third_party/libplist
+	url = https://github.com/libimobiledevice/libplist.git
