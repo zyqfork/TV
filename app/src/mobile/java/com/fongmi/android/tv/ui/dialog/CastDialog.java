@@ -44,14 +44,18 @@ import okhttp3.Response;
 
 public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.OnClickListener, ScanTask.Listener, DLNACastManager.DeviceListener, Callback {
 
+    private static final long EMPTY_DELAY_MS = 3500;
+
     private final FormBody.Builder body;
     private final OkHttpClient client;
+    private final Runnable showEmpty = this::showEmptyIfNeeded;
 
     private DialogDeviceBinding binding;
     private DeviceAdapter adapter;
     private ScanTask scanTask;
     private CastVideo video;
     private boolean fm;
+    private boolean casting;
 
     public CastDialog() {
         scanTask = new ScanTask(this);
@@ -116,15 +120,40 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
     }
 
-    private void setRecyclerVisible() {
-        binding.recycler.setVisibility(adapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
+    private void updateListState(boolean searching) {
+        boolean empty = adapter.getItemCount() == 0;
+        binding.recycler.setVisibility(empty ? View.GONE : View.VISIBLE);
+        if (!empty) {
+            App.removeCallbacks(showEmpty);
+            binding.status.setVisibility(View.GONE);
+            return;
+        }
+        if (searching) {
+            App.removeCallbacks(showEmpty);
+            binding.status.setText(R.string.device_searching);
+            binding.status.setVisibility(View.VISIBLE);
+            App.post(showEmpty, EMPTY_DELAY_MS);
+        } else {
+            showEmptyIfNeeded();
+        }
+    }
+
+    private void showEmptyIfNeeded() {
+        if (binding == null || adapter == null || adapter.getItemCount() > 0) return;
+        binding.status.setText(R.string.device_empty);
+        binding.status.setVisibility(View.VISIBLE);
+        binding.recycler.setVisibility(View.GONE);
     }
 
     private void getDevice() {
         adapter.setItems(Device.getAll(), () -> {
-            adapter.sort(DLNACastManager.get().getRegistered(), this::setRecyclerVisible);
-            if (adapter.getItemCount() == 0) onRefresh();
-            else DLNACastManager.get().search();
+            adapter.sort(DLNACastManager.get().getRegistered(), () -> {
+                if (adapter.getItemCount() == 0) onRefresh();
+                else {
+                    updateListState(false);
+                    DLNACastManager.get().search();
+                }
+            });
         });
     }
 
@@ -133,52 +162,69 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     }
 
     private void onRefresh() {
+        if (casting) return;
         adapter.clear(() -> {
             Device.delete();
             if (fm) scanTask.start();
             DLNACastManager.get().search();
-            adapter.sort(DLNACastManager.get().getRegistered(), this::setRecyclerVisible);
+            updateListState(true);
         });
     }
 
     private void onCasted() {
+        casting = false;
         ((CastDialog.Listener) requireActivity()).onCasted();
         dismiss();
     }
 
+    private void onCastFailed() {
+        casting = false;
+    }
+
     @Override
     public void onDeviceAdded(Device device) {
-        binding.recycler.setVisibility(View.VISIBLE);
-        adapter.sort(device);
+        adapter.sort(device, () -> updateListState(false));
     }
 
     @Override
     public void onDeviceRemoved(Device device) {
-        adapter.remove(device);
+        adapter.remove(device, () -> updateListState(false));
     }
 
     @Override
     public void onFind(Device device) {
-        binding.recycler.setVisibility(View.VISIBLE);
-        adapter.sort(device);
+        adapter.sort(device, () -> updateListState(false));
     }
 
     @Override
     public void onFailure(@NonNull Call call, @NonNull IOException e) {
-        App.post(() -> Notify.show(e.getMessage()));
+        App.post(() -> {
+            onCastFailed();
+            Notify.show(e.getMessage());
+        });
     }
 
     @Override
     public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
         try (Response res = response) {
             if (res.body().string().equals("OK")) App.post(this::onCasted);
-            else App.post(() -> Notify.show(R.string.device_offline));
+            else App.post(() -> {
+                onCastFailed();
+                Notify.show(R.string.device_offline);
+            });
         }
     }
 
     @Override
     public void onItemClick(Device item) {
-        if (item.isDLNA()) new DLNACast(video, this::onCasted).cast(item);
+        if (casting) return;
+        if (video == null) {
+            Notify.show(R.string.device_offline);
+            return;
+        }
+        casting = true;
+        Notify.show(R.string.device_casting);
+        if (item.isDLNA()) new DLNACast(video, this::onCasted, this::onCastFailed).cast(item);
         else OkHttp.newCall(client, item.getIp().concat("/action?do=cast"), body.build()).enqueue(this);
     }
 
@@ -190,6 +236,7 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        App.removeCallbacks(showEmpty);
         DLNACastManager.get().setDeviceListener(null);
         DLNACastManager.get().release(requireActivity());
         scanTask.stop();

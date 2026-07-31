@@ -52,6 +52,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     public static final String LOCAL_BIND_ACTION = BuildConfig.APPLICATION_ID.concat(".LOCAL_BIND");
     public static final String ACTION_SHUTDOWN = BuildConfig.APPLICATION_ID.concat(".SHUTDOWN");
+    public static final String ACTION_SUSPEND = BuildConfig.APPLICATION_ID.concat(".SUSPEND");
 
     private static final SessionCommand COMMAND_REPEAT = new SessionCommand(ActionEvent.REPEAT, Bundle.EMPTY);
     private static final String ACTION_MEDIA_BROWSER_SERVICE = "android.media.browse.MediaBrowserService";
@@ -138,12 +139,19 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         else if (ActionEvent.REPEAT.equals(action)) dispatchRepeat();
         else if (ActionEvent.REPLAY.equals(action)) dispatchReplay();
         else if (ACTION_SHUTDOWN.equals(action)) shutdown();
+        else if (ACTION_SUSPEND.equals(action)) suspend();
     }
 
     /** Explicit exit from Home / task switcher when background play is disabled. */
     public static void requestShutdown(android.content.Context context) {
         if (!running) return;
         context.startService(new Intent(context, PlaybackService.class).setAction(ACTION_SHUTDOWN));
+    }
+
+    /** Pause and release decoder so cast receivers can take the screen/audio. */
+    public static void requestSuspend(android.content.Context context) {
+        if (!running) return;
+        context.startService(new Intent(context, PlaybackService.class).setAction(ACTION_SUSPEND));
     }
 
     private boolean isLocalBind(Intent intent) {

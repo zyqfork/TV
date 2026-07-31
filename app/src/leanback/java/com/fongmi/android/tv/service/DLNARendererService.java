@@ -21,8 +21,8 @@ import com.fongmi.android.tv.dlna.DLNARenderingControlImpl;
 import com.fongmi.android.tv.dlna.DLNAServiceConfiguration;
 import com.fongmi.android.tv.dlna.RenderState;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.utils.Notify;
-import com.fongmi.android.tv.utils.Util;
 
 import org.jupnp.UpnpServiceConfiguration;
 import org.jupnp.android.AndroidUpnpServiceImpl;
@@ -60,6 +60,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private boolean bound;
 
     public static void start(Context context) {
+        if (!DlnaSetting.isEnabled()) return;
         context.startService(new Intent(context, DLNARendererService.class));
     }
 
@@ -67,9 +68,34 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         context.stopService(new Intent(context, DLNARendererService.class));
     }
 
+    private static Runnable pendingApply;
+    private static Runnable pendingStart;
+
+    public static void apply(Context context) {
+        Context app = context.getApplicationContext();
+        if (pendingApply != null) {
+            App.removeCallbacks(pendingApply);
+            pendingApply = null;
+        }
+        if (pendingStart != null) {
+            App.removeCallbacks(pendingStart);
+            pendingStart = null;
+        }
+        pendingApply = () -> {
+            pendingApply = null;
+            stop(app);
+            pendingStart = () -> {
+                pendingStart = null;
+                start(app);
+            };
+            App.post(pendingStart, 400);
+        };
+        App.post(pendingApply, 1000);
+    }
+
     @Override
     protected UpnpServiceConfiguration createConfiguration() {
-        return new DLNAServiceConfiguration();
+        return new DLNAServiceConfiguration(true);
     }
 
     @Override
@@ -77,6 +103,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         super.onCreate();
         Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT).setSmallIcon(R.drawable.ic_notification).setContentTitle(getString(R.string.app_name)).setSilent(true).build();
         startForeground(Notify.ID + 1, notification);
+        if (!DlnaSetting.isEnabled()) {
+            stopSelf();
+            return;
+        }
         upnpService.startup();
         registerLocalDevice();
     }
@@ -92,7 +122,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         LocalService<DLNARenderingControlImpl> renderControl = createRenderingControl();
         DeviceIdentity identity = new DeviceIdentity(new UDN(UUID.nameUUIDFromBytes((Build.MANUFACTURER + Build.MODEL + "-MediaRenderer").getBytes(StandardCharsets.UTF_8))));
         UDADeviceType type = new UDADeviceType("MediaRenderer", 1);
-        DeviceDetails details = new DeviceDetails(Util.getDeviceName(), new ManufacturerDetails(Build.MANUFACTURER), new ModelDetails(Build.MODEL, "DLNA Renderer", "1.0"));
+        DeviceDetails details = new DeviceDetails(DlnaSetting.getDisplayName(), new ManufacturerDetails(Build.MANUFACTURER), new ModelDetails(Build.MODEL, "DLNA Renderer", "1.0"));
         try {
             LocalDevice device = new LocalDevice(identity, type, details, new LocalService[]{avTransport, connManager, renderControl});
             upnpService.getRegistry().addDevice(device);

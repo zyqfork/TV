@@ -23,7 +23,11 @@ import org.jupnp.support.model.item.VideoItem;
 
 import java.util.Locale;
 
-public record DLNACast(CastVideo video, Runnable runnable) {
+public record DLNACast(CastVideo video, Runnable success, Runnable failure) {
+
+    public DLNACast(CastVideo video, Runnable success) {
+        this(video, success, null);
+    }
 
     public void cast(Device item) {
         DLNACastManager mgr = DLNACastManager.get();
@@ -32,8 +36,22 @@ public record DLNACast(CastVideo video, Runnable runnable) {
         if (service != null && control != null) {
             control.execute(uriAction(control, service));
         } else {
-            App.post(() -> Notify.show(R.string.device_offline));
+            fail(R.string.device_offline);
         }
+    }
+
+    private void fail(int resId) {
+        App.post(() -> {
+            Notify.show(resId);
+            if (failure != null) failure.run();
+        });
+    }
+
+    private void fail(String msg) {
+        App.post(() -> {
+            Notify.show(msg);
+            if (failure != null) failure.run();
+        });
     }
 
     private String buildMetaData() {
@@ -57,7 +75,7 @@ public record DLNACast(CastVideo video, Runnable runnable) {
 
             @Override
             public void failure(ActionInvocation i, UpnpResponse r, String msg) {
-                App.post(() -> Notify.show(msg));
+                fail(msg);
             }
         };
     }
@@ -67,12 +85,12 @@ public record DLNACast(CastVideo video, Runnable runnable) {
             @Override
             public void success(ActionInvocation i) {
                 if (video.position() > 0) control.execute(seekAction(service));
-                App.post(runnable);
+                App.post(success);
             }
 
             @Override
             public void failure(ActionInvocation i, UpnpResponse r, String msg) {
-                App.post(() -> Notify.show(msg));
+                fail(msg);
             }
         };
     }

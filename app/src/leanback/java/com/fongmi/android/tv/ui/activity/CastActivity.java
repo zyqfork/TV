@@ -26,6 +26,7 @@ import com.fongmi.android.tv.databinding.ActivityCastBinding;
 import com.fongmi.android.tv.dlna.CastAction;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.service.CastConflict;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -150,6 +151,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     private void setAction(Intent intent) {
         mAction = intent.getParcelableExtra(CastAction.KEY_EXTRA);
         if (mAction == null) return;
+        CastConflict.yieldToDlna(this);
         mBinding.widget.title.setText(getName());
         mBinding.widget.title.setSelected(true);
         resetMedia();

@@ -30,6 +30,9 @@
     <string name="device_select">選擇裝置</string>
     <string name="device_offline">裝置已離線</string>
     <string name="device_scan">請掃描影視 QRCode 進行綁定</string>
+    <string name="device_searching">正在搜尋裝置…</string>
+    <string name="device_empty">未發現裝置，請重新整理或確認同一 Wi‑Fi</string>
+    <string name="device_casting">正在投屏…</string>
 
     <!-- Control -->
     <string name="control_speed">倍速</string>

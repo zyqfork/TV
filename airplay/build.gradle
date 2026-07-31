@@ -59,10 +59,10 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0'
     implementation 'androidx.datastore:datastore-preferences:1.2.1'
     implementation 'androidx.media:media:1.8.0'
-    implementation 'androidx.media3:media3-exoplayer:1.11.0-beta01'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.11.0-beta01'
-    implementation 'androidx.media3:media3-transformer:1.11.0-beta01'
-    implementation 'androidx.media3:media3-ui-compose-material3:1.11.0-beta01'
+    // Keep media3 aligned with app/media3compat (custom media3-ui:1.10.1 has PlayerView.setRender).
+    implementation 'androidx.media3:media3-exoplayer:1.10.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.10.1'
+    implementation 'androidx.media3:media3-transformer:1.10.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
     implementation 'com.google.oboe:oboe:1.10.0'
 

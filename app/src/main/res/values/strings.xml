@@ -125,6 +125,69 @@
     <string name="setting_wall">Wallpaper</string>
     <string name="setting_player">Player setting</string>
     <string name="setting_danmaku">Danmaku setting</string>
+    <string name="setting_cast_setting">Cast setting</string>
+    <string name="setting_dlna_setting">DLNA setting</string>
+    <string name="setting_dlna">DLNA</string>
+    <string name="setting_dlna_name">Device name</string>
+    <string name="setting_dlna_iface_mode">Network mode</string>
+    <string name="setting_dlna_iface">Network interface</string>
+    <string name="setting_dlna_iface_none">No interface</string>
+    <string name="setting_dlna_http_port">HTTP port</string>
+    <string name="setting_airplay_setting">AirPlay setting</string>
+    <string name="setting_airplay">AirPlay</string>
+    <string name="setting_airplay_name">Device name</string>
+    <string name="setting_airplay_port">Server port</string>
+    <string name="setting_airplay_iface_mode">Network mode</string>
+    <string name="setting_airplay_iface">Network interface</string>
+    <string name="setting_airplay_iface_none">No interface</string>
+    <string name="setting_airplay_require_pin">Require PIN</string>
+    <string name="setting_airplay_allow_new">Allow new connection</string>
+    <string name="setting_airplay_advertise_video">Advertise video</string>
+    <string name="setting_airplay_advertise_audio">Advertise audio</string>
+    <string name="setting_airplay_advanced">Advanced</string>
+    <string name="airplay_cast_waiting">Waiting for AirPlay…</string>
+    <string name="airplay_cast_connecting">Connecting…</string>
+    <string name="airplay_cast_mirroring">AirPlay Mirroring</string>
+    <string name="airplay_cast_video">AirPlay Video</string>
+    <string name="airplay_cast_audio">AirPlay Audio</string>
+    <string name="airplay_cast_pin_hint">Enter this PIN on your device</string>
+    <string name="airplay_cast_play">Play</string>
+    <string name="airplay_cast_pause">Pause</string>
+    <string name="airplay_cast_close">Close</string>
+    <string name="setting_airplay_h265">H.265 (HEVC)</string>
+    <string name="setting_airplay_enforce_sdr">Force SDR</string>
+    <string name="setting_airplay_resolution">Resolution</string>
+    <string name="setting_airplay_resolution_auto">Auto</string>
+    <string name="setting_airplay_resolution_custom">Custom…</string>
+    <string name="setting_airplay_max_fps">Maximum FPS</string>
+    <string name="setting_airplay_max_fps_custom">Custom…</string>
+    <string name="setting_airplay_overscanned">Overscanned</string>
+    <string name="setting_airplay_low_latency">Low latency</string>
+    <string name="setting_airplay_allow_frame_drop">Allow frame drop</string>
+    <string name="setting_airplay_realtime_priority">Realtime decoder priority</string>
+    <string name="setting_airplay_operating_rate">Operating rate hint</string>
+    <string name="setting_airplay_aligned_pacing">Aligned frame pacing</string>
+    <string name="setting_airplay_aac">AAC</string>
+    <string name="setting_airplay_alac">ALAC</string>
+    <string name="setting_airplay_force_sw_alac">Force software ALAC</string>
+    <string name="setting_airplay_audio_latency">Audio delay</string>
+    <string name="setting_airplay_audio_latency_default">Default</string>
+    <string name="setting_airplay_audio_latency_ms">%d ms</string>
+    <string name="setting_airplay_audio_auto_buffer">Auto audio buffer</string>
+    <string name="setting_airplay_audio_cushion">Audio buffer (ms)</string>
+    <string name="setting_airplay_audio_adaptive">Audio buffer profile</string>
+    <string name="setting_airplay_oboe_buffer">Hardware buffer (frames)</string>
+    <string name="setting_airplay_auto_fullscreen">Auto fullscreen</string>
+    <string name="setting_airplay_idle_preview">Idle preview</string>
+    <string name="setting_airplay_debug_overlay">Debug overlay</string>
+    <string name="setting_airplay_benchmark_log">Debug logging</string>
+    <string-array name="setting_airplay_audio_adaptive_names">
+        <item>Lowest latency</item>
+        <item>Lower latency</item>
+        <item>Balanced</item>
+        <item>Better stability</item>
+        <item>Best stability</item>
+    </string-array>
     <string name="setting_incognito">Incognito mode</string>
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
@@ -273,6 +336,13 @@
     <string-array name="select_engine">
         <item>EXO</item>
         <item>MPV</item>
+    </string-array>
+
+    <string-array name="select_dlna_iface_mode">
+        <item>Default route</item>
+        <item>Wi-Fi first</item>
+        <item>Ethernet first</item>
+        <item>Manual</item>
     </string-array>
 
     <string-array name="select_render">

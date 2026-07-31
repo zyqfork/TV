@@ -12,6 +12,7 @@ class BootReceiver : BroadcastReceiver() {
             intent.action != "android.intent.action.QUICKBOOT_POWERON") return
 
         val prefs = context.getSharedPreferences(Prefs.NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(Prefs.SERVER_ENABLED, Prefs.DEF_SERVER_ENABLED)) return
         if (!prefs.getBoolean(Prefs.BOOT_AUTO_START, Prefs.DEF_BOOT_AUTO_START)) return
 
         val serviceIntent = Intent(context, AirPlayService::class.java)

@@ -124,6 +124,69 @@
     <string name="setting_wall">壁纸</string>
     <string name="setting_player">播放设置</string>
     <string name="setting_danmaku">弹幕设置</string>
+    <string name="setting_cast_setting">投屏设置</string>
+    <string name="setting_dlna_setting">DLNA 设置</string>
+    <string name="setting_dlna">DLNA</string>
+    <string name="setting_dlna_name">设备名称</string>
+    <string name="setting_dlna_iface_mode">网卡模式</string>
+    <string name="setting_dlna_iface">网卡</string>
+    <string name="setting_dlna_iface_none">无可用网卡</string>
+    <string name="setting_dlna_http_port">HTTP 端口</string>
+    <string name="setting_airplay_setting">AirPlay 设置</string>
+    <string name="setting_airplay">AirPlay</string>
+    <string name="setting_airplay_name">设备名称</string>
+    <string name="setting_airplay_port">服务端口</string>
+    <string name="setting_airplay_iface_mode">网卡模式</string>
+    <string name="setting_airplay_iface">网卡</string>
+    <string name="setting_airplay_iface_none">无可用网卡</string>
+    <string name="setting_airplay_require_pin">需要 PIN</string>
+    <string name="setting_airplay_allow_new">允许新连接</string>
+    <string name="setting_airplay_advertise_video">通告视频</string>
+    <string name="setting_airplay_advertise_audio">通告音频</string>
+    <string name="setting_airplay_advanced">高级配置</string>
+    <string name="airplay_cast_waiting">等待 AirPlay 连接…</string>
+    <string name="airplay_cast_connecting">正在连接…</string>
+    <string name="airplay_cast_mirroring">AirPlay 镜像</string>
+    <string name="airplay_cast_video">AirPlay 视频</string>
+    <string name="airplay_cast_audio">AirPlay 音频</string>
+    <string name="airplay_cast_pin_hint">请在设备上输入此 PIN</string>
+    <string name="airplay_cast_play">播放</string>
+    <string name="airplay_cast_pause">暂停</string>
+    <string name="airplay_cast_close">关闭</string>
+    <string name="setting_airplay_h265">H.265 (HEVC)</string>
+    <string name="setting_airplay_enforce_sdr">强制 SDR</string>
+    <string name="setting_airplay_resolution">分辨率</string>
+    <string name="setting_airplay_resolution_auto">自动</string>
+    <string name="setting_airplay_resolution_custom">自定义…</string>
+    <string name="setting_airplay_max_fps">最高帧率</string>
+    <string name="setting_airplay_max_fps_custom">自定义…</string>
+    <string name="setting_airplay_overscanned">过扫描</string>
+    <string name="setting_airplay_low_latency">低延迟</string>
+    <string name="setting_airplay_allow_frame_drop">允许丢帧</string>
+    <string name="setting_airplay_realtime_priority">实时解码优先级</string>
+    <string name="setting_airplay_operating_rate">工作速率提示</string>
+    <string name="setting_airplay_aligned_pacing">对齐帧节奏</string>
+    <string name="setting_airplay_aac">AAC</string>
+    <string name="setting_airplay_alac">ALAC</string>
+    <string name="setting_airplay_force_sw_alac">强制软解 ALAC</string>
+    <string name="setting_airplay_audio_latency">音频延迟</string>
+    <string name="setting_airplay_audio_latency_default">默认</string>
+    <string name="setting_airplay_audio_latency_ms">%d 毫秒</string>
+    <string name="setting_airplay_audio_auto_buffer">自动音频缓冲</string>
+    <string name="setting_airplay_audio_cushion">音频缓冲 (毫秒)</string>
+    <string name="setting_airplay_audio_adaptive">音频缓冲档位</string>
+    <string name="setting_airplay_oboe_buffer">硬件缓冲 (帧)</string>
+    <string name="setting_airplay_auto_fullscreen">自动全屏</string>
+    <string name="setting_airplay_idle_preview">空闲预览</string>
+    <string name="setting_airplay_debug_overlay">调试信息</string>
+    <string name="setting_airplay_benchmark_log">性能日志</string>
+    <string-array name="setting_airplay_audio_adaptive_names">
+        <item>最低延迟</item>
+        <item>较低延迟</item>
+        <item>均衡</item>
+        <item>更稳</item>
+        <item>最稳</item>
+    </string-array>
     <string name="setting_incognito">无痕模式</string>
     <string name="setting_theme_color">主题色彩</string>
     <string name="setting_auto">自动</string>
@@ -274,6 +337,13 @@
         <item>中</item>
         <item>大</item>
         <item>特大</item>
+    </string-array>
+
+    <string-array name="select_dlna_iface_mode">
+        <item>默认路由</item>
+        <item>Wi-Fi 优先</item>
+        <item>有线优先</item>
+        <item>手动指定</item>
     </string-array>
 
     <string-array name="select_scale">

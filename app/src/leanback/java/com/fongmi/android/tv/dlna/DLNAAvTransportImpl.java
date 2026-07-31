@@ -2,11 +2,13 @@ package com.fongmi.android.tv.dlna;
 
 import android.content.Context;
 import android.content.Intent;
+import android.app.Activity;
 
 import androidx.media3.common.Player;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.service.CastConflict;
 import com.fongmi.android.tv.ui.activity.CastActivity;
 import com.google.gson.reflect.TypeToken;
 
@@ -158,6 +160,11 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
         fireStateChange(RenderState.STOPPED);
         App.post(() -> {
             if (player != null && dlnaActive) player.stop();
+            // Close cast UI so PlaybackActivity releases decoder / unbinds service.
+            Activity current = App.activity();
+            if (current instanceof CastActivity && !current.isFinishing()) {
+                current.finish();
+            }
         });
     }
 
@@ -247,6 +254,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     }
 
     private void startCastActivity(CastAction action) {
+        CastConflict.yieldToDlna(context);
         Intent intent = new Intent(context, CastActivity.class);
         intent.putExtra(CastAction.KEY_EXTRA, action);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);

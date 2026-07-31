@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:background="@drawable/shape_controller"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="24dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="16dp">
+
+    <SeekBar
+        android:id="@+id/seek"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:max="1000"
+        android:progress="0" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/prev"
+                style="@style/Control"
+                android:layout_marginEnd="8dp"
+                android:nextFocusLeft="@id/close"
+                android:text="@string/play_prev" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/play"
+                style="@style/Control"
+                android:layout_marginEnd="8dp"
+                android:text="@string/airplay_cast_pause" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/next"
+                style="@style/Control"
+                android:layout_marginEnd="8dp"
+                android:text="@string/play_next" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/stop"
+                style="@style/Control"
+                android:layout_marginEnd="8dp"
+                android:text="@string/play_stop"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/close"
+                style="@style/Control"
+                android:nextFocusRight="@id/prev"
+                android:text="@string/airplay_cast_close" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </HorizontalScrollView>
+
+</androidx.appcompat.widget.LinearLayoutCompat>

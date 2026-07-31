@@ -10,7 +10,6 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.FocusHighlight;
@@ -47,8 +46,11 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.service.AirPlayServer;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.AirPlaySetting;
+import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -79,8 +81,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-
-import io.github.jqssun.airplay.service.AirPlayService;
 
 public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener {
 
@@ -125,8 +125,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mClock = Clock.create(mBinding.clock);
         mBinding.progressLayout.showProgress();
         PermissionUtil.requestNotify(this);
+        DlnaSetting.ensureDefaultInterface();
+        AirPlaySetting.ensureDefaultInterface();
         DLNARendererService.start(this);
-        ContextCompat.startForegroundService(this, new Intent(this, AirPlayService.class).setAction(AirPlayService.ACTION_START_SERVER));
+        AirPlayServer.start(this);
         Updater.create().start(this);
         setRecyclerView();
         setViewModel();

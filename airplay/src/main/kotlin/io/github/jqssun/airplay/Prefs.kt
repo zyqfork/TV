@@ -9,6 +9,8 @@ object Prefs {
     const val SERVER_NAME = "server_name"; const val DEF_SERVER_NAME = "Android AirPlay"
     const val FALLBACK_MAC_ADDRESS = "fallback_mac_address"
     const val SERVER_PORT = "server_port"; const val DEF_SERVER_PORT = 7000
+    const val SERVER_ENABLED = "server_enabled"; const val DEF_SERVER_ENABLED = true
+    const val IFACE_NAME = "iface_name"; const val DEF_IFACE_NAME = ""
     const val AUTO_START = "auto_start"; const val DEF_AUTO_START = true
     const val BOOT_AUTO_START = "boot_auto_start"; const val DEF_BOOT_AUTO_START = true
     const val RUN_IN_BACKGROUND = "run_in_background"; const val DEF_RUN_IN_BACKGROUND = true

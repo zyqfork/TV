@@ -30,6 +30,9 @@
     <string name="device_select">Select devices</string>
     <string name="device_offline">Device is offline</string>
     <string name="device_scan">Please scan QR Code to bind</string>
+    <string name="device_searching">Searching for devices…</string>
+    <string name="device_empty">No devices found. Refresh or check the same Wi‑Fi.</string>
+    <string name="device_casting">Casting…</string>
 
     <!-- Control -->
     <string name="control_speed">Speed</string>
