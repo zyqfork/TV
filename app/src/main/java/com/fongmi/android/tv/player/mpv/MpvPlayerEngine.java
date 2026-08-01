@@ -53,6 +53,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     public void release() {
         startGeneration++;
         player.release();
+        player = null;
     }
 
     @Override
@@ -81,6 +82,7 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean setDecode(int decode) {
+        if (this.decode == decode) return false;
         boolean rebuild = this.decode == HARD_PERFORMANCE || decode == HARD_PERFORMANCE;
         this.decode = decode;
         if (rebuild) return true;
@@ -105,12 +107,18 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getDuration() < TimeUnit.MINUTES.toMillis(1);
+        if (player == null) return false;
+        long duration = player.getDuration();
+        if (duration == C.TIME_UNSET) return false;
+        return duration < TimeUnit.MINUTES.toMillis(1);
     }
 
     @Override
     public boolean isVod() {
-        return player.getDuration() > TimeUnit.MINUTES.toMillis(1);
+        if (player == null) return false;
+        long duration = player.getDuration();
+        if (duration == C.TIME_UNSET) return false;
+        return duration > TimeUnit.MINUTES.toMillis(1);
     }
 
     @Override

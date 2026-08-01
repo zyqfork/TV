@@ -49,7 +49,15 @@ public final class PlayerEngineFactory {
     }
 
     public static boolean matches(PlayerEngine engine, int preferredEngine, PlaySpec spec) {
-        return engine != null && engine.getType() == resolve(preferredEngine, spec);
+        return engine != null && engine.getType() == resolveType(preferredEngine, spec);
+    }
+
+    public static PlayerEngine.Type resolveType(int preferredEngine, PlaySpec spec) {
+        return resolve(preferredEngine, spec);
+    }
+
+    public static boolean isMpvPreferred(int preferredEngine) {
+        return isMpvReady(preferredEngine);
     }
 
     private static PlayerEngine.Type resolve(int preferredEngine, PlaySpec spec) {

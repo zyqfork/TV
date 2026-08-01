@@ -2,6 +2,7 @@ package is.xyz.mpv;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Surface;
 
@@ -18,10 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class MPVLib {
 
     private static final String TAG = "MPVLib";
+    private static final long STALE_LOCK_MS = 30_000L;
     private static final CopyOnWriteArrayList<EventObserver> observers = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<LogObserver> logObservers = new CopyOnWriteArrayList<>();
     private static volatile boolean loaded;
     private static final AtomicBoolean instanceInUse = new AtomicBoolean();
+    private static volatile long acquiredAtMs;
 
     private MPVLib() {
     }
@@ -64,10 +67,23 @@ public final class MPVLib {
     private static native String nativeGetFeatures();
 
     public static boolean acquireInstance() {
-        return load() && instanceInUse.compareAndSet(false, true);
+        if (!load()) return false;
+        if (instanceInUse.compareAndSet(false, true)) {
+            acquiredAtMs = SystemClock.elapsedRealtime();
+            return true;
+        }
+        // Stale lock recovery: if held past timeout, prior release likely aborted mid-destroy.
+        long heldFor = acquiredAtMs > 0 ? SystemClock.elapsedRealtime() - acquiredAtMs : 0;
+        if (heldFor < STALE_LOCK_MS) return false;
+        Log.w(TAG, "Forcing MPV instance lock reset after " + heldFor + "ms");
+        instanceInUse.set(false);
+        if (!instanceInUse.compareAndSet(false, true)) return false;
+        acquiredAtMs = SystemClock.elapsedRealtime();
+        return true;
     }
 
     public static void releaseInstance() {
+        acquiredAtMs = 0;
         instanceInUse.set(false);
     }
 

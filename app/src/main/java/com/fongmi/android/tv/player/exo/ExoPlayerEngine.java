@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.exo;
 
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -56,6 +57,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     public void release() {
         App.removeCallbacks(preCacheRunnable);
         preCache.release();
+        player.removeListener(listener);
         player.release();
     }
 
@@ -63,12 +65,14 @@ public class ExoPlayerEngine implements PlayerEngine {
     public Player rebuild() {
         App.removeCallbacks(preCacheRunnable);
         preCache.stop();
+        player.removeListener(listener);
         player.release();
         return player = ExoUtil.buildPlayer(decode, live, audioPassThrough, listener);
     }
 
     @Override
     public boolean setDecode(int decode) {
+        if (this.decode == decode) return false;
         this.decode = decode;
         return true;
     }
@@ -92,12 +96,16 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getDuration() < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+        long duration = player.getDuration();
+        if (duration == C.TIME_UNSET) return player.isCurrentMediaItemLive();
+        return duration < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
     }
 
     @Override
     public boolean isVod() {
-        return player.getDuration() > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        long duration = player.getDuration();
+        if (duration == C.TIME_UNSET) return !player.isCurrentMediaItemLive();
+        return duration > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
     }
 
     @Override

@@ -63,6 +63,8 @@ public class PlayerManager implements ParseCallback {
     private int retry;
     private int sourceRetry;
     private int decode;
+    /** Bitmask of decode modes already tried for the current item (avoids HARD↔SOFT oscillation). */
+    private int decodeTriedMask;
     private int preferredEngine;
     private boolean liveMode;
     private final Runnable sourceRetryRunnable;
@@ -91,6 +93,8 @@ public class PlayerManager implements ParseCallback {
 
     public void release() {
         App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
+        stopParse();
+        spec = null;
         if (player != null) player.removeListener(listener);
         if (engine != null) engine.release();
         engine = null;
@@ -318,8 +322,18 @@ public class PlayerManager implements ParseCallback {
     private void replaceIdleEngine(int targetEngine) {
         PlayerEngine old = engine;
         player.removeListener(listener);
-        engine = PlayerEngineFactory.create(decode, targetEngine, liveMode, listener);
-        old.release();
+        boolean oldMpv = old.getType() == PlayerEngine.Type.MPV;
+        boolean newMpv = PlayerEngineFactory.isMpvPreferred(targetEngine);
+        // MPV holds a process-wide native lock: release the old MPV before creating another.
+        if (oldMpv && newMpv) {
+            old.release();
+            engine = PlayerEngineFactory.create(decode, targetEngine, liveMode, listener);
+        } else {
+            // When leaving MPV for Exo, create Exo first so PlayerView keeps a valid Surface
+            // while MPV tears down asynchronously.
+            engine = PlayerEngineFactory.create(decode, targetEngine, liveMode, listener);
+            old.release();
+        }
         setPlayer(engine.getPlayer());
     }
 
@@ -495,6 +509,7 @@ public class PlayerManager implements ParseCallback {
         App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         retry = 0;
         sourceRetry = 0;
+        decodeTriedMask = 0;
         openReported = false;
     }
 
@@ -512,7 +527,18 @@ public class PlayerManager implements ParseCallback {
 
     private void switchDecode(boolean persist, boolean freshAttempt) {
         long position = getPosition();
-        decode = nextDecode(decode, engine.getType() == PlayerEngine.Type.MPV);
+        boolean mpv = engine.getType() == PlayerEngine.Type.MPV;
+        if (persist) {
+            decode = nextDecode(decode, mpv);
+        } else {
+            decodeTriedMask |= 1 << decode;
+            int next = nextUnusedDecode(decode, mpv);
+            if (next < 0) {
+                callback.onError(ResUtil.getString(R.string.error_play_url));
+                return;
+            }
+            decode = next;
+        }
         if (persist) PlayerSetting.putDecode(liveMode, getEngine(), decode);
         boolean rebuild = engine.setDecode(decode);
         callback.onDecodeChanged();
@@ -536,8 +562,19 @@ public class PlayerManager implements ParseCallback {
         };
     }
 
+    /** Next decode mode that has not failed for this item; -1 if all candidates exhausted. */
+    private int nextUnusedDecode(int current, boolean mpv) {
+        int candidate = nextDecode(current, mpv);
+        for (int i = 0; i < 3; i++) {
+            if ((decodeTriedMask & (1 << candidate)) == 0) return candidate;
+            candidate = nextDecode(candidate, mpv);
+        }
+        return -1;
+    }
+
     private void handleDecodeError(PlaybackException e) {
-        if (++retry > 2) {
+        decodeTriedMask |= 1 << decode;
+        if (++retry > 2 || nextUnusedDecode(decode, engine.getType() == PlayerEngine.Type.MPV) < 0) {
             callback.onError(engine.getErrorMessage(e));
         } else {
             Notify.show(R.string.error_decode_fallback);
@@ -615,11 +652,17 @@ public class PlayerManager implements ParseCallback {
         if (PlayerEngineFactory.matches(engine, preferredEngine, spec)) return;
         PlayerEngine old = engine;
         player.removeListener(listener);
-        engine = PlayerEngineFactory.create(decode, preferredEngine, liveMode, spec, listener);
-        // Release MPV while PlayerView still owns its valid Surface. Publishing the replacement
-        // first detaches that Surface and makes MPV's asynchronous shutdown rebuild a surface-less
-        // VO, which can leave the next channel black.
-        old.release();
+        boolean oldMpv = old.getType() == PlayerEngine.Type.MPV;
+        boolean newMpv = PlayerEngineFactory.resolveType(preferredEngine, spec) == PlayerEngine.Type.MPV;
+        if (oldMpv && newMpv) {
+            old.release();
+            engine = PlayerEngineFactory.create(decode, preferredEngine, liveMode, spec, listener);
+        } else {
+            // Release MPV while PlayerView still owns its valid Surface when switching to Exo.
+            // Publishing Exo first keeps the Surface; releasing MPV first would risk a black frame.
+            engine = PlayerEngineFactory.create(decode, preferredEngine, liveMode, spec, listener);
+            old.release();
+        }
         setPlayer(engine.getPlayer());
     }
 
@@ -713,6 +756,7 @@ public class PlayerManager implements ParseCallback {
         App.removeCallbacks(sourceRetryRunnable);
         retry = 0;
         sourceRetry = 0;
+        decodeTriedMask = 0;
     }
 
     private Danmaku getSelectedDanmaku(List<Danmaku> items) {
