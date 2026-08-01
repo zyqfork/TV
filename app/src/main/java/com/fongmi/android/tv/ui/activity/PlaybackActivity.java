@@ -42,6 +42,7 @@ import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Traffic;
 import com.github.catvod.net.OkHttp;
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -499,7 +500,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
         @Override
         public void onPlayerRebuild(Player player) {
-            if (isOwner()) setRender();
+            if (!isOwner()) return;
+            // Baseline traffic after engine/decode rebuild so the overlay doesn't flash lifetime MB/s.
+            Traffic.reset();
+            setRender();
         }
 
         @Override
