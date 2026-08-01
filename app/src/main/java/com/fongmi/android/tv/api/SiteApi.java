@@ -13,6 +13,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.player.extractor.Source;
+import com.fongmi.android.tv.storage.NetworkPlayResolver;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.github.catvod.crawler.Spider;
@@ -166,7 +167,13 @@ public class SiteApi {
             return result;
         } else if (site.isEmpty() && "push_agent".equals(key)) {
             Result result = new Result();
-            result.setUrl(id);
+            if (id.startsWith("webdav://")) {
+                NetworkPlayResolver.ResolvedWebDav resolved = NetworkPlayResolver.resolveWebDav(id);
+                result.setUrl(resolved.url());
+                result.setHeader(resolved.headers());
+            } else {
+                result.setUrl(id);
+            }
             result.setParse(0);
             result.setFlag(flag);
             result.setUrl(Source.get().fetch(result));

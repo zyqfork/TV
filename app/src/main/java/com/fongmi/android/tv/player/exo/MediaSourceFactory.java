@@ -2,6 +2,8 @@ package com.fongmi.android.tv.player.exo;
 
 import static androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS;
 
+import android.net.Uri;
+
 import androidx.annotation.NonNull;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -19,6 +21,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ExtractorsFactory;
@@ -112,6 +115,11 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
+        Uri uri = mediaItem.localConfiguration != null ? mediaItem.localConfiguration.uri : Uri.EMPTY;
+        if ("smb".equalsIgnoreCase(uri.getScheme())) {
+            return new ProgressiveMediaSource.Factory(new SmbDataSource.Factory(), getExtractorsFactory())
+                    .createMediaSource(mediaItem);
+        }
         getHttpDataSourceFactory().setDefaultRequestProperties(ExoUtil.extractHeaders(mediaItem));
         return defaultMediaSourceFactory.createMediaSource(mediaItem);
     }

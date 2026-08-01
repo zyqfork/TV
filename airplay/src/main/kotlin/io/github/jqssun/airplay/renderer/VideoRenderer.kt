@@ -244,6 +244,21 @@ class VideoRenderer {
         }
     }
 
+    /** End a cast session but keep the EGL pipeline warm for the next connect. */
+    fun resetSession() = synchronized(lock) {
+        stopCodec()
+        displaySurface = null
+        pipeline.setDisplaySurface(null)
+        firstFrameQueued = false
+        currentH265 = false
+        videoWidth = 0
+        videoHeight = 0
+        fps = 0; bitrateBps = 0; frameCount = 0; codecName = ""
+        droppedFrames = 0; framePacingJitterUs = 0
+        _framesThisSec = 0; _bytesThisSec = 0
+        _frameIntervalIdx = 0; _frameIntervalCount = 0; _lastOutputFrameNs = 0L
+    }
+
     fun release() = synchronized(lock) {
         stopCodec()
         pipeline.release()

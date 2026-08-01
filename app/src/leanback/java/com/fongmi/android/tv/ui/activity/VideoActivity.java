@@ -154,6 +154,11 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         start(activity, key, id, name, null);
     }
 
+    /** Local / network file: open in fullscreen and finish on back (skip detail chrome). */
+    public static void startFullscreen(Activity activity, String key, String id, String name) {
+        start(activity, key, id, name, null, null, false, false, true);
+    }
+
     public static void start(Activity activity, String key, String id, String name, String pic) {
         start(activity, key, id, name, pic, null);
     }
@@ -163,9 +168,14 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast) {
+        start(activity, key, id, name, pic, mark, collect, cast, false);
+    }
+
+    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, boolean fullscreen) {
         Intent intent = new Intent(activity, VideoActivity.class);
         intent.putExtra("collect", collect);
         intent.putExtra("cast", cast);
+        intent.putExtra("fullscreen", fullscreen);
         intent.putExtra("mark", mark);
         intent.putExtra("name", name);
         intent.putExtra("pic", pic);
@@ -176,6 +186,14 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     private boolean isCast() {
         return getIntent().getBooleanExtra("cast", false);
+    }
+
+    private boolean isDirectPlay() {
+        return getIntent().getBooleanExtra("fullscreen", false);
+    }
+
+    private boolean shouldEnterFullscreenOnStart() {
+        return isDirectPlay() || isCast();
     }
 
     private String getName() {
@@ -521,6 +539,15 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         checkKeepImg();
         setText(item);
         updateKeep();
+        applyDirectPlayChrome();
+    }
+
+    private void applyDirectPlayChrome() {
+        if (!isDirectPlay()) return;
+        mBinding.content.setVisibility(View.GONE);
+        mBinding.keep.setVisibility(View.GONE);
+        mBinding.change.setVisibility(View.GONE);
+        mBinding.part.setVisibility(View.GONE);
     }
 
     @Override
@@ -661,7 +688,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void checkCast() {
-        if (isCast() && !isFullscreen()) enterFullscreen();
+        if (shouldEnterFullscreenOnStart() && !isFullscreen()) enterFullscreen();
         else mBinding.progressLayout.showProgress();
     }
 
@@ -1067,6 +1094,10 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void setPartAdapter() {
+        if (isDirectPlay()) {
+            mBinding.part.setVisibility(View.GONE);
+            return;
+        }
         mPartAdapter.addAll(PartUtil.split(mHistory.getVodName()));
         mBinding.part.setVisibility(View.VISIBLE);
         setR2Callback();
@@ -1419,7 +1450,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
             hideControl();
         } else if (isVisible(mBinding.widget.center)) {
             hideCenter();
-        } else if (isFullscreen()) {
+        } else if (isFullscreen() && !isDirectPlay()) {
             exitFullscreen();
         } else {
             mViewModel.stopSearch();

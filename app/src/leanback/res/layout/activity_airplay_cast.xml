@@ -12,12 +12,14 @@
     <SurfaceView
         android:id="@+id/mirrorSurface"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
 
     <SurfaceView
         android:id="@+id/videoSurface"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_gravity="center"
         android:visibility="gone" />
 
     <androidx.appcompat.widget.AppCompatImageView

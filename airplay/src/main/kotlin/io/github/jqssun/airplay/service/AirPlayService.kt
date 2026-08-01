@@ -548,9 +548,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
             audioRenderer.stop()
         } catch (_: Exception) {
         }
-        // Mirroring MediaCodec + EGL pipeline otherwise stay alive until stopServer().
+        // Stop codec + detach display, but keep EGL pipeline warm for faster reconnect.
         try {
-            videoRenderer.release()
+            videoRenderer.resetSession()
         } catch (_: Exception) {
         }
         _audioOnly.value = false
@@ -562,6 +562,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         _positionMs.value = 0
         _durationMs.value = 0
         _videoResolution.value = ""
+        _videoAspect.value = 16f / 9f
+        _videoPlaybackAspect.value = 16f / 9f
+        _videoPlaybackSize.value = null
         _playing.value = false
         _progressBaseTime = 0
         mediaSession?.isActive = false

@@ -8,9 +8,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.SeekBar;
 
 import androidx.annotation.Nullable;
@@ -34,9 +36,9 @@ import io.github.jqssun.airplay.service.VideoPlaybackInfo;
 public class AirPlayCastActivity extends BaseActivity {
 
     private static final long SEEK_STEP_MS = 10_000L;
-    private static final long POLL_MS = 200L;
-    /** After a session ends, leave the idle waiting screen briefly then exit. */
-    private static final long IDLE_FINISH_MS = 8_000L;
+    private static final long POLL_MS = 100L;
+    /** After disconnect, leave briefly so waiting UI can flash, then exit. */
+    private static final long IDLE_FINISH_MS = 400L;
 
     private ActivityAirplayCastBinding mBinding;
     private AirPlayService mService;
@@ -57,6 +59,8 @@ public class AirPlayCastActivity extends BaseActivity {
     private long seekHoldMs;
     private String lastPin = "";
     private int lastMode = -1;
+    private float lastMirrorAspect;
+    private float lastVideoAspect;
 
     public static void start(Context context) {
         context.startActivity(new Intent(context, AirPlayCastActivity.class)
@@ -170,13 +174,68 @@ public class AirPlayCastActivity extends BaseActivity {
 
     private void attachSurfaces() {
         if (mService == null) return;
-        if (mBinding.mirrorSurface.getHolder().getSurface().isValid()) {
+        if (mBinding.mirrorSurface.getVisibility() == View.VISIBLE
+                && mBinding.mirrorSurface.getHolder().getSurface().isValid()) {
             mService.setVideoSurface(mBinding.mirrorSurface.getHolder().getSurface());
         }
         if (mBinding.videoSurface.getVisibility() == View.VISIBLE
                 && mBinding.videoSurface.getHolder().getSurface().isValid()) {
             mService.setVideoPlaybackSurface(mBinding.videoSurface.getHolder().getSurface());
         }
+    }
+
+    /** Hide surfaces so a frozen last frame cannot linger after disconnect. */
+    private void clearPlaybackSurfaces() {
+        mBinding.mirrorSurface.setVisibility(View.INVISIBLE);
+        mBinding.videoSurface.setVisibility(View.GONE);
+        mBinding.cover.setVisibility(View.GONE);
+        mBinding.buffering.setVisibility(View.GONE);
+        hideControl();
+        hideCenter();
+        mBinding.widget.pinBox.setVisibility(View.GONE);
+        mBinding.widget.status.setVisibility(View.VISIBLE);
+        mBinding.widget.status.setText(R.string.airplay_cast_waiting);
+        mBinding.widget.top.setVisibility(View.GONE);
+    }
+
+    /** Letterbox / pillarbox the Surface inside the black root instead of stretching. */
+    private void updateSurfaceBestFit(boolean video, boolean mirroring) {
+        if (video) {
+            Float aspect = mService.getVideoPlaybackAspect().getValue();
+            applyBestFit(mBinding.videoSurface, aspect == null || aspect <= 0f ? 16f / 9f : aspect, true);
+        } else if (mirroring) {
+            Float aspect = mService.getVideoAspect().getValue();
+            applyBestFit(mBinding.mirrorSurface, aspect == null || aspect <= 0f ? 16f / 9f : aspect, false);
+        }
+    }
+
+    private void applyBestFit(View surface, float aspect, boolean videoSurface) {
+        View parent = (View) surface.getParent();
+        int parentW = parent.getWidth();
+        int parentH = parent.getHeight();
+        if (parentW <= 0 || parentH <= 0) {
+            parent.post(() -> applyBestFit(surface, aspect, videoSurface));
+            return;
+        }
+        float parentAspect = (float) parentW / parentH;
+        int width;
+        int height;
+        if (parentAspect > aspect) {
+            height = parentH;
+            width = Math.round(parentH * aspect);
+        } else {
+            width = parentW;
+            height = Math.round(parentW / aspect);
+        }
+        float last = videoSurface ? lastVideoAspect : lastMirrorAspect;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) surface.getLayoutParams();
+        if (lp.width == width && lp.height == height && Math.abs(last - aspect) < 0.0001f) return;
+        if (videoSurface) lastVideoAspect = aspect;
+        else lastMirrorAspect = aspect;
+        lp.width = width;
+        lp.height = height;
+        lp.gravity = Gravity.CENTER;
+        surface.setLayoutParams(lp);
     }
 
     private final ServiceConnection mConnection = new ServiceConnection() {
@@ -235,16 +294,30 @@ public class AirPlayCastActivity extends BaseActivity {
             idleFinishPending = false;
             App.removeCallbacks(mIdleFinish);
         } else if (hadSession && !idleFinishPending) {
+            // Drop frozen last frame immediately; finish after a short waiting flash.
+            clearPlaybackSurfaces();
             idleFinishPending = true;
             App.post(mIdleFinish, IDLE_FINISH_MS);
         }
 
         boolean showVideoSurface = video || pending;
+        boolean showMirrorSurface = mirroring && !showVideoSurface;
         boolean wasVideoVisible = mBinding.videoSurface.getVisibility() == View.VISIBLE;
-        mBinding.videoSurface.setVisibility(showVideoSurface ? View.VISIBLE : View.GONE);
-        mBinding.mirrorSurface.setVisibility(showVideoSurface ? View.INVISIBLE : View.VISIBLE);
-        if (showVideoSurface && !wasVideoVisible) {
-            mBinding.videoSurface.post(this::attachSurfaces);
+        boolean wasMirrorVisible = mBinding.mirrorSurface.getVisibility() == View.VISIBLE;
+        // Clear frozen frame as soon as A/V ends, even if TCP count briefly lags.
+        if (!showVideoSurface && !showMirrorSurface && !audio) {
+            mBinding.videoSurface.setVisibility(View.GONE);
+            mBinding.mirrorSurface.setVisibility(View.INVISIBLE);
+            mBinding.cover.setVisibility(View.GONE);
+        } else {
+            mBinding.videoSurface.setVisibility(showVideoSurface ? View.VISIBLE : View.GONE);
+            mBinding.mirrorSurface.setVisibility(showMirrorSurface ? View.VISIBLE : View.INVISIBLE);
+        }
+        if ((showVideoSurface && !wasVideoVisible) || (showMirrorSurface && !wasMirrorVisible)) {
+            mBinding.root.post(this::attachSurfaces);
+        }
+        if (showVideoSurface || showMirrorSurface) {
+            updateSurfaceBestFit(video, mirroring);
         }
 
         boolean showCover = audio && !video && !mirroring;
