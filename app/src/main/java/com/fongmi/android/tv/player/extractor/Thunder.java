@@ -95,7 +95,7 @@ public class Thunder implements Source.Extractor {
         }
 
         @Override
-        public List<Episode> call() {
+        public List<Episode> call() throws Exception {
             boolean torrent = isTorrent(url);
             GetTaskId taskId = XLTaskHelper.get().parse(url, Path.thunder(Util.md5(url)));
             if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(create(taskId));
@@ -108,11 +108,14 @@ public class Thunder implements Source.Extractor {
             }
         }
 
-        private void waitDone(GetTaskId taskId) {
+        private void waitDone(GetTaskId taskId) throws Exception {
             for (int i = 0; i < 100; i++) {
-                if (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() == 2) return;
+                int status = XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus();
+                if (status == 2) return; // success
+                if (status == 3) throw new ExtractException(ResUtil.getString(R.string.error_play_url));
                 SystemClock.sleep(100);
             }
+            throw new ExtractException(ResUtil.getString(R.string.error_play_timeout));
         }
     }
 }

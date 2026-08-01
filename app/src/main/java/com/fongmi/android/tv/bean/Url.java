@@ -71,7 +71,11 @@ public class Url {
     }
 
     public Url set(int position) {
-        this.position = Math.min(position, getValues().size() - 1);
+        if (getValues().isEmpty()) {
+            this.position = 0;
+            return this;
+        }
+        this.position = Math.min(Math.max(position, 0), getValues().size() - 1);
         return this;
     }
 

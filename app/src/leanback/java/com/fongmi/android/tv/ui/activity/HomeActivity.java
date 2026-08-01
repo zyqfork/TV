@@ -530,6 +530,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void onDestroy() {
+        CastNetworkWatcher.unregister(this);
         LiveConfig.get().clear();
         VodConfig.get().clear();
         AppDatabase.backup();

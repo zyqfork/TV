@@ -51,4 +51,18 @@ public final class CastNetworkWatcher {
             callback = null;
         }
     }
+
+    public static synchronized void unregister(Context context) {
+        if (callback == null) return;
+        HANDLER.removeCallbacks(APPLY);
+        Context app = context.getApplicationContext();
+        ConnectivityManager cm = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm != null) {
+            try {
+                cm.unregisterNetworkCallback(callback);
+            } catch (Exception ignored) {
+            }
+        }
+        callback = null;
+    }
 }

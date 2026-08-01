@@ -118,18 +118,26 @@ public class Local implements Process {
         HttpRange range = HttpRange.from(fileLen, headers, etag);
         if (!range.valid()) return createRangeNotSatisfiableResponse(fileLen);
         FileInputStream fis = new FileInputStream(file);
-        skip(fis, range.start);
-        Response res;
-        if (range.isPartial(fileLen)) {
-            res = newFixedLengthResponse(Status.PARTIAL_CONTENT, mime, fis, range.length);
-            res.addHeader("Content-Range", "bytes " + range.start + "-" + range.end + "/" + fileLen);
-        } else {
-            res = newFixedLengthResponse(Status.OK, mime, fis, range.length);
+        try {
+            skip(fis, range.start);
+            Response res;
+            if (range.isPartial(fileLen)) {
+                res = newFixedLengthResponse(Status.PARTIAL_CONTENT, mime, fis, range.length);
+                res.addHeader("Content-Range", "bytes " + range.start + "-" + range.end + "/" + fileLen);
+            } else {
+                res = newFixedLengthResponse(Status.OK, mime, fis, range.length);
+            }
+            res.addHeader("Content-Length", String.valueOf(range.length));
+            res.addHeader("Accept-Ranges", "bytes");
+            res.addHeader("ETag", etag);
+            return res;
+        } catch (IOException e) {
+            try {
+                fis.close();
+            } catch (IOException ignored) {
+            }
+            throw e;
         }
-        res.addHeader("Content-Length", String.valueOf(range.length));
-        res.addHeader("Accept-Ranges", "bytes");
-        res.addHeader("ETag", etag);
-        return res;
     }
 
     private String etag(File file, long fileLen) {
