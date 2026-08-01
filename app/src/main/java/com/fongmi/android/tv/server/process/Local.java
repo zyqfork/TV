@@ -44,7 +44,8 @@ public class Local implements Process {
 
     private Response getFile(Map<String, String> headers, String path) {
         try {
-            File file = Path.local(path.substring(5));
+            File file = Path.resolveUnderRoot(path.substring(5));
+            if (file == null) throw new FileNotFoundException("Invalid path");
             if (file.isDirectory()) return getFolder(file);
             if (file.isFile()) return getFile(headers, file, getMimeTypeForFile(path));
             throw new FileNotFoundException();
@@ -54,26 +55,38 @@ public class Local implements Process {
     }
 
     private Response upload(Map<String, String> params, Map<String, String> files) {
-        String path = params.get("path");
+        File dir = Path.resolveUnderRoot(params.get("path"));
+        if (dir == null) return Nano.error("Invalid path");
         for (String k : files.keySet()) {
             String fn = params.get(k);
+            if (fn == null || fn.contains("..") || fn.contains("/") || fn.contains("\\")) continue;
             File temp = new File(files.get(k));
-            if (fn.toLowerCase().endsWith(".zip")) FileUtil.zipDecompress(temp, Path.root(path));
-            else Path.copy(temp, Path.root(path, fn));
+            if (fn.toLowerCase().endsWith(".zip")) FileUtil.zipDecompress(temp, dir);
+            else Path.copy(temp, new File(dir, fn));
         }
         return Nano.ok();
     }
 
     private Response newFolder(Map<String, String> params) {
-        String path = params.get("path");
+        File dir = Path.resolveUnderRoot(params.get("path"));
         String name = params.get("name");
-        Path.root(path, name).mkdirs();
+        if (dir == null || name == null || name.contains("..") || name.contains("/") || name.contains("\\")) {
+            return Nano.error("Invalid path");
+        }
+        new File(dir, name).mkdirs();
         return Nano.ok();
     }
 
     private Response delete(Map<String, String> params) {
-        String path = params.get("path");
-        Path.clear(Path.root(path));
+        File target = Path.resolveUnderRoot(params.get("path"));
+        if (target == null) return Nano.error("Invalid path");
+        // Never delete the storage root itself.
+        try {
+            if (target.getCanonicalFile().equals(Path.root().getCanonicalFile())) return Nano.error("Invalid path");
+        } catch (Exception e) {
+            return Nano.error("Invalid path");
+        }
+        Path.clear(target);
         return Nano.ok();
     }
 

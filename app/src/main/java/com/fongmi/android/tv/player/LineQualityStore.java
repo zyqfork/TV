@@ -7,6 +7,8 @@ import com.github.catvod.utils.Prefers;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +16,7 @@ import java.util.Map;
 public class LineQualityStore {
 
     private static final String KEY = "live_line_quality_v1";
+    private static final int MAX_ENTRIES = 200;
     private static final Type TYPE = new TypeToken<Map<String, LineScore>>() {}.getType();
 
     private static Map<String, LineScore> load() {
@@ -28,7 +31,19 @@ public class LineQualityStore {
     }
 
     private static void save(Map<String, LineScore> map) {
+        trim(map);
         Prefers.put(KEY, App.gson().toJson(map));
+    }
+
+    /** Keep the most recently used entries (ok/fail timestamps). */
+    private static void trim(Map<String, LineScore> map) {
+        if (map.size() <= MAX_ENTRIES) return;
+        List<Map.Entry<String, LineScore>> entries = new ArrayList<>(map.entrySet());
+        entries.sort(Comparator.comparingLong((Map.Entry<String, LineScore> e) -> Math.max(e.getValue().lastOkAt, e.getValue().lastFailAt)).reversed());
+        map.clear();
+        for (int i = 0; i < Math.min(MAX_ENTRIES, entries.size()); i++) {
+            map.put(entries.get(i).getKey(), entries.get(i).getValue());
+        }
     }
 
     public static void recordSuccess(String rawUrl, long openMs) {
@@ -84,8 +99,7 @@ public class LineQualityStore {
 
     public static String normalize(String rawUrl) {
         if (rawUrl == null) return "";
-        String url = rawUrl.split("\\$")[0].trim();
-        return url;
+        return rawUrl.split("\\$")[0].trim();
     }
 
     private static class LineScore {
@@ -97,4 +111,3 @@ public class LineQualityStore {
         long lastFailAt;
     }
 }
-

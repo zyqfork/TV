@@ -141,9 +141,29 @@ public class Path {
     }
 
     public static File local(String path) {
-        path = path.replace("file:/", "");
-        File file = new File(root(), path);
-        return file.exists() ? file : new File(path);
+        path = path == null ? "" : path.replace("file:/", "");
+        File resolved = resolveUnderRoot(path);
+        return resolved != null ? resolved : new File(root(), "__missing__");
+    }
+
+    /**
+     * Resolve a relative path under {@link #root()}, rejecting path traversal and absolute escapes.
+     * Returns null when the path would leave the app root.
+     */
+    public static File resolveUnderRoot(String path) {
+        try {
+            File root = root().getCanonicalFile();
+            String relative = path == null ? "" : path;
+            while (relative.startsWith("/")) relative = relative.substring(1);
+            File candidate = relative.isEmpty() ? root : new File(root, relative);
+            File canonical = candidate.getCanonicalFile();
+            String rootPath = root.getAbsolutePath();
+            String filePath = canonical.getAbsolutePath();
+            if (filePath.equals(rootPath) || filePath.startsWith(rootPath + File.separator)) return canonical;
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public static String read(File file) {

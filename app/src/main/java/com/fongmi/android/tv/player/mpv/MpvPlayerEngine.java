@@ -21,7 +21,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     private MpvPlayer player;
     private boolean live;
     private int decode;
-    private int startGeneration;
+    private volatile int startGeneration;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
         this(decode, false, listener);

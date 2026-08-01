@@ -153,7 +153,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_32_33)
                 .addMigrations(Migrations.MIGRATION_33_34)
                 .addMigrations(Migrations.MIGRATION_34_35)
-                .fallbackToDestructiveMigration(true)
+                // Prefer failing closed over silent wipe when a migration path is missing.
                 .allowMainThreadQueries().build();
     }
 
