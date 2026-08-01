@@ -1547,8 +1547,10 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         } else if (isVisible(mBinding.widget.center)) {
             hideCenter();
         } else if (isFullscreen() && !isDirectPlay()) {
+            // Network / vod: leave fullscreen back to detail chrome.
             exitFullscreen();
         } else {
+            // Direct file play stays fullscreen-only; back finishes the activity.
             mViewModel.stopSearch();
             if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
             super.onBackInvoked();

@@ -261,8 +261,9 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private final Runnable positionUpdater = new Runnable() {
         @Override
         public void run() {
-            if (player != null && avTransportImpl != null && player.isPlaying()) avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
-            if (player != null) App.post(this, 1000);
+            if (!isDlnaActive || player == null) return;
+            if (avTransportImpl != null && player.isPlaying()) avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
+            App.post(this, 1000);
         }
     };
 

@@ -69,6 +69,8 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     @Override
     public void onServiceDisconnected(ComponentName name) {
         detach();
+        // Service died while still "bound" from our side; allow init() to rebinding.
+        bound = false;
     }
 
     public void setDeviceListener(DeviceListener listener) {

@@ -43,7 +43,7 @@ public class DlnaServerActivity extends BaseActivity implements DlnaServerAdapte
         mBinding.progressLayout.showProgress();
         DlnaMediaManager.get().setDeviceListener(this);
         DlnaMediaManager.get().init(this);
-        refreshList();
+        // List refresh happens in onResume (covers first show + return from browse for pins).
     }
 
     @Override
