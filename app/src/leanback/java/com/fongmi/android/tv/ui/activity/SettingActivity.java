@@ -85,6 +85,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.configBootRefreshText.setText(Setting.getSwitch(Setting.isConfigBootRefresh()));
+        mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
     }
 
@@ -119,6 +120,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
         mBinding.configBootRefresh.setOnClickListener(this::setConfigBootRefresh);
+        mBinding.dlnaLibrary.setOnClickListener(this::setDlnaLibrary);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
@@ -268,6 +270,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setConfigBootRefresh(View view) {
         Setting.putConfigBootRefresh(!Setting.isConfigBootRefresh());
         mBinding.configBootRefreshText.setText(Setting.getSwitch(Setting.isConfigBootRefresh()));
+    }
+
+    private void setDlnaLibrary(View view) {
+        Setting.putDlnaLibrary(!Setting.isDlnaLibrary());
+        mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
+        ConfigEvent.common();
     }
 
     private void setSize(View view) {

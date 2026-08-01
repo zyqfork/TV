@@ -122,6 +122,15 @@ public class Setting {
         Prefers.put("config_boot_refresh", refresh);
     }
 
+    /** When true, home shows DLNA media library entry for browsing LAN MediaServers. */
+    public static boolean isDlnaLibrary() {
+        return Prefers.getBoolean("dlna_library");
+    }
+
+    public static void putDlnaLibrary(boolean enabled) {
+        Prefers.put("dlna_library", enabled);
+    }
+
     public static boolean getUpdate() {
         return Prefers.getBoolean("update", true);
     }

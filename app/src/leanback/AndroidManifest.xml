@@ -147,6 +147,16 @@
             android:screenOrientation="sensorLandscape" />
 
         <activity
+            android:name=".ui.activity.HistoryActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".ui.activity.RecommendActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
             android:name=".ui.activity.PushActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:screenOrientation="sensorLandscape" />
@@ -228,6 +238,20 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
             android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".ui.activity.DlnaServerActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".ui.activity.DlnaBrowseActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="sensorLandscape" />
+
+        <service
+            android:name=".service.DlnaBrowserService"
+            android:exported="false" />
 
         <service
             android:name=".service.DLNARendererService"

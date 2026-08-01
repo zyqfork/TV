@@ -14,6 +14,8 @@
     <string name="detail_year">年份：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">地區：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_path">路徑：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_source">來源：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_protocol">協議：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">類型：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_director">導演：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">演員：<xliff:g name="name">%s</xliff:g></string>
@@ -155,6 +157,18 @@
     <string name="network_storage_share_optional">共用名稱（可留空，進入後自動列出）</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
+    <string name="dlna_library_refresh">重新整理</string>
+    <string name="dlna_library_empty">未發現媒體伺服器</string>
+    <string name="dlna_library_browse_fail">目錄讀取失敗</string>
+    <string name="dlna_library_play_fail">無可播放位址</string>
+    <string name="dlna_library_type">DLNA</string>
+    <string name="dlna_library_pin">新增到媒體庫首頁</string>
+    <string name="dlna_library_unpin">從媒體庫首頁移除</string>
+    <string name="dlna_library_pin_added">已新增到媒體庫首頁</string>
+    <string name="dlna_library_pin_removed">已從媒體庫首頁移除</string>
+    <string name="dlna_library_pinned">已釘選</string>
+    <string name="dlna_library_folder">資料夾</string>
+    <string name="dlna_library_item">媒體</string>
     <string name="setting_dlna_setting">DLNA 設定</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">裝置名稱</string>
@@ -219,6 +233,7 @@
     </string-array>
     <string name="setting_incognito">無痕模式</string>
     <string name="setting_config_boot_refresh">自動重新整理</string>
+    <string name="setting_dlna_library">媒體庫</string>
     <string name="setting_theme_color">主題色彩</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>

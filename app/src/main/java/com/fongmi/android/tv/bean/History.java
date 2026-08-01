@@ -12,6 +12,7 @@ import androidx.room.PrimaryKey;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Diffable;
@@ -263,6 +264,16 @@ public class History implements Diffable<History> {
         if (NetworkPlayResolver.isNetworkPlayUrl(vodId)) {
             String title = NetworkPlayResolver.displayTitle(vodId);
             return TextUtils.isEmpty(title) ? ResUtil.getString(R.string.setting_network_storage) : title;
+        }
+        // DLNA / direct HTTP under PUSH must not show push_agent name (手机推送).
+        if (SiteApi.PUSH.equals(getSiteKey()) && SiteApi.isDirectPlayId(vodId)) {
+            if (!TextUtils.isEmpty(getVodFlag())) return getVodFlag();
+            try {
+                String host = android.net.Uri.parse(vodId).getHost();
+                if (!TextUtils.isEmpty(host)) return host;
+            } catch (Exception ignored) {
+            }
+            return ResUtil.getString(R.string.dlna_library_type);
         }
         return VodConfig.get().getSite(getSiteKey()).getName();
     }

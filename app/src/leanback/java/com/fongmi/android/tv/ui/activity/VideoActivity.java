@@ -232,6 +232,10 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
             String title = NetworkPlayResolver.displayTitle(id);
             return TextUtils.isEmpty(title) ? getString(R.string.setting_network_storage) : title;
         }
+        if (isDirectPushPlay()) {
+            String mark = getMark();
+            return TextUtils.isEmpty(mark) ? getString(R.string.dlna_library_type) : mark;
+        }
         return getSite().getName();
     }
 
@@ -542,7 +546,17 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     public void renderDetail(Vod item, History history) {
         mHistory = history;
         mBinding.progressLayout.showContent();
-        mBinding.name.setText(item.getName());
+        String title = isSimplePlay() && !TextUtils.isEmpty(getName()) ? getName() : item.getName();
+        mBinding.name.setText(title);
+        if (isSimplePlay() && !TextUtils.isEmpty(title)) {
+            item.setName(title);
+            mHistory.setVodName(title);
+        }
+        // Persist display source (server / drive name) so home history is not「手机推送」.
+        if (isDirectPushPlay()) {
+            String site = getDisplaySiteName();
+            if (!TextUtils.isEmpty(site)) mHistory.setVodFlag(site);
+        }
         mBinding.video.requestFocus();
         App.removeCallbacks(mR4);
         setArtwork(item.getPic());
@@ -562,16 +576,26 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void applyNetworkPlayChrome() {
-        if (!isNetworkPlay()) return;
+        if (!isSimplePlay()) return;
         mBinding.content.setVisibility(View.GONE);
         mBinding.change.setVisibility(View.GONE);
         mBinding.part.setVisibility(View.GONE);
         mBinding.quick.setVisibility(View.GONE);
         mBinding.control.action.parse.setVisibility(View.GONE);
+        mBinding.control.action.next.setVisibility(View.GONE);
+        mBinding.control.action.prev.setVisibility(View.GONE);
     }
 
     private boolean isNetworkPlay() {
         return NetworkPlayResolver.isNetworkPlayUrl(getId());
+    }
+
+    private boolean isDirectPushPlay() {
+        return SiteApi.PUSH.equals(getKey()) && SiteApi.isDirectPlayId(getId());
+    }
+
+    private boolean isSimplePlay() {
+        return isNetworkPlay() || isDirectPushPlay();
     }
 
     @Override
@@ -586,7 +610,8 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     public void renderFlags(List<Flag> items) {
-        mBinding.flag.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean hide = isSimplePlay() && items.size() <= 1;
+        mBinding.flag.setVisibility(hide || items.isEmpty() ? View.GONE : View.VISIBLE);
         mFlagAdapter.addAll(items);
     }
 
@@ -626,7 +651,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     public void renderSources(List<Vod> items) {
-        if (isNetworkPlay()) {
+        if (isSimplePlay()) {
             mBinding.quick.setVisibility(View.GONE);
             return;
         }
@@ -647,7 +672,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     @Override
     public void renderUseParse(boolean useParse) {
         setUseParse(useParse);
-        mBinding.control.action.parse.setVisibility(isNetworkPlay() || !isUseParse() ? View.GONE : View.VISIBLE);
+        mBinding.control.action.parse.setVisibility(isSimplePlay() || !isUseParse() ? View.GONE : View.VISIBLE);
     }
 
     @Override
@@ -730,8 +755,8 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     private void setText(Vod item) {
         mBinding.content.setTag(item.getContent());
-        if (isNetworkPlay()) {
-            setNetworkPlayText(item);
+        if (isSimplePlay()) {
+            setSimplePlayText(item);
             return;
         }
         setText(mBinding.year, R.string.detail_year, item.getYear());
@@ -743,13 +768,16 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         setText(mBinding.remark, 0, item.getRemarks());
     }
 
-    private void setNetworkPlayText(Vod item) {
+    private void setSimplePlayText(Vod item) {
         String protocol = item.getTypeName();
-        if (TextUtils.isEmpty(protocol)) protocol = NetworkPlayResolver.protocolLabel(getId());
+        if (TextUtils.isEmpty(protocol)) {
+            protocol = isNetworkPlay() ? NetworkPlayResolver.protocolLabel(getId()) : getString(R.string.dlna_library_type);
+        }
         String path = item.getArea();
-        if (TextUtils.isEmpty(path)) path = NetworkPlayResolver.displayPath(getId());
-        setText(mBinding.site, R.string.detail_site, getDisplaySiteName());
-        setText(mBinding.type, R.string.detail_type, protocol);
+        if (TextUtils.isEmpty(path) && isNetworkPlay()) path = NetworkPlayResolver.displayPath(getId());
+        if (TextUtils.isEmpty(path) && isDirectPushPlay()) path = displayUrlPath(getId());
+        setText(mBinding.site, R.string.detail_source, getDisplaySiteName());
+        setText(mBinding.type, R.string.detail_protocol, protocol);
         mBinding.year.setVisibility(View.GONE);
         mBinding.area.setVisibility(View.GONE);
         mBinding.actor.setVisibility(View.GONE);
@@ -760,8 +788,20 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
             mBinding.director.setText(getString(R.string.detail_path, path));
             mBinding.director.setVisibility(View.VISIBLE);
             mBinding.director.setSingleLine(true);
-            mBinding.director.setEllipsize(TextUtils.TruncateAt.END);
+            mBinding.director.setEllipsize(TextUtils.TruncateAt.MIDDLE);
             mBinding.director.setMovementMethod(null);
+        }
+    }
+
+    private static String displayUrlPath(String url) {
+        if (TextUtils.isEmpty(url)) return "";
+        try {
+            android.net.Uri uri = android.net.Uri.parse(url);
+            String path = uri.getPath();
+            if (!TextUtils.isEmpty(path) && path.length() > 1) return path;
+            return url;
+        } catch (Exception e) {
+            return url;
         }
     }
 
@@ -789,7 +829,8 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void setEpisodeAdapter(List<Episode> items) {
-        mBinding.episode.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean hide = isSimplePlay() && items.size() <= 1;
+        mBinding.episode.setVisibility(hide || items.isEmpty() ? View.GONE : View.VISIBLE);
         mEpisodeAdapter.addAll(items);
         setArrayAdapter(items.size());
         setR2Callback();
@@ -1148,7 +1189,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void setPartAdapter() {
-        if (isDirectPlay() || isNetworkPlay()) {
+        if (isDirectPlay() || isSimplePlay()) {
             mBinding.part.setVisibility(View.GONE);
             return;
         }
@@ -1188,6 +1229,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         if (keep != null) {
             keep.setVodName(mHistory.getVodName());
             keep.setVodPic(mHistory.getVodPic());
+            keep.setSiteName(getDisplaySiteName());
             keep.save();
         }
     }

@@ -14,6 +14,8 @@
     <string name="detail_year">年份：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">地区：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_path">路径：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_source">来源：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_protocol">协议：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">类型：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_director">导演：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">演员：<xliff:g name="name">%s</xliff:g></string>
@@ -155,6 +157,18 @@
     <string name="network_storage_share_optional">共享名（可留空，进入后自动列出）</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
+    <string name="dlna_library_refresh">刷新</string>
+    <string name="dlna_library_empty">未发现媒体服务器</string>
+    <string name="dlna_library_browse_fail">目录读取失败</string>
+    <string name="dlna_library_play_fail">无可播放地址</string>
+    <string name="dlna_library_type">DLNA</string>
+    <string name="dlna_library_pin">添加到媒体库首页</string>
+    <string name="dlna_library_unpin">从媒体库首页移除</string>
+    <string name="dlna_library_pin_added">已添加到媒体库首页</string>
+    <string name="dlna_library_pin_removed">已从媒体库首页移除</string>
+    <string name="dlna_library_pinned">已钉选</string>
+    <string name="dlna_library_folder">文件夹</string>
+    <string name="dlna_library_item">媒体</string>
     <string name="setting_dlna_setting">DLNA 设置</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">设备名称</string>
@@ -219,6 +233,7 @@
     </string-array>
     <string name="setting_incognito">无痕模式</string>
     <string name="setting_config_boot_refresh">自动刷新</string>
+    <string name="setting_dlna_library">媒体库</string>
     <string name="setting_theme_color">主题色彩</string>
     <string name="setting_auto">自动</string>
     <string name="setting_custom">自定义</string>

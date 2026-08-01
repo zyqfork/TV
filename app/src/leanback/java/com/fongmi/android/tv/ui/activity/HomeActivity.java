@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.leanback.widget.ArrayObjectAdapter;
+import androidx.leanback.widget.BaseGridView;
 import androidx.leanback.widget.FocusHighlight;
 import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
@@ -52,6 +53,7 @@ import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
@@ -84,7 +86,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener {
+public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, HeaderPresenter.OnClickListener {
 
     private ActivityHomeBinding mBinding;
     private ArrayObjectAdapter mHistoryAdapter;
@@ -146,7 +148,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                mBinding.toolbar.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
                 if (mPresenter.isDelete()) setHistoryDelete(false);
             }
         });
@@ -174,7 +175,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @SuppressLint("RestrictedApi")
     private void setRecyclerView() {
         CustomSelector selector = new CustomSelector();
-        selector.addPresenter(Integer.class, new HeaderPresenter());
+        selector.addPresenter(Integer.class, new HeaderPresenter(this));
         selector.addPresenter(String.class, new ProgressPresenter());
         selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
@@ -182,6 +183,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
+        mBinding.recycler.setWindowAlignment(BaseGridView.WINDOW_ALIGN_BOTH_EDGE);
+        mBinding.recycler.setWindowAlignmentOffsetPercent(BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED);
+        mBinding.recycler.setItemAlignmentOffsetPercent(BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED);
     }
 
     private void setViewModel() {
@@ -304,6 +308,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (homeStorage != null) {
             items.add(Func.create(R.string.home_network_storage, null, homeStorage.getId()));
         }
+        if (Setting.isDlnaLibrary()) items.add(Func.create(R.string.home_media_library));
         items.add(Func.create(R.string.home_setting));
         mFuncAdapter.setItems(items, new BaseDiffCallback<Func>());
     }
@@ -417,6 +422,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     @Override
+    public void onHeaderClick(int resId) {
+        if (resId == R.string.home_history) HistoryActivity.start(this);
+        else if (resId == R.string.home_recommend) RecommendActivity.start(this);
+    }
+
+    @Override
     public void onItemClick(Func item) {
         if (item.getResId() == R.string.home_vod) VodActivity.start(this, mResult);
         else if (item.getResId() == R.string.home_live) LiveActivity.start(this);
@@ -424,6 +435,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         else if (item.getResId() == R.string.home_push) PushActivity.start(this);
         else if (item.getResId() == R.string.home_search) SearchActivity.start(this);
         else if (item.getResId() == R.string.home_network_storage) NetworkBrowseActivity.start(this, item.getId());
+        else if (item.getResId() == R.string.home_media_library) DlnaServerActivity.start(this);
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
     }
 

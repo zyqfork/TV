@@ -14,6 +14,8 @@
     <string name="detail_year">Year: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">Area: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_path">Path: <xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_source">Source: <xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_protocol">Protocol: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">Type: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_director">Director: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">Actor: <xliff:g name="name">%s</xliff:g></string>
@@ -156,6 +158,18 @@
     <string name="network_storage_share_optional">Share (optional, leave empty to list)</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
+    <string name="dlna_library_refresh">Refresh</string>
+    <string name="dlna_library_empty">No media servers found</string>
+    <string name="dlna_library_browse_fail">Failed to browse folder</string>
+    <string name="dlna_library_play_fail">No playable URL</string>
+    <string name="dlna_library_type">DLNA</string>
+    <string name="dlna_library_pin">Add to library home</string>
+    <string name="dlna_library_unpin">Remove from library home</string>
+    <string name="dlna_library_pin_added">Added to library home</string>
+    <string name="dlna_library_pin_removed">Removed from library home</string>
+    <string name="dlna_library_pinned">Pinned</string>
+    <string name="dlna_library_folder">Folder</string>
+    <string name="dlna_library_item">Item</string>
     <string name="setting_dlna_setting">DLNA setting</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">Device name</string>
@@ -220,6 +234,7 @@
     </string-array>
     <string name="setting_incognito">Incognito mode</string>
     <string name="setting_config_boot_refresh">Auto refresh</string>
+    <string name="setting_dlna_library">Media library</string>
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
