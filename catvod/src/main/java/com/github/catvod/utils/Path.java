@@ -54,6 +54,12 @@ public class Path {
         return mkdir(new File(root(), "TV"));
     }
 
+    /** App-specific backup dir; writable without MANAGE_EXTERNAL_STORAGE. */
+    public static File backup() {
+        File external = Init.context().getExternalFilesDir("backup");
+        return mkdir(external != null ? external : new File(files(), "backup"));
+    }
+
     public static File so() {
         return mkdir(new File(files(), "so"));
     }

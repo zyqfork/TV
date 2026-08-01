@@ -135,7 +135,7 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
             load(item.getPath());
         } else {
             String playUrl = mStorage.toPlayUrl(item.getPath());
-            VideoActivity.startFullscreen(this, SiteApi.PUSH, playUrl, item.getName());
+            VideoActivity.start(this, SiteApi.PUSH, playUrl, item.getName());
         }
     }
 

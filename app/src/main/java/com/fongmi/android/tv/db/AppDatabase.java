@@ -28,9 +28,12 @@ import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
-import java.time.LocalDate;
+import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class}, version = AppDatabase.VERSION)
 public abstract class AppDatabase extends RoomDatabase {
@@ -38,6 +41,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final int VERSION = 35;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
+    private static final int MAX_BACKUP = 5;
 
     private static volatile AppDatabase instance;
 
@@ -52,41 +56,94 @@ public abstract class AppDatabase extends RoomDatabase {
 
     public static void backup(com.fongmi.android.tv.impl.Callback callback) {
         Task.execute(() -> {
-            File file = new File(Path.tv(), "tv-" + LocalDate.now().format(Formatters.DATE) + ".bk");
-            Backup backup = Backup.create();
-            if (backup.getConfig().isEmpty()) {
-                App.post(callback::error);
-            } else {
+            try {
+                File dir = backupDir();
+                File file = new File(dir, "tv-" + LocalDateTime.now().format(Formatters.BACKUP) + ".bk");
+                Backup backup = Backup.create();
+                if (backup.getConfig().isEmpty()) {
+                    App.post(callback::error);
+                    return;
+                }
                 Path.write(file, backup.toString().getBytes());
+                if (!file.exists() || file.length() == 0) {
+                    App.post(callback::error);
+                    return;
+                }
                 FileUtil.gzipCompress(file);
-                App.post(callback::success);
+                File gz = new File(file.getAbsolutePath() + ".gz");
+                if (!gz.exists() || gz.length() == 0) {
+                    App.post(callback::error);
+                    return;
+                }
                 cleanOld();
+                App.post(callback::success);
+            } catch (Throwable e) {
+                App.post(callback::error);
             }
         });
     }
 
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
         Task.execute(() -> {
-            File restore = Path.cache("restore");
-            FileUtil.gzipDecompress(file, restore);
-            Backup backup = Backup.objectFrom(Path.read(restore));
-            if (backup.getConfig().isEmpty()) {
+            try {
+                File restore = Path.cache("restore");
+                FileUtil.gzipDecompress(file, restore);
+                Backup backup = Backup.objectFrom(Path.read(restore));
+                if (backup.getConfig().isEmpty()) {
+                    App.post(callback::error);
+                } else {
+                    backup.restore();
+                    Path.clear(restore);
+                    App.post(callback::success);
+                }
+            } catch (Throwable e) {
                 App.post(callback::error);
-            } else {
-                backup.restore();
-                Path.clear(restore);
-                App.post(callback::success);
             }
         });
     }
 
+    /** Prefer /sdcard/TV when writable; otherwise app-specific backup dir. */
+    public static File backupDir() {
+        File preferred = Path.tv();
+        if (canWrite(preferred)) return preferred;
+        return Path.backup();
+    }
+
+    public static List<File> listBackups() {
+        Map<String, File> map = new LinkedHashMap<>();
+        addBackups(map, Path.tv());
+        addBackups(map, Path.backup());
+        List<File> items = new ArrayList<>(map.values());
+        items.sort((f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
+        return items;
+    }
+
+    private static void addBackups(Map<String, File> map, File dir) {
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            String name = file.getName();
+            if (name.startsWith("tv") && name.endsWith(".bk.gz")) map.put(file.getAbsolutePath(), file);
+        }
+    }
+
+    private static boolean canWrite(File dir) {
+        if (dir == null) return false;
+        if (!dir.exists() && !dir.mkdirs()) return false;
+        File probe = new File(dir, ".write_test");
+        try {
+            if (!probe.createNewFile() && !probe.exists()) return false;
+            return probe.delete() || !probe.exists();
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (probe.exists()) probe.delete();
+        }
+    }
+
     private static void cleanOld() {
-        List<File> items = new ArrayList<>();
-        File[] files = Path.tv().listFiles();
-        if (files == null) files = new File[0];
-        for (File file : files) if (file.getName().startsWith("tv") && file.getName().endsWith(".bk.gz")) items.add(file);
-        if (!items.isEmpty()) items.sort((f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-        if (items.size() > 7) for (int i = 7; i < items.size(); i++) Path.clear(items.get(i));
+        List<File> items = listBackups();
+        if (items.size() > MAX_BACKUP) for (int i = MAX_BACKUP; i < items.size(); i++) Path.clear(items.get(i));
     }
 
     private static AppDatabase create(Context context) {

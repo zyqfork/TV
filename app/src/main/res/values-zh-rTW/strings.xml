@@ -13,6 +13,7 @@
     <string name="detail_site">站源：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_year">年份：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">地區：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_path">路徑：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">類型：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_director">導演：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">演員：<xliff:g name="name">%s</xliff:g></string>
@@ -128,11 +129,11 @@
     <string name="setting_network_storage">網路儲存</string>
     <string name="network_storage_add_smb">新增 SMB</string>
     <string name="network_storage_add_webdav">新增 WebDAV</string>
-    <string name="network_storage_discover_smb">發現 SMB</string>
     <string name="network_storage_discovering">正在掃描區域網路 SMB…</string>
     <string name="network_storage_discover_empty">未發現 SMB 主機</string>
     <string name="network_storage_discover_pick">選擇 SMB 主機</string>
     <string name="network_storage_discover_done">發現 %d 台 SMB 主機</string>
+    <string name="network_storage_manual">手動輸入</string>
     <string name="network_storage_empty">尚無網路儲存</string>
     <string name="network_storage_name">名稱</string>
     <string name="network_storage_host">主機</string>
@@ -146,6 +147,8 @@
     <string name="network_storage_edit">編輯</string>
     <string name="network_storage_delete">刪除</string>
     <string name="network_storage_browse">瀏覽</string>
+    <string name="network_storage_pin_home">顯示到首頁</string>
+    <string name="network_storage_unpin_home">取消首頁顯示</string>
     <string name="network_storage_invalid">請填寫必要欄位</string>
     <string name="network_storage_list_fail">目錄讀取失敗</string>
     <string name="network_storage_share_missing">共用名稱不存在，已列出可用共用</string>
@@ -215,6 +218,7 @@
         <item>最穩</item>
     </string-array>
     <string name="setting_incognito">無痕模式</string>
+    <string name="setting_config_boot_refresh">自動重新整理</string>
     <string name="setting_theme_color">主題色彩</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>
@@ -231,6 +235,7 @@
 
     <!-- Backup & Restore -->
     <string name="restore_select">選擇備份</string>
+    <string name="restore_empty">暫無備份</string>
     <string name="restore_success">還原成功</string>
     <string name="restore_fail">還原失敗</string>
     <string name="backup_success">備份成功</string>

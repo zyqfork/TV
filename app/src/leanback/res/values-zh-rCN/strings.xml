@@ -6,6 +6,7 @@
     <string name="home_search">搜索</string>
     <string name="home_keep">收藏</string>
     <string name="home_push">推送</string>
+    <string name="home_network_storage">网盘</string>
     <string name="home_setting">设置</string>
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>

@@ -8,6 +8,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivityNetworkStorageBinding;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.storage.SmbDiscover;
@@ -46,8 +47,7 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
 
     @Override
     protected void initEvent() {
-        mBinding.addSmb.setOnClickListener(v -> NetworkStorageEditActivity.start(this, NetworkStorage.TYPE_SMB, null));
-        mBinding.discoverSmb.setOnClickListener(v -> startDiscover());
+        mBinding.addSmb.setOnClickListener(v -> startDiscover());
         mBinding.addWebdav.setOnClickListener(v -> NetworkStorageEditActivity.start(this, NetworkStorage.TYPE_WEBDAV, null));
     }
 
@@ -68,10 +68,14 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
         mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
     }
 
+    private void openManualSmb() {
+        NetworkStorageEditActivity.start(this, NetworkStorage.TYPE_SMB, null);
+    }
+
     private void startDiscover() {
         if (mScanning) return;
         mScanning = true;
-        mBinding.discoverSmb.setEnabled(false);
+        mBinding.addSmb.setEnabled(false);
         Notify.show(R.string.network_storage_discovering);
         stopDiscover();
         mDiscover = new SmbDiscover(this);
@@ -87,7 +91,7 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
 
     private void finishDiscover() {
         mScanning = false;
-        mBinding.discoverSmb.setEnabled(true);
+        mBinding.addSmb.setEnabled(true);
         stopDiscover();
     }
 
@@ -101,14 +105,21 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
         if (isFinishing()) return;
         if (hosts == null || hosts.isEmpty()) {
             Notify.show(R.string.network_storage_discover_empty);
+            openManualSmb();
             return;
         }
         Notify.show(getString(R.string.network_storage_discover_done, hosts.size()));
-        String[] labels = new String[hosts.size()];
+        String manual = getString(R.string.network_storage_manual);
+        String[] labels = new String[hosts.size() + 1];
         for (int i = 0; i < hosts.size(); i++) labels[i] = hosts.get(i).display();
+        labels[hosts.size()] = manual;
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.network_storage_discover_pick)
                 .setItems(labels, (dialog, which) -> {
+                    if (which >= hosts.size()) {
+                        openManualSmb();
+                        return;
+                    }
                     SmbDiscover.Host host = hosts.get(which);
                     String name = host.getName();
                     if (name == null || name.isEmpty() || name.equals(host.getIp())) name = host.getIp();
@@ -125,9 +136,11 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
 
     @Override
     public void onItemLongClick(NetworkStorage item) {
+        boolean pinned = NetworkStorageStore.isHome(item.getId());
         String[] actions = {
                 getString(R.string.network_storage_browse),
                 getString(R.string.network_storage_edit),
+                getString(pinned ? R.string.network_storage_unpin_home : R.string.network_storage_pin_home),
                 getString(R.string.network_storage_delete)
         };
         new MaterialAlertDialogBuilder(this)
@@ -135,9 +148,17 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) NetworkBrowseActivity.start(this, item.getId());
                     else if (which == 1) NetworkStorageEditActivity.start(this, item.getType(), item.getId());
+                    else if (which == 2) toggleHome(item);
                     else confirmDelete(item);
                 })
                 .show();
+    }
+
+    private void toggleHome(NetworkStorage item) {
+        if (NetworkStorageStore.isHome(item.getId())) NetworkStorageStore.setHome(null);
+        else NetworkStorageStore.setHome(item.getId());
+        ConfigEvent.common();
+        Notify.show(NetworkStorageStore.isHome(item.getId()) ? R.string.network_storage_pin_home : R.string.network_storage_unpin_home);
     }
 
     private void confirmDelete(NetworkStorage item) {
@@ -146,6 +167,7 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
                 .setMessage(item.displayTitle())
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> {
                     NetworkStorageStore.delete(item.getId());
+                    ConfigEvent.common();
                     refresh();
                 })
                 .setNegativeButton(R.string.dialog_negative, null)

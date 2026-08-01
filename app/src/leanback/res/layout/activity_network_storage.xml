@@ -27,22 +27,6 @@
             android:textSize="16sp" />
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/discoverSmb"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:background="@drawable/selector_button"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingStart="16dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="8dp"
-            android:text="@string/network_storage_discover_smb"
-            android:textColor="@color/white"
-            android:textSize="16sp" />
-
-        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/addWebdav"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

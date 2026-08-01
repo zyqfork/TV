@@ -112,6 +112,22 @@ public class SiteApi {
     @NonNull
     public static Result detailContent(@NonNull String key, @NonNull String id) throws Exception {
         SpiderDebug.log("detail", "key=%s,id=%s", key, id);
+        if (NetworkPlayResolver.isNetworkPlayUrl(id)) {
+            Vod vod = new Vod();
+            String fileName = NetworkPlayResolver.fileName(id);
+            String title = NetworkPlayResolver.displayTitle(id);
+            if (TextUtils.isEmpty(title)) title = ResUtil.getString(R.string.setting_network_storage);
+            if (TextUtils.isEmpty(fileName)) fileName = id;
+            vod.setId(id);
+            vod.setName(fileName);
+            vod.setTypeName(NetworkPlayResolver.protocolLabel(id));
+            vod.setArea(NetworkPlayResolver.displayPath(id));
+            vod.setPlayFrom(title);
+            vod.setPlayUrl(fileName + "$" + id);
+            vod.setPic(ResUtil.getString(R.string.push_image));
+            Source.get().parse(vod.setFlags());
+            return Result.vod(vod);
+        }
         Site site = VodConfig.get().getSite(key);
         if (site.isEmpty() && PUSH.equals(key)) {
             Vod vod = new Vod();
@@ -145,7 +161,21 @@ public class SiteApi {
         SpiderDebug.log("player", "key=%s,flag=%s,id=%s", key, flag, id);
         Site site = VodConfig.get().getSite(key);
         Source.get().stop();
-        if (site.getType() == 3) {
+        if (NetworkPlayResolver.isNetworkPlayUrl(id)) {
+            Result result = new Result();
+            if (id.startsWith("webdav://")) {
+                NetworkPlayResolver.ResolvedWebDav resolved = NetworkPlayResolver.resolveWebDav(id);
+                result.setUrl(resolved.url());
+                result.setHeader(resolved.headers());
+            } else {
+                result.setUrl(id);
+            }
+            result.setParse(0);
+            result.setFlag(flag);
+            result.setUrl(Source.get().fetch(result));
+            SpiderDebug.log("player", result.toString());
+            return result;
+        } else if (site.getType() == 3) {
             String playerContent = site.recent().spider().playerContent(flag, id, VodConfig.get().getFlags());
             SpiderDebug.log("player", playerContent);
             Result result = Result.fromJson(playerContent);
@@ -165,15 +195,9 @@ public class SiteApi {
             result.setUrl(Source.get().fetch(result));
             result.setHeader(site.getHeader());
             return result;
-        } else if (site.isEmpty() && "push_agent".equals(key)) {
+        } else if (site.isEmpty() && PUSH.equals(key)) {
             Result result = new Result();
-            if (id.startsWith("webdav://")) {
-                NetworkPlayResolver.ResolvedWebDav resolved = NetworkPlayResolver.resolveWebDav(id);
-                result.setUrl(resolved.url());
-                result.setHeader(resolved.headers());
-            } else {
-                result.setUrl(id);
-            }
+            result.setUrl(id);
             result.setParse(0);
             result.setFlag(flag);
             result.setUrl(Source.get().fetch(result));

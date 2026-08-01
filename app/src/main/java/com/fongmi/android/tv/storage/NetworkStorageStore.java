@@ -13,6 +13,7 @@ import java.util.List;
 public class NetworkStorageStore {
 
     private static final String KEY = "network_storages";
+    private static final String KEY_HOME = "network_storage_home";
     private static final Gson GSON = new Gson();
     private static final Type LIST_TYPE = new TypeToken<List<NetworkStorage>>() {
     }.getType();
@@ -35,6 +36,27 @@ public class NetworkStorageStore {
         return null;
     }
 
+    public static NetworkStorage getHome() {
+        return find(getHomeId());
+    }
+
+    public static String getHomeId() {
+        return Prefers.getString(KEY_HOME);
+    }
+
+    public static boolean isHome(String id) {
+        return !TextUtils.isEmpty(id) && id.equals(getHomeId());
+    }
+
+    public static void setHome(String id) {
+        if (TextUtils.isEmpty(id)) Prefers.remove(KEY_HOME);
+        else Prefers.put(KEY_HOME, id);
+    }
+
+    public static void clearHomeIf(String id) {
+        if (isHome(id)) Prefers.remove(KEY_HOME);
+    }
+
     public static void save(NetworkStorage item) {
         if (item == null || TextUtils.isEmpty(item.getId())) return;
         List<NetworkStorage> list = getAll();
@@ -55,5 +77,6 @@ public class NetworkStorageStore {
         List<NetworkStorage> list = getAll();
         list.removeIf(item -> id.equals(item.getId()));
         Prefers.put(KEY, GSON.toJson(list));
+        clearHomeIf(id);
     }
 }

@@ -15,6 +15,8 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Diffable;
+import com.fongmi.android.tv.storage.NetworkPlayResolver;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
@@ -257,6 +259,11 @@ public class History implements Diffable<History> {
     }
 
     public String getSiteName() {
+        String vodId = getVodId();
+        if (NetworkPlayResolver.isNetworkPlayUrl(vodId)) {
+            String title = NetworkPlayResolver.displayTitle(vodId);
+            return TextUtils.isEmpty(title) ? ResUtil.getString(R.string.setting_network_storage) : title;
+        }
         return VodConfig.get().getSite(getSiteKey()).getName();
     }
 

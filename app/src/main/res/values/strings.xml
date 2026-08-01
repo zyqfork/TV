@@ -13,6 +13,7 @@
     <string name="detail_site">Site: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_year">Year: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">Area: <xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_path">Path: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">Type: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_director">Director: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">Actor: <xliff:g name="name">%s</xliff:g></string>
@@ -129,11 +130,11 @@
     <string name="setting_network_storage">Network storage</string>
     <string name="network_storage_add_smb">Add SMB</string>
     <string name="network_storage_add_webdav">Add WebDAV</string>
-    <string name="network_storage_discover_smb">Discover SMB</string>
     <string name="network_storage_discovering">Scanning LAN for SMB…</string>
     <string name="network_storage_discover_empty">No SMB hosts found</string>
     <string name="network_storage_discover_pick">Select SMB host</string>
     <string name="network_storage_discover_done">Found %d SMB host(s)</string>
+    <string name="network_storage_manual">Enter manually</string>
     <string name="network_storage_empty">No network storage</string>
     <string name="network_storage_name">Name</string>
     <string name="network_storage_host">Host</string>
@@ -147,6 +148,8 @@
     <string name="network_storage_edit">Edit</string>
     <string name="network_storage_delete">Delete</string>
     <string name="network_storage_browse">Browse</string>
+    <string name="network_storage_pin_home">Show on home</string>
+    <string name="network_storage_unpin_home">Remove from home</string>
     <string name="network_storage_invalid">Please fill in required fields</string>
     <string name="network_storage_list_fail">Failed to list directory</string>
     <string name="network_storage_share_missing">Share not found. Showing available shares.</string>
@@ -216,6 +219,7 @@
         <item>Best stability</item>
     </string-array>
     <string name="setting_incognito">Incognito mode</string>
+    <string name="setting_config_boot_refresh">Auto refresh</string>
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
@@ -232,6 +236,7 @@
 
     <!-- Backup & Restore -->
     <string name="restore_select">Select backup</string>
+    <string name="restore_empty">No backups found</string>
     <string name="restore_success">Restore successful</string>
     <string name="restore_fail">Restore failed</string>
     <string name="backup_success">Backup successful</string>

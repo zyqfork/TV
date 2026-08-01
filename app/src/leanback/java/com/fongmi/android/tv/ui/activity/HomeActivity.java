@@ -52,6 +52,8 @@ import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.storage.NetworkStorage;
+import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
@@ -298,6 +300,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         items.add(Func.create(R.string.home_search));
         items.add(Func.create(R.string.home_keep));
         items.add(Func.create(R.string.home_push));
+        NetworkStorage homeStorage = NetworkStorageStore.getHome();
+        if (homeStorage != null) {
+            items.add(Func.create(R.string.home_network_storage, null, homeStorage.getId()));
+        }
         items.add(Func.create(R.string.home_setting));
         mFuncAdapter.setItems(items, new BaseDiffCallback<Func>());
     }
@@ -417,6 +423,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         else if (item.getResId() == R.string.home_keep) KeepActivity.start(this);
         else if (item.getResId() == R.string.home_push) PushActivity.start(this);
         else if (item.getResId() == R.string.home_search) SearchActivity.start(this);
+        else if (item.getResId() == R.string.home_network_storage) NetworkBrowseActivity.start(this, item.getId());
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
     }
 

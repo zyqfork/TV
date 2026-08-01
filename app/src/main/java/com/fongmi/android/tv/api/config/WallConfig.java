@@ -38,11 +38,17 @@ public class WallConfig extends BaseConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().config(config).load(callback);
+        get().config(config).force().load(callback);
     }
 
     public WallConfig init() {
         return config(Config.wall());
+    }
+
+    @Override
+    public WallConfig force() {
+        super.force();
+        return this;
     }
 
     public WallConfig config(Config config) {

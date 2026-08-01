@@ -8,6 +8,7 @@ import java.util.Locale;
 public final class Formatters {
 
     public static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT);
+    public static final DateTimeFormatter BACKUP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss", Locale.ROOT);
     public static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT);
     public static final DateTimeFormatter TIME_SEC = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT).withZone(ZoneId.systemDefault());
     public static final DateTimeFormatter LOCAL_DATETIME = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss", Locale.ROOT);

@@ -38,6 +38,51 @@ public final class NetworkPlayResolver {
         return storage;
     }
 
+    public static String displayTitle(String url) {
+        if (!isNetworkPlayUrl(url)) return "";
+        try {
+            return requireStorage(url).displayTitle();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String fileName(String url) {
+        String path = relativePath(url);
+        if (TextUtils.isEmpty(path)) return "";
+        int index = path.lastIndexOf('/');
+        return index < 0 ? path : path.substring(index + 1);
+    }
+
+    public static String protocolLabel(String url) {
+        if (!isNetworkPlayUrl(url)) return "";
+        try {
+            NetworkStorage storage = requireStorage(url);
+            return storage.isWebDav() ? "WebDAV" : "SMB";
+        } catch (Exception e) {
+            return url.startsWith("webdav://") ? "WebDAV" : "SMB";
+        }
+    }
+
+    /** Display path like /DCIM/Movies/a.mp4 (share + relative when applicable). */
+    public static String displayPath(String url) {
+        if (!isNetworkPlayUrl(url)) return "";
+        String path = relativePath(url);
+        try {
+            NetworkStorage storage = requireStorage(url);
+            if (storage.isSmb()) {
+                String share = storage.getShare();
+                if (!TextUtils.isEmpty(share)) {
+                    if (path.isEmpty()) path = share;
+                    else if (!path.equals(share) && !path.startsWith(share + "/")) path = share + "/" + path;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (path.isEmpty()) return "/";
+        return path.startsWith("/") ? path : "/" + path;
+    }
+
     /** Resolve webdav://id/... to http(s) URL + Basic auth headers for PlayerManager. */
     public static ResolvedWebDav resolveWebDav(String url) {
         NetworkStorage storage = requireStorage(url);

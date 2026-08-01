@@ -84,6 +84,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
+        mBinding.configBootRefreshText.setText(Setting.getSwitch(Setting.isConfigBootRefresh()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
     }
 
@@ -117,6 +118,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
+        mBinding.configBootRefresh.setOnClickListener(this::setConfigBootRefresh);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
@@ -250,7 +252,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     private void setWallRefresh(View view) {
         Setting.putWall(0);
-        WallConfig.get().load(getCallback());
+        WallConfig.get().force().load(getCallback());
     }
 
     private boolean onWallHistory(View view) {
@@ -261,6 +263,11 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setIncognito(View view) {
         Setting.putIncognito(!Setting.isIncognito());
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
+    }
+
+    private void setConfigBootRefresh(View view) {
+        Setting.putConfigBootRefresh(!Setting.isConfigBootRefresh());
+        mBinding.configBootRefreshText.setText(Setting.getSwitch(Setting.isConfigBootRefresh()));
     }
 
     private void setSize(View view) {
@@ -321,9 +328,9 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void initConfig() {
-        VodConfig.get().init().load(getCallback());
-        LiveConfig.get().init().load();
-        WallConfig.get().init().load();
+        VodConfig.get().init().force().load(getCallback());
+        LiveConfig.get().init().force().load();
+        WallConfig.get().init().force().load();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

@@ -113,6 +113,15 @@ public class Setting {
         Prefers.put("incognito", incognito);
     }
 
+    /** When true (default), cold start re-fetches vod/live subscription config. */
+    public static boolean isConfigBootRefresh() {
+        return Prefers.getBoolean("config_boot_refresh", true);
+    }
+
+    public static void putConfigBootRefresh(boolean refresh) {
+        Prefers.put("config_boot_refresh", refresh);
+    }
+
     public static boolean getUpdate() {
         return Prefers.getBoolean("update", true);
     }

@@ -4,10 +4,12 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -33,6 +35,7 @@ abstract class BaseConfig {
     private final AtomicInteger taskId = new AtomicInteger(0);
 
     protected boolean sync;
+    protected boolean forceRefresh;
     protected volatile Config config;
     private volatile Future<?> future;
 
@@ -79,6 +82,11 @@ abstract class BaseConfig {
         OkHttp.dns().addAll(hosts);
     }
 
+    public BaseConfig force() {
+        this.forceRefresh = true;
+        return this;
+    }
+
     public void load(Callback callback) {
         int id = taskId.incrementAndGet();
         if (future != null && !future.isDone()) future.cancel(true);
@@ -102,8 +110,19 @@ abstract class BaseConfig {
             if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         } finally {
+            forceRefresh = false;
             if (taskId.get() == id) postEvent();
         }
+    }
+
+    /** Network fetch, or cached Config.json when boot refresh is off. */
+    protected String fetchJson(Config config) throws Exception {
+        if (!forceRefresh && !Setting.isConfigBootRefresh() && !TextUtils.isEmpty(config.getJson())) {
+            return config.getJson();
+        }
+        String json = Decoder.getJson(UrlUtil.convert(config.getUrl()), getTag());
+        config.setJson(json);
+        return json;
     }
 
     protected boolean isCanceled(Throwable e) {
