@@ -31,6 +31,9 @@ import java.util.Objects;
 
 public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServer.Configuration> {
 
+    private static final int ACCEPT_BACKLOG = 50;
+    private static final int SOCKET_TIMEOUT_MS = 30_000;
+
     private final Configuration configuration;
     private ServerSocket serverSocket;
     private volatile boolean stopped;
@@ -51,7 +54,7 @@ public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServ
         try {
             serverSocket = new ServerSocket();
             serverSocket.setReuseAddress(true);
-            serverSocket.bind(new InetSocketAddress(bindAddress, configuration.getListenPort()), 50);
+            serverSocket.bind(new InetSocketAddress(bindAddress, configuration.getListenPort()), ACCEPT_BACKLOG);
         } catch (IOException e) {
             throw new InitializationException("Could not bind HTTP server socket on " + bindAddress, e);
         }
@@ -76,7 +79,7 @@ public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServ
         while (!stopped) {
             try {
                 Socket socket = serverSocket.accept();
-                socket.setSoTimeout(30_000);
+                socket.setSoTimeout(SOCKET_TIMEOUT_MS);
                 router.received(new SocketUpnpStream(router.getProtocolFactory(), socket));
             } catch (SocketException e) {
                 break;
@@ -175,6 +178,7 @@ public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServ
             byte[] body = new byte[len];
             int offset = 0, read;
             while (offset < len && (read = is.read(body, offset, len - offset)) != -1) offset += read;
+            if (offset < len) throw new IOException("Truncated HTTP body: expected " + len + ", got " + offset);
             if (msg.isContentTypeMissingOrText()) msg.setBodyCharacters(body);
             else msg.setBody(UpnpMessage.BodyType.BYTES, body);
         }

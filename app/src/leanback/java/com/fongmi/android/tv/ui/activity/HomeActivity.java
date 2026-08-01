@@ -39,6 +39,7 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.dlna.CastNetworkWatcher;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -133,6 +134,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         AirPlaySetting.ensureDefaultInterface();
         DLNARendererService.start(this);
         AirPlayServer.start(this);
+        CastNetworkWatcher.register(this);
         Updater.create().start(this);
         setRecyclerView();
         setViewModel();

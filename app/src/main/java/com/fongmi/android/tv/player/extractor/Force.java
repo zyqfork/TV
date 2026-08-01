@@ -8,6 +8,10 @@ import android.os.IBinder;
 import android.os.SystemClock;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Constant;
+import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.exception.ExtractException;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.forcetech.Util;
 import com.github.catvod.net.OkHttp;
@@ -35,7 +39,13 @@ public class Force implements Source.Extractor, ServiceConnection {
     public String fetch(String url) throws Exception {
         String scheme = Util.scheme(url);
         if (!set.contains(scheme)) init(scheme);
-        while (!set.contains(scheme)) SystemClock.sleep(10);
+        long deadline = SystemClock.elapsedRealtime() + Constant.TIMEOUT_EXTRACT;
+        while (!set.contains(scheme)) {
+            if (SystemClock.elapsedRealtime() >= deadline) {
+                throw new ExtractException(ResUtil.getString(R.string.error_play_url));
+            }
+            SystemClock.sleep(10);
+        }
         Uri uri = UrlUtil.uri(url);
         int port = Util.port(scheme);
         String id = uri.getLastPathSegment();

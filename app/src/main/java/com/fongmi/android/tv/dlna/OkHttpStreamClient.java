@@ -19,6 +19,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class OkHttpStreamClient extends AbstractStreamClient<OkHttpStreamClient.Configuration, Call> {
 
@@ -69,7 +70,8 @@ public class OkHttpStreamClient extends AbstractStreamClient<OkHttpStreamClient.
                 UpnpHeaders upnpHeaders = new UpnpHeaders();
                 response.headers().names().forEach(name -> response.headers(name).forEach(value -> upnpHeaders.add(name, value)));
                 responseMessage.setHeaders(upnpHeaders);
-                byte[] bytes = response.body().bytes();
+                ResponseBody body = response.body();
+                byte[] bytes = body != null ? body.bytes() : new byte[0];
                 if (bytes.length > 0) responseMessage.setBodyCharacters(bytes);
                 return responseMessage;
             }

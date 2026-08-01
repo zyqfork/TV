@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.extractor;
 import android.net.Uri;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Core;
@@ -19,6 +20,7 @@ import com.tvbus.engine.TVCore;
 
 import java.io.File;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class TVBus implements Source.Extractor, Listener {
 
@@ -58,7 +60,10 @@ public class TVBus implements Source.Extractor, Listener {
         if (tvcore == null) init(core = c);
         latch = new CountDownLatch(1);
         tvcore.start(url);
-        latch.await();
+        if (!latch.await(Constant.TIMEOUT_EXTRACT, TimeUnit.MILLISECONDS)) {
+            stop();
+            throw new ExtractException(ResUtil.getString(R.string.error_play_url));
+        }
         return check();
     }
 

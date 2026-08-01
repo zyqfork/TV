@@ -89,7 +89,7 @@ public class PlayerHelper {
             intent.setDataAndType(data, "video/*");
             intent.putExtra("title", title).putExtra("return_result", isVod);
             intent.putExtra("headers", list.toArray(String[]::new));
-            if (isVod) intent.putExtra("position", (int) position);
+            if (isVod) intent.putExtra("position", position);
             activity.startActivityForResult(getChooser(intent), 1001);
         } catch (Exception ignored) {
         }
@@ -98,8 +98,9 @@ public class PlayerHelper {
     public static void onExternalResult(Intent data, Runnable onNext, LongConsumer seekTo) {
         try {
             if (data == null || data.getExtras() == null) return;
-            long position = data.getExtras().getInt("position", 0);
-            String endBy = data.getExtras().getString("end_by", "");
+            Bundle extras = data.getExtras();
+            long position = extras.getLong("position", extras.getInt("position", 0));
+            String endBy = extras.getString("end_by", "");
             if ("playback_completion".equals(endBy)) App.post(onNext);
             if ("user".equals(endBy)) seekTo.accept(position);
         } catch (Exception ignored) {

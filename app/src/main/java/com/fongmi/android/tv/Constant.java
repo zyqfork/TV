@@ -18,6 +18,7 @@ public class Constant {
     public static final long TIMEOUT_PARSE_LIVE = TimeUnit.SECONDS.toMillis(10);
     public static final long TIMEOUT_FIRST_FRAME_LIVE = TimeUnit.SECONDS.toMillis(8);
     public static final long TIMEOUT_FIRST_FRAME_VOD = TimeUnit.SECONDS.toMillis(20);
+    public static final long TIMEOUT_EXTRACT = TimeUnit.SECONDS.toMillis(10);
     public static final long HISTORY_TIME = TimeUnit.DAYS.toMillis(60);
 
     public static long getOpEdLimit(long duration) {

@@ -104,10 +104,15 @@ public class SmbDataSource extends BaseDataSource {
         try {
             if (file != null) file.close();
         } catch (Exception ignored) {
+        } finally {
+            file = null;
+            try {
+                if (helper != null) helper.close();
+            } catch (Exception ignored) {
+            } finally {
+                helper = null;
+            }
         }
-        file = null;
-        if (helper != null) helper.close();
-        helper = null;
         if (opened) {
             opened = false;
             transferEnded();

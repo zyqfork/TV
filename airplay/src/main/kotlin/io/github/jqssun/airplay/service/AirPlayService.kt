@@ -55,6 +55,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class VideoPlaybackInfo(
@@ -671,8 +672,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     }
 
     override fun onConnectionInit() {
-        val firstConnection = _connectionCount.value == 0
-        _connectionCount.value++
+        var firstConnection = false
+        _connectionCount.update { current ->
+            firstConnection = current == 0
+            current + 1
+        }
         log("Client connected (${_connectionCount.value})")
         if (!firstConnection) return
         // conn_init is only a tcp pre-auth signal. pin-required sessions must wait for
@@ -684,9 +688,13 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     }
 
     override fun onConnectionDestroy() {
-        _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
-        log("Client disconnected (${_connectionCount.value})")
-        if (_connectionCount.value == 0) {
+        var remaining = 0
+        _connectionCount.update { current ->
+            remaining = (current - 1).coerceAtLeast(0)
+            remaining
+        }
+        log("Client disconnected ($remaining)")
+        if (remaining == 0) {
             // Drop without POST /stop still frees codec / audio / pin / session state.
             stopLocalSession("disconnect")
         } else {

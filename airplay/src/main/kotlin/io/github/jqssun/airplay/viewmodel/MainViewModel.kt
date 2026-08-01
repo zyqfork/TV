@@ -290,7 +290,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val snapshot: List<String>
         synchronized(_logLock) {
             _logList.add(line)
-            while (_logList.size > 9999) _logList.removeAt(0)
+            while (_logList.size > MAX_LOG_LINES) _logList.removeAt(0)
             persistLogsLocked()
             snapshot = _logList.toList()
         }
@@ -323,7 +323,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val snapshot: List<String>
         synchronized(_logLock) {
             val restored = runCatching {
-                if (logFile.exists()) logFile.readLines().takeLast(9999) else emptyList()
+                if (logFile.exists()) logFile.readLines().takeLast(MAX_LOG_LINES) else emptyList()
             }.getOrDefault(emptyList())
             _logList.clear()
             _logList.addAll(restored)
@@ -334,6 +334,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun persistLogsLocked() {
         runCatching {
+            if (logFile.exists() && logFile.length() > MAX_LOG_BYTES) {
+                val bak = File(logFile.parentFile, "airplay_logs.txt.1")
+                if (bak.exists()) bak.delete()
+                logFile.renameTo(bak)
+            }
             logFile.writeText(_logList.joinToString("\n"))
         }
     }
@@ -608,5 +613,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // raise if the play/pause icon flickers back right after a local toggle
         const val VIDEO_ACTION_SYNC_HOLD_MS = 700L
         const val SERVER_RESTART_DEBOUNCE_MS = 500L
+        const val MAX_LOG_LINES = 2000
+        const val MAX_LOG_BYTES = 1_000_000L
     }
 }

@@ -44,6 +44,8 @@ public class AirPlayServer {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             bridged = null;
+            // Service died while still "bound" from our side; allow bindBridge() to reconnect.
+            bridgeBound = false;
         }
     };
 
