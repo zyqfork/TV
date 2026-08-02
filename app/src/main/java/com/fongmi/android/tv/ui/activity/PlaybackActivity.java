@@ -60,6 +60,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private PlaybackService mService;
     private boolean audioOnly;
     private boolean scrubbing;
+    private boolean scrubResumePlay;
     private boolean redirect;
     private boolean bound;
     private boolean stop;
@@ -292,6 +293,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         getSeekView().getTimeBar().addListener(new TimeBar.OnScrubListener() {
             @Override
             public void onScrubStart(@NonNull TimeBar timeBar, long position) {
+                scrubResumePlay = mController != null && mController.isPlaying();
                 PlaybackActivity.this.setScrubbing(true);
             }
 
@@ -312,7 +314,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void onScrubStop(boolean canceled) {
-        if (!canceled && mController != null && mController.isCommandAvailable(Player.COMMAND_PLAY_PAUSE)) mController.play();
+        // Only resume if playback was already playing when scrub started (paused scrub stays paused).
+        if (!canceled && scrubResumePlay && mController != null && mController.isCommandAvailable(Player.COMMAND_PLAY_PAUSE)) {
+            mController.play();
+        }
+        scrubResumePlay = false;
         setScrubbing(false);
     }
 

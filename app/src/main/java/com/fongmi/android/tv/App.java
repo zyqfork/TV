@@ -25,7 +25,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private final Gson gson;
     private final long time;
 
-    private Activity activity;
+    private volatile Activity activity;
     private Hook hook;
 
     public App() {

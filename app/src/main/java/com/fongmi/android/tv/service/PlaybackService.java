@@ -200,6 +200,13 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     private void releaseResources() {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        navigationCallback = null;
+        navigationKey = null;
+        playerCallbacks.clear();
+        if (sessionPlayer != null) {
+            sessionPlayer.removeListener(listener);
+            sessionPlayer = null;
+        }
         releaseSession();
         player.stop();
         player.release();
@@ -521,7 +528,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     @Override
     public void onPlayerRebuild(Player newPlayer) {
-        sessionPlayer.removeListener(listener);
+        if (sessionPlayer != null) sessionPlayer.removeListener(listener);
         sessionPlayer = newPlayer;
         sessionPlayer.addListener(listener);
         if (session != null) session.setPlayer(wrap(newPlayer));
@@ -569,7 +576,11 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     @NonNull
     @Override
     public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(@NonNull MediaLibrarySession session, @NonNull MediaSession.ControllerInfo browser, @NonNull String parentId, int page, int pageSize, @Nullable MediaLibraryService.LibraryParams params) {
-        return Task.executor().submit(() -> LibraryResult.ofItemList(BrowseTree.getChildren(parentId, page, pageSize), params));
+        if (!isRunning()) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED));
+        return Task.executor().submit(() -> {
+            if (!isRunning()) return LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED);
+            return LibraryResult.ofItemList(BrowseTree.getChildren(parentId, page, pageSize), params);
+        });
     }
 
     @NonNull
@@ -591,7 +602,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     @NonNull
     @Override
     public ListenableFuture<LibraryResult<MediaItem>> onGetItem(@NonNull MediaLibrarySession session, @NonNull MediaSession.ControllerInfo browser, @NonNull String mediaId) {
+        if (!isRunning()) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED));
         return Task.executor().submit(() -> {
+            if (!isRunning()) return LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED);
             MediaItem item = BrowseTree.getItem(mediaId);
             return item != null ? LibraryResult.ofItem(item, null) : LibraryResult.ofError(SessionError.ERROR_BAD_VALUE);
         });

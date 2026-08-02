@@ -176,6 +176,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     @Override
     public void onDestroy() {
+        cancelPending();
         unbindPlaybackService();
         super.onDestroy();
     }
@@ -203,7 +204,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         if (!bound) return;
         bound = false;
         cleanupPlaybackRefs();
-        unbindService(this);
+        try {
+            unbindService(this);
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     public void setDlnaActive(boolean active) {
@@ -234,6 +238,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
             unbindPlaybackService();
             return;
         }
+        if (!(binder instanceof PlaybackService.LocalBinder)) {
+            unbindPlaybackService();
+            return;
+        }
         playbackService = ((PlaybackService.LocalBinder) binder).getService();
         playbackService.addPlayerCallback(playerCallback);
         player = playbackService.player();
@@ -246,17 +254,20 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
+        // System already dropped the connection; clear flag before cleanup so later unbind is a no-op.
+        bound = false;
         cleanupPlaybackRefs();
     }
 
     private void notifyState() {
-        if (avTransportImpl == null || player == null || !isDlnaActive) return;
-        int state = player.getPlaybackState();
+        PlayerManager local = player;
+        if (avTransportImpl == null || local == null || !isDlnaActive) return;
+        int state = local.getPlaybackState();
         if (state == Player.STATE_IDLE) return;
-        avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
+        avTransportImpl.updatePositionCache(local.getPosition(), getDuration(local));
         RenderState renderState = switch (state) {
             case Player.STATE_BUFFERING -> RenderState.PREPARING;
-            case Player.STATE_READY -> player.isPlaying() ? RenderState.PLAYING : RenderState.PAUSED;
+            case Player.STATE_READY -> local.isPlaying() ? RenderState.PLAYING : RenderState.PAUSED;
             case Player.STATE_ENDED -> avTransportImpl.hasNext() ? RenderState.PREPARING : RenderState.STOPPED;
             default -> null;
         };
@@ -266,14 +277,18 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private final Runnable positionUpdater = new Runnable() {
         @Override
         public void run() {
-            if (!isDlnaActive || player == null) return;
-            if (avTransportImpl != null && player.isPlaying()) avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
+            if (!isDlnaActive) return;
+            PlayerManager local = player;
+            if (local == null) return;
+            if (avTransportImpl != null && local.isPlaying()) {
+                avTransportImpl.updatePositionCache(local.getPosition(), getDuration(local));
+            }
             App.post(this, 1000);
         }
     };
 
-    private long getDuration() {
-        long duration = player.getDuration();
+    private long getDuration(PlayerManager local) {
+        long duration = local.getDuration();
         return duration == C.TIME_UNSET || duration <= 0 ? -1 : duration;
     }
 

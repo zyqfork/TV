@@ -95,7 +95,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         Task.submit(() -> {
             PlaySpec play = MpvHlsPngTs.prepare(spec);
             App.post(() -> {
-                if (gen != startGeneration) return;
+                if (gen != startGeneration || player == null) return;
                 player.setMediaItem(MediaItemFactory.from(play), position);
                 player.prepare();
                 player.play();

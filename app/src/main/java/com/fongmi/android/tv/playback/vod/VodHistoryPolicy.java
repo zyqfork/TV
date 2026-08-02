@@ -67,6 +67,11 @@ public class VodHistoryPolicy {
     }
 
     public long startPositionMs(History history) {
-        return history == null ? C.TIME_UNSET : Math.max(history.getOpening(), history.getPosition());
+        if (history == null) return C.TIME_UNSET;
+        // Treat TIME_UNSET / negative as 0 so replay-after-clear does not pass UNSET through Math.max.
+        long opening = history.getOpening() > 0 ? history.getOpening() : 0;
+        long position = history.getPosition() > 0 ? history.getPosition() : 0;
+        long start = Math.max(opening, position);
+        return start > 0 ? start : C.TIME_UNSET;
     }
 }

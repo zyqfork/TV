@@ -53,8 +53,9 @@ public class VodPlaybackController {
     }
 
     public void onPlayerResult(Result result) {
+        // Only apply when the pending request still matches; do not fall back to currentRequest
+        // (that can attach a late result to a newly selected episode).
         VodPlayRequest request = state.getPendingRequest();
-        if (request == null) request = currentRequest();
         if (cannotApply(result, request)) return;
         applyPlayerResult(result, request);
     }
@@ -196,6 +197,7 @@ public class VodPlaybackController {
     private void nextEpisode(boolean notify, boolean reversed) {
         if (!state.hasEpisode()) return;
         Episode item = getRelativeEpisode(1);
+        if (item == null) return;
         if (!item.isSelected()) selectEpisode(item);
         else if (notify) host.showNoNext(reversed);
     }
@@ -203,6 +205,7 @@ public class VodPlaybackController {
     private void prevEpisode(boolean notify, boolean reversed) {
         if (!state.hasEpisode()) return;
         Episode item = getRelativeEpisode(-1);
+        if (item == null) return;
         if (!item.isSelected()) selectEpisode(item);
         else if (notify) host.showNoPrev(reversed);
     }
@@ -345,13 +348,12 @@ public class VodPlaybackController {
         return host.isHostFinishing() || !state.hasEpisode() || request == null || !request.matches(host.getVodKey(), state.getFlag(), state.getEpisode()) || !request.accepts(result);
     }
 
-    private VodPlayRequest currentRequest() {
-        return state.hasEpisode() ? VodPlayRequest.create(host.getVodKey(), state.getFlag(), state.getEpisode()) : null;
-    }
-
     private Episode getRelativeEpisode(int offset) {
         List<Episode> episodes = state.getFlag().getEpisodes();
+        if (episodes.isEmpty()) return null;
         int current = state.getFlag().getPosition();
+        // No selected episode yet: do not clamp -1±1 onto episode 0/1.
+        if (current < 0 || current >= episodes.size()) return null;
         int position = Math.clamp(current + offset, 0, episodes.size() - 1);
         return episodes.get(position);
     }
