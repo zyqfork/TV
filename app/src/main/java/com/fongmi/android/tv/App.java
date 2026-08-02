@@ -56,8 +56,11 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     public static void post(Runnable runnable, long delayMillis) {
-        get().handler.removeCallbacks(runnable);
-        if (delayMillis >= 0) get().handler.postDelayed(runnable, delayMillis);
+        // remove + postDelayed must be atomic across threads that schedule the same runnable.
+        synchronized (get().handler) {
+            get().handler.removeCallbacks(runnable);
+            if (delayMillis >= 0) get().handler.postDelayed(runnable, delayMillis);
+        }
     }
 
     public static void removeCallbacks(Runnable runnable) {

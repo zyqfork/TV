@@ -65,6 +65,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     }
 
     public static void stop(Context context) {
+        cancelPending();
         context.stopService(new Intent(context, DLNARendererService.class));
     }
 
@@ -73,14 +74,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     public static void apply(Context context) {
         Context app = context.getApplicationContext();
-        if (pendingApply != null) {
-            App.removeCallbacks(pendingApply);
-            pendingApply = null;
-        }
-        if (pendingStart != null) {
-            App.removeCallbacks(pendingStart);
-            pendingStart = null;
-        }
+        cancelPending();
         pendingApply = () -> {
             pendingApply = null;
             stop(app);
@@ -91,6 +85,17 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
             App.post(pendingStart, 400);
         };
         App.post(pendingApply, 1000);
+    }
+
+    private static void cancelPending() {
+        if (pendingApply != null) {
+            App.removeCallbacks(pendingApply);
+            pendingApply = null;
+        }
+        if (pendingStart != null) {
+            App.removeCallbacks(pendingStart);
+            pendingStart = null;
+        }
     }
 
     @Override

@@ -60,6 +60,7 @@ public class PlayerManager implements ParseCallback {
     private boolean subtitleDecodeHintShown;
     private boolean openReported;
     private long playStartRealtimeMs;
+    private int firstFrameExtendCount;
     private int retry;
     private int sourceRetry;
     private int decode;
@@ -640,9 +641,9 @@ public class PlayerManager implements ParseCallback {
 
     private void onFirstFrameTimeout() {
         if (openReported || spec == null || isReleased()) return;
-        // MPV on phone/tablet may need longer for surface settle + demux. If playback
-        // already advanced, keep waiting instead of failing the open.
-        if (engine.getType() == PlayerEngine.Type.MPV && getPosition() > 0) {
+        // MPV may advance position before STATE_READY; extend a few times, then fail.
+        if (engine.getType() == PlayerEngine.Type.MPV && getPosition() > 0 && firstFrameExtendCount < 3) {
+            firstFrameExtendCount++;
             scheduleFirstFrameTimeout();
             return;
         }
@@ -720,6 +721,7 @@ public class PlayerManager implements ParseCallback {
     private void setMediaItem(long timeout, long startPositionMs) {
         if (spec == null || spec.getUrl() == null) return;
         openReported = false;
+        firstFrameExtendCount = 0;
         playStartRealtimeMs = SystemClock.elapsedRealtime();
         ensureEngine(spec.checkUa());
         ensureDecodeForSubs(spec);

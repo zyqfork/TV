@@ -177,8 +177,9 @@ public class LivePlaybackController {
         if (channel == null || channel.isOnly()) return;
         int current = channel.getIndex();
         int best = LineQualityStore.bestIndex(channel.getUrls(), current);
+        // Already on the best line: do not switch away to a worse one.
+        if (best == current) return;
         channel.setIndex(best);
-        if (channel.getIndex() == current) channel.switchLine(true);
         host.renderLineSelection(channel, show);
         scheduleRefresh(C.TIME_UNSET, true);
     }

@@ -42,6 +42,9 @@ public class CustomTitleView extends MaterialTextView {
     public void setListener(Listener listener) {
         this.listener = listener;
         setOnClickListener(v -> listener.showDialog());
+        // setOnClickListener can flip focusable; keep XML intent so DPAD reaches the grid.
+        setFocusable(false);
+        setFocusableInTouchMode(false);
     }
 
     private boolean hasEvent(KeyEvent event) {

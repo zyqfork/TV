@@ -6,6 +6,7 @@ import android.util.AttributeSet;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.OverScroller;
 
@@ -25,6 +26,9 @@ public class HomeGridView extends VerticalGridView {
 
     private boolean freeScroll;
     private boolean pinning;
+    private boolean pointerDragged;
+    private float downX;
+    private float downY;
     private float wheelCarry;
     private final OverScroller scroller;
     private final Runnable endFreeScroll = () -> {
@@ -83,13 +87,13 @@ public class HomeGridView extends VerticalGridView {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent e) {
-        trackPointer(e);
+        if (isPointerFreeScrollSource(e)) trackPointer(e);
         return super.onInterceptTouchEvent(e);
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        trackPointer(e);
+        if (isPointerFreeScrollSource(e)) trackPointer(e);
         return super.onTouchEvent(e);
     }
 
@@ -148,20 +152,40 @@ public class HomeGridView extends VerticalGridView {
         return super.onRequestFocusInDescendants(direction, previouslyFocusedRect);
     }
 
+    private boolean isPointerFreeScrollSource(MotionEvent e) {
+        // Free-scroll is for mouse/stylus drag. Touchscreen taps must reach Leanback item clicks.
+        return e.isFromSource(InputDevice.SOURCE_CLASS_POINTER)
+                && (e.isFromSource(InputDevice.SOURCE_MOUSE) || e.isFromSource(InputDevice.SOURCE_STYLUS));
+    }
+
     private void trackPointer(MotionEvent e) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 scroller.forceFinished(true);
                 removeCallbacks(wheelFling);
-                beginFreeScroll();
+                removeCallbacks(endFreeScroll);
+                pointerDragged = false;
+                downX = e.getX();
+                downY = e.getY();
                 break;
             case MotionEvent.ACTION_MOVE:
+                if (!pointerDragged) {
+                    float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                    if (Math.hypot(e.getX() - downX, e.getY() - downY) < slop) break;
+                    pointerDragged = true;
+                }
                 beginFreeScroll();
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                syncSelectionToVisible();
-                endFreeScrollSoon();
+                if (pointerDragged) {
+                    syncSelectionToVisible();
+                    endFreeScrollSoon();
+                } else {
+                    freeScroll = false;
+                    removeCallbacks(endFreeScroll);
+                }
+                pointerDragged = false;
                 break;
             default:
                 break;

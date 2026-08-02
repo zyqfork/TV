@@ -192,8 +192,9 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     public void play(UnsignedIntegerFourBytes instanceId, String speed) {
         App.post(() -> {
             if (player == null || !dlnaActive) return;
+            if (currentURI.isEmpty()) return;
             int state = player.getPlaybackState();
-            if (!currentURI.isEmpty() && (state == Player.STATE_ENDED || state == Player.STATE_IDLE)) {
+            if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) {
                 startCastActivity(new CastAction(currentURI, currentMetaData, parseHeaders(currentMetaData)));
             } else {
                 player.play();
@@ -246,7 +247,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
             startCastActivity(new CastAction(currentURI, currentMetaData, parseHeaders(currentMetaData)));
             return;
         }
-        // No previous item: restart current from the beginning.
+        // No previous item: restart current from the beginning when a session is active.
+        if (currentURI.isEmpty()) return;
         App.post(() -> {
             if (player != null && dlnaActive) {
                 posCache = new PosCache(0, posCache.duration);
@@ -283,7 +285,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     }
 
     private boolean canPrevious() {
-        return dlnaActive && !prevURI.isEmpty();
+        // Allow Previous even before CastActivity marks dlnaActive (URI already known).
+        return !prevURI.isEmpty();
     }
 
     private TransportAction[] withNav(TransportAction... actions) {

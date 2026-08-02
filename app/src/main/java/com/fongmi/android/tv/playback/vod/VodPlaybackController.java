@@ -230,8 +230,8 @@ public class VodPlaybackController {
     public void onTimeChanged(long time, long position, long duration) {
         History history = currentHistory();
         historyPolicy.updateTime(history, time, position, duration);
-        // Skip when position already past duration (rounding); trigger when remaining <= ending.
-        if (history != null && history.getEnding() > 0 && position > 0 && position < duration
+        // Skip when duration unknown/invalid or position already past duration (rounding).
+        if (history != null && history.getEnding() > 0 && duration > 0 && position > 0 && position < duration
                 && duration - position <= history.getEnding()) nextEpisode(false);
     }
 

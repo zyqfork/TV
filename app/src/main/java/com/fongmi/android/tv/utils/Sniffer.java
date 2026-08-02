@@ -27,8 +27,12 @@ public class Sniffer {
 
     public static String getUrl(String text) {
         if (Json.isObj(text) || text.contains("$")) return text;
-        Matcher m = AI_PUSH.matcher(text);
-        if (m.find()) return m.group(0);
+        // Prefer real network schemes over the custom video: scheme to avoid matching the word
+        // "video:" inside unrelated text.
+        Matcher net = Pattern.compile("(https?|thunder|magnet|ed2k):\\S+").matcher(text);
+        if (net.find()) return net.group(0);
+        Matcher video = Pattern.compile("(?<!\\w)video:\\S+").matcher(text);
+        if (video.find()) return video.group(0);
         return text;
     }
 

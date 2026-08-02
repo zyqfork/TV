@@ -239,7 +239,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
                 moveTaskToBack(true);
             } else {
                 PlaybackService.requestShutdown(this);
-                super.onBackInvoked();
+                App.post(() -> HomeActivity.super.onBackInvoked(), 50);
             }
         }
     }

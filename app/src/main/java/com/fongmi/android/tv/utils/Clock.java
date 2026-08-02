@@ -43,6 +43,7 @@ public class Clock {
     }
 
     public void start() {
+        stop();
         timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
@@ -62,13 +63,17 @@ public class Clock {
     }
 
     public Clock stop() {
-        if (timer != null) timer.cancel();
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
         return this;
     }
 
     public void release() {
-        if (timer != null) timer.cancel();
+        stop();
         if (callback != null) callback = null;
+        view = null;
     }
 
     public interface Callback {

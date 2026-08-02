@@ -269,7 +269,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setFocus() {
         mBinding.title.setSelected(true);
-        App.post(() -> mBinding.title.setFocusable(true), 500);
+        // Title becomes focusable for site switching, but keep primary focus on the grid
+        // so DPAD/touch activate Func items instead of leaving focus stuck on the title.
+        App.post(() -> {
+            mBinding.title.setFocusable(true);
+            if (!mBinding.recycler.hasFocus()) mBinding.recycler.requestFocus();
+        }, 500);
         if (!mBinding.title.hasFocus()) mBinding.recycler.requestFocus();
     }
 
@@ -533,7 +538,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             } else {
                 // Background play off: tear down decoder/service instead of parking the task.
                 PlaybackService.requestShutdown(this);
-                super.onBackInvoked();
+                // Give the service a chance to receive ACTION_SHUTDOWN before Activity finishes.
+                App.post(() -> HomeActivity.super.onBackInvoked(), 50);
             }
         }
     }
@@ -541,6 +547,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void onDestroy() {
         CastNetworkWatcher.unregister(this);
+        if (mClock != null) mClock.release();
         LiveConfig.get().clear();
         VodConfig.get().clear();
         AppDatabase.backup();
