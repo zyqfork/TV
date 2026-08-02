@@ -111,6 +111,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     @Override
     public void onActivityDestroyed(@NonNull Activity activity) {
+        if (activity == activity()) this.activity = null;
     }
 
     @Override

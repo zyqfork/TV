@@ -23,6 +23,7 @@ public class VodPlaybackState {
     private boolean selectFirstSource;
     private boolean autoFallback;
     private boolean useParse;
+    private boolean searchTriggered;
     private String searchKeyword;
     private int qualityPosition;
 
@@ -44,6 +45,7 @@ public class VodPlaybackState {
         selectFirstSource = false;
         autoFallback = false;
         useParse = false;
+        searchTriggered = false;
         searchKeyword = "";
         qualityPosition = 0;
     }
@@ -173,6 +175,14 @@ public class VodPlaybackState {
 
     public void setUseParse(boolean useParse) {
         this.useParse = useParse;
+    }
+
+    public boolean isSearchTriggered() {
+        return searchTriggered;
+    }
+
+    public void setSearchTriggered(boolean searchTriggered) {
+        this.searchTriggered = searchTriggered;
     }
 
     public String getSearchKeyword() {

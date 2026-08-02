@@ -38,6 +38,7 @@ public class VodFallbackPolicy {
     }
 
     public void search(String keyword, boolean autoFallback) {
+        state.setSearchTriggered(true);
         state.setSearchKeyword(keyword);
         state.setAutoFallback(autoFallback);
         state.setSelectFirstSource(autoFallback);
@@ -71,8 +72,13 @@ public class VodFallbackPolicy {
     }
 
     private void fallbackToNextSource(boolean force) {
-        if (!state.hasSources()) search(host.getVodName(), true);
-        else if (state.isAutoFallback() || force) nextSource();
+        if (!state.hasSources()) {
+            // Empty search already ran for this vod — do not loop forever.
+            if (state.isSearchTriggered()) return;
+            search(host.getVodName(), true);
+        } else if (state.isAutoFallback() || force) {
+            nextSource();
+        }
     }
 
     private void nextSource() {

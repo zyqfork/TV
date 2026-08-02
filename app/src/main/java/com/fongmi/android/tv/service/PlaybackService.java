@@ -35,6 +35,7 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.Task;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
@@ -178,8 +179,8 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // Removing the app task is an explicit exit. Do not keep VOD/MPV audio alive merely
-        // because a stale controller or navigation callback still references this service.
+        // Background play / PiP on: keep the foreground media service after swipe-away.
+        if (PlayerSetting.isBackgroundOn()) return;
         shutdown();
     }
 

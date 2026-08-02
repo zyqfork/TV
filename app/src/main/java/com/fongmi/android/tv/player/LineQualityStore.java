@@ -18,6 +18,7 @@ public class LineQualityStore {
     private static final String KEY = "live_line_quality_v1";
     private static final int MAX_ENTRIES = 200;
     private static final Type TYPE = new TypeToken<Map<String, LineScore>>() {}.getType();
+    private static final Object LOCK = new Object();
 
     private static Map<String, LineScore> load() {
         try {
@@ -49,44 +50,50 @@ public class LineQualityStore {
     public static void recordSuccess(String rawUrl, long openMs) {
         String key = normalize(rawUrl);
         if (key.isEmpty()) return;
-        Map<String, LineScore> map = load();
-        LineScore score = map.getOrDefault(key, new LineScore());
-        score.ok += 1;
-        score.lastOkAt = System.currentTimeMillis();
-        if (openMs > 0) {
-            score.openCount += 1;
-            score.openMsAvg = score.openMsAvg <= 0 ? openMs : (score.openMsAvg * 4 + openMs) / 5;
+        synchronized (LOCK) {
+            Map<String, LineScore> map = load();
+            LineScore score = map.getOrDefault(key, new LineScore());
+            score.ok += 1;
+            score.lastOkAt = System.currentTimeMillis();
+            if (openMs > 0) {
+                score.openCount += 1;
+                score.openMsAvg = score.openMsAvg <= 0 ? openMs : (score.openMsAvg * 4 + openMs) / 5;
+            }
+            if (score.fail > 0) score.fail -= 1;
+            map.put(key, score);
+            save(map);
         }
-        if (score.fail > 0) score.fail -= 1;
-        map.put(key, score);
-        save(map);
     }
 
     public static void recordFailure(String rawUrl) {
         String key = normalize(rawUrl);
         if (key.isEmpty()) return;
-        Map<String, LineScore> map = load();
-        LineScore score = map.getOrDefault(key, new LineScore());
-        score.fail += 1;
-        score.lastFailAt = System.currentTimeMillis();
-        map.put(key, score);
-        save(map);
+        synchronized (LOCK) {
+            Map<String, LineScore> map = load();
+            LineScore score = map.getOrDefault(key, new LineScore());
+            score.fail += 1;
+            score.lastFailAt = System.currentTimeMillis();
+            map.put(key, score);
+            save(map);
+        }
     }
 
     public static int bestIndex(List<String> urls, int fallbackIndex) {
         if (urls == null || urls.isEmpty()) return Math.max(fallbackIndex, 0);
-        Map<String, LineScore> map = load();
-        long best = Long.MIN_VALUE;
-        int index = Math.max(0, Math.min(fallbackIndex, urls.size() - 1));
-        for (int i = 0; i < urls.size(); i++) {
-            LineScore s = map.get(normalize(urls.get(i)));
-            long score = qualityScore(s);
-            if (score > best) {
-                best = score;
-                index = i;
+        synchronized (LOCK) {
+            Map<String, LineScore> map = load();
+            long best = Long.MIN_VALUE;
+            int index = Math.max(0, Math.min(fallbackIndex, urls.size() - 1));
+            for (int i = 0; i < urls.size(); i++) {
+                LineScore s = map.get(normalize(urls.get(i)));
+                long score = qualityScore(s);
+                if (score > best) {
+                    best = score;
+                    index = i;
+                }
             }
+            return index;
         }
-        return index;
     }
 
     private static long qualityScore(LineScore s) {

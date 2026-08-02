@@ -41,8 +41,8 @@ public class DanmakuSetting {
     }
 
     public static void putLoad(boolean danmakuLoad) {
+        // Keep show/hide independent from load; user may load danmaku while overlay is off.
         Prefers.put("danmaku_load", danmakuLoad);
-        if (danmakuLoad) putShow(true);
     }
 
     public static boolean isAuto() {

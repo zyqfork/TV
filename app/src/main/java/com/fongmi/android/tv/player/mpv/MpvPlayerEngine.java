@@ -118,7 +118,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         if (player == null) return false;
         long duration = player.getDuration();
         if (duration == C.TIME_UNSET) return false;
-        return duration > TimeUnit.MINUTES.toMillis(1);
+        return duration >= TimeUnit.MINUTES.toMillis(1);
     }
 
     @Override

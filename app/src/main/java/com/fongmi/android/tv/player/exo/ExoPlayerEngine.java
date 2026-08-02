@@ -98,6 +98,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     public boolean isLive() {
         long duration = player.getDuration();
         if (duration == C.TIME_UNSET) return player.isCurrentMediaItemLive();
+        // Exclusive partition at 60s: <1min → live heuristic, >=1min → vod.
         return duration < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
     }
 
@@ -105,7 +106,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     public boolean isVod() {
         long duration = player.getDuration();
         if (duration == C.TIME_UNSET) return !player.isCurrentMediaItemLive();
-        return duration > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        return duration >= TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
     }
 
     @Override

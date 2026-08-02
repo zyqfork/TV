@@ -297,6 +297,7 @@ public class PlayerManager implements ParseCallback {
             else PlayerSetting.putVodEngine(targetEngine);
         }
         decode = PlayerSetting.getDecode(liveMode, targetEngine);
+        decodeTriedMask = 0;
         callback.onDecodeChanged();
         if (isEmpty()) {
             // A background suspend or a failed/unfinished parse clears the current PlaySpec.
@@ -872,7 +873,12 @@ public class PlayerManager implements ParseCallback {
             switch (engine.handleError(e)) {
                 case RETRY -> handleSourceRetry(e);
                 case DECODE -> handleDecodeError(e);
-                case RECOVERED -> setDanmakus(spec.getDanmakus());
+                case RECOVERED -> {
+                    // Engine may have rebuilt its Player (e.g. audio pass-through fallback).
+                    Player recovered = engine.getPlayer();
+                    if (recovered != null && recovered != player) setPlayer(recovered);
+                    setDanmakus(spec.getDanmakus());
+                }
                 case FATAL -> handleFatalError(e);
             }
         }
