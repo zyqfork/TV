@@ -720,6 +720,8 @@ public class PlayerManager implements ParseCallback {
 
     private void setMediaItem(long timeout, long startPositionMs) {
         if (spec == null || spec.getUrl() == null) return;
+        // Drop stale play/first-frame timeouts before engine.start; keep sourceRetry across retries.
+        App.removeCallbacks(runnable, firstFrameRunnable);
         openReported = false;
         firstFrameExtendCount = 0;
         playStartRealtimeMs = SystemClock.elapsedRealtime();
@@ -834,14 +836,15 @@ public class PlayerManager implements ParseCallback {
         @Override
         public void onPlaybackStateChanged(int state) {
             if (state == Player.STATE_READY) {
-                App.removeCallbacks(runnable, firstFrameRunnable);
+                // Playback succeeded; cancel pending timeouts and any queued source retry restart.
+                App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
                 if (!openReported && spec != null) {
                     openReported = true;
                     long openMs = Math.max(0, SystemClock.elapsedRealtime() - playStartRealtimeMs);
                     LineQualityStore.recordSuccess(spec.getUrl(), openMs);
                 }
             } else if (state == Player.STATE_ENDED) {
-                App.removeCallbacks(runnable, firstFrameRunnable);
+                App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
             }
         }
 
@@ -870,7 +873,8 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onPlayerError(@NonNull PlaybackException e) {
-            App.removeCallbacks(runnable, firstFrameRunnable);
+            // Clear pending timeouts/retries; RETRY path will re-schedule sourceRetryRunnable.
+            App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
             if (spec == null) return;
             switch (engine.handleError(e)) {
                 case RETRY -> handleSourceRetry(e);
