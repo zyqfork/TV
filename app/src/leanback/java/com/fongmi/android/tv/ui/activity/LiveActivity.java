@@ -99,6 +99,8 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     private Runnable mR2;
     private Runnable mR3;
     private Runnable mR4;
+    private Runnable mSeekRunnable;
+    private long mSeekTime;
     private Clock mClock;
     private View mFocus2;
     private int count;
@@ -169,6 +171,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         mR2 = this::setTraffic;
         mR3 = this::hideInfo;
         mR4 = this::hideUI;
+        mSeekRunnable = () -> seek(mSeekTime);
         setRecyclerView();
         setVideoView();
         setViewModel();
@@ -792,7 +795,8 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     public void renderGroupSelection(Group group) {
         mGroup = group;
-        mBinding.group.setSelectedPosition(mGroupAdapter.indexOf(group));
+        int index = mGroupAdapter.indexOf(group);
+        if (index >= 0) mBinding.group.setSelectedPosition(index);
     }
 
     @Override
@@ -833,6 +837,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         mChannelAdapter.clear();
         mGroupAdapter.clear();
         mHides.clear();
+        mOldView = null;
         mChannel = null;
         mGroup = null;
     }
@@ -1011,13 +1016,19 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     public void onKeyLeft(long time) {
         if (player().isLive()) prevLine();
-        else App.post(() -> seek(time), 250);
+        else {
+            mSeekTime = time;
+            App.post(mSeekRunnable, 250);
+        }
     }
 
     @Override
     public void onKeyRight(long time) {
         if (player().isLive()) nextLine(true);
-        else App.post(() -> seek(time), 250);
+        else {
+            mSeekTime = time;
+            App.post(mSeekRunnable, 250);
+        }
     }
 
     @Override
@@ -1071,6 +1082,8 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
             hideControl();
         } else if (isVisible(mBinding.widget.bottom)) {
             hideInfo();
+        } else if (isVisible(mBinding.epgData)) {
+            hideEpg();
         } else if (isVisible(mBinding.recycler)) {
             hideUI();
         } else {
@@ -1083,7 +1096,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     protected void onDestroy() {
         mClock.release();
         Source.get().exit();
-        App.removeCallbacks(mR0, mR1, mR2, mR3, mR4);
+        App.removeCallbacks(mR0, mR1, mR2, mR3, mR4, mSeekRunnable);
         super.onDestroy();
     }
 }

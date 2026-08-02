@@ -1148,6 +1148,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             hideControl();
         } else if (isVisible(mBinding.widget.info)) {
             hideInfo();
+        } else if (isVisible(mBinding.epgData)) {
+            hideEpg();
         } else if (isVisible(mBinding.recycler)) {
             hideUI();
         } else if (!isLock()) {
