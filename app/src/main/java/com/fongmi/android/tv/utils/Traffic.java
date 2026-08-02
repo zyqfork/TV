@@ -8,6 +8,10 @@ import com.fongmi.android.tv.App;
 
 import java.text.DecimalFormat;
 
+/**
+ * Per-playback UI bitrate sampler. TrafficStats is UID-scoped, but each Activity keeps its own
+ * baseline so interleaved screens do not poison each other's first samples.
+ */
 public class Traffic {
 
     private static final DecimalFormat format = new DecimalFormat("#.0");
@@ -15,20 +19,19 @@ public class Traffic {
     private static final String UNIT_KB = " KB/s";
     private static final String UNIT_MB = " MB/s";
 
-    private static long lastTotalRxBytes;
-    private static long lastTimeStamp;
+    private long lastTotalRxBytes;
+    private long lastTimeStamp;
 
-    public static void setSpeed(TextView view) {
+    public synchronized void setSpeed(TextView view) {
         if (TrafficStats.getUidRxBytes(UID) == TrafficStats.UNSUPPORTED) return;
         view.setVisibility(View.VISIBLE);
         view.setText(getSpeed());
     }
 
-    private static String getSpeed() {
+    private String getSpeed() {
         long nowTimeStamp = System.currentTimeMillis();
         long nowTotalRxBytes = TrafficStats.getUidRxBytes(UID) / 1024;
-        // The first sample after a player switch establishes a baseline. Calculating from zero
-        // makes the loading overlay briefly report the app's entire lifetime traffic as MB/s.
+        // The first sample after reset/player switch establishes a baseline.
         if (lastTimeStamp == 0) {
             lastTimeStamp = nowTimeStamp;
             lastTotalRxBytes = nowTotalRxBytes;
@@ -40,7 +43,7 @@ public class Traffic {
         return speed < 1000 ? speed + UNIT_KB : format.format(speed / 1024f) + UNIT_MB;
     }
 
-    public static void reset() {
+    public synchronized void reset() {
         long total = TrafficStats.getUidRxBytes(UID);
         lastTotalRxBytes = total == TrafficStats.UNSUPPORTED ? 0 : total / 1024;
         lastTimeStamp = total == TrafficStats.UNSUPPORTED ? 0 : System.currentTimeMillis();

@@ -353,9 +353,12 @@ public class History implements Diffable<History> {
     }
 
     public History save() {
-        updateTime = System.currentTimeMillis();
-        AppDatabase.get().getHistoryDao().insertOrUpdate(this);
-        return this;
+        // Serialize Room writes so concurrent Task.execute(save) from the clock tick cannot race.
+        synchronized (History.class) {
+            updateTime = System.currentTimeMillis();
+            AppDatabase.get().getHistoryDao().insertOrUpdate(this);
+            return this;
+        }
     }
 
     public History delete() {

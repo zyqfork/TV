@@ -58,10 +58,12 @@ public class VodHistoryPolicy {
 
     public void updateTime(History history, long time, long position, long duration) {
         if (history == null || position < 0 || duration <= 0) return;
-        history.setCreateTime(time);
-        history.setPosition(position);
-        history.setDuration(duration);
-        if (history.canSave() && history.canSync()) sync(history);
+        synchronized (history) {
+            history.setCreateTime(time);
+            history.setPosition(position);
+            history.setDuration(duration);
+            if (history.canSave() && history.canSync()) sync(history);
+        }
     }
 
     public long startPositionMs(History history) {

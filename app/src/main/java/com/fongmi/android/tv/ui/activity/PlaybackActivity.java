@@ -53,6 +53,8 @@ import java.util.concurrent.TimeUnit;
 public abstract class PlaybackActivity extends BaseActivity implements MediaController.Listener, Player.Listener, ServiceConnection {
 
     private final List<Runnable> foreverObserverRemovers = new ArrayList<>();
+    /** Per-Activity bitrate sampler; avoids cross-screen baseline pollution. */
+    protected final Traffic traffic = new Traffic();
     private ListenableFuture<MediaController> mControllerFuture;
     private MediaController mController;
     private PlaybackService mService;
@@ -502,7 +504,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         public void onPlayerRebuild(Player player) {
             if (!isOwner()) return;
             // Baseline traffic after engine/decode rebuild so the overlay doesn't flash lifetime MB/s.
-            Traffic.reset();
+            traffic.reset();
             setRender();
         }
 

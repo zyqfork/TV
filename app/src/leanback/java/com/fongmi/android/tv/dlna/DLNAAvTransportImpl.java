@@ -53,6 +53,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
 
     private volatile boolean dlnaActive;
     private volatile long pendingSeekMs = -1;
+    /** Target of an in-flight Seek; preferred by PositionInfo until player reports. */
+    private volatile long seekingToMs = -1;
     /** Atomic snapshot so PositionInfo never mixes position/duration from different updates. */
     private volatile PosCache posCache = PosCache.EMPTY;
 
@@ -87,6 +89,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
         nextMetaData = "";
         prevMetaData = "";
         pendingSeekMs = -1;
+        seekingToMs = -1;
         posCache = PosCache.EMPTY;
         currentMetaData = "";
         currentPlayMode = PlayMode.NORMAL;
@@ -94,6 +97,11 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     }
 
     public void updatePositionCache(long position, long duration) {
+        long seeking = seekingToMs;
+        // Drop optimistic seek once the player has landed near the target.
+        if (seeking >= 0 && position >= 0 && Math.abs(position - seeking) <= 1500) {
+            seekingToMs = -1;
+        }
         posCache = new PosCache(position, duration);
     }
 
@@ -119,6 +127,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
         this.nextMetaData = "";
         this.dlnaActive = false;
         this.pendingSeekMs = -1;
+        this.seekingToMs = -1;
         this.currentURI = incoming;
         this.currentMetaData = currentURIMetaData != null ? currentURIMetaData : "";
         startCastActivity(new CastAction(this.currentURI, this.currentMetaData, parseHeaders(this.currentMetaData)));
@@ -157,7 +166,9 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     @Override
     public PositionInfo getPositionInfo(UnsignedIntegerFourBytes instanceId) {
         PosCache cache = posCache;
-        long posMs = cache.position;
+        long seeking = seekingToMs;
+        // Prefer in-flight seek target so controllers polling right after Seek see the request.
+        long posMs = seeking >= 0 ? seeking : cache.position;
         long durMs = cache.duration;
         if (posMs < 0) return new PositionInfo(1, currentMetaData, currentURI);
         String relTime = formatMs(posMs);
@@ -218,8 +229,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     public void seek(UnsignedIntegerFourBytes instanceId, String unit, String target) {
         if (!SeekMode.REL_TIME.toString().equals(unit) && !SeekMode.ABS_TIME.toString().equals(unit)) return;
         long ms = parseTimeToMs(target);
-        // Controllers often poll PositionInfo immediately after Seek; update cache before async seek.
-        if (ms >= 0) posCache = new PosCache(ms, posCache.duration);
+        // Do not mutate posCache here (player seek is async). Expose target via seekingToMs instead.
+        if (ms >= 0) seekingToMs = ms;
         if (dlnaActive) {
             PlayerManager local = player;
             if (local != null) App.post(() -> local.seekTo(ms));
@@ -251,7 +262,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
         if (currentURI.isEmpty()) return;
         App.post(() -> {
             if (player != null && dlnaActive) {
-                posCache = new PosCache(0, posCache.duration);
+                seekingToMs = 0;
                 player.seekTo(0);
             }
         });

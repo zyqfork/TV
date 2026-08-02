@@ -222,7 +222,8 @@ public class PlayerSetting {
     }
 
     public static int getSize() {
-        return Math.clamp(Prefers.getInt("size", 2), MIN_SIZE, MAX_SIZE);
+        // Default: 小 (index 0) — denser poster grid.
+        return Math.clamp(Prefers.getInt("size", 0), MIN_SIZE, MAX_SIZE);
     }
 
     public static void putSize(int size) {

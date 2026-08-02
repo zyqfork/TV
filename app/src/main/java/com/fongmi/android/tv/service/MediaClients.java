@@ -19,6 +19,11 @@ class MediaClients {
         browserBound = false;
     }
 
+    void clear() {
+        browserBound = false;
+        controllers.clear();
+    }
+
     void connect(@NonNull MediaSession.ControllerInfo controller, @NonNull String packageName) {
         if (!isSelf(controller, packageName)) controllers.merge(controller.getPackageName(), 1, Integer::sum);
     }

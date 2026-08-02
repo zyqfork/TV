@@ -86,7 +86,6 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PartUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
-import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.bassaer.library.MDColor;
@@ -1107,7 +1106,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     private void hideProgress() {
         mBinding.progress.getRoot().setVisibility(View.GONE);
         App.removeCallbacks(mR3);
-        Traffic.reset();
+        traffic.reset();
     }
 
     private void showError(String text) {
@@ -1150,7 +1149,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void setTraffic() {
-        Traffic.setSpeed(mBinding.progress.traffic);
+        traffic.setSpeed(mBinding.progress.traffic);
         App.post(mR3, 1000);
     }
 

@@ -223,6 +223,8 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         if (!running) return;
         running = false;
         stopAndClear();
+        // Drop MediaBrowser / session client bookkeeping so stopSelf can finish after unbind.
+        clients.clear();
         // A MediaBrowser connection owned by the launcher/system UI may keep this Service bound
         // after the app task has exited. stopSelf() alone then leaves an idle native MPV instance,
         // its threads and the MediaSession alive indefinitely. Explicit exit must release them
