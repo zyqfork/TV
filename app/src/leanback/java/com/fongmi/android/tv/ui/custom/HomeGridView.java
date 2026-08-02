@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.custom;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.InputDevice;
 import android.view.MotionEvent;
@@ -10,6 +11,7 @@ import android.widget.OverScroller;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.leanback.widget.VerticalGridView;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -22,11 +24,18 @@ import com.fongmi.android.tv.utils.ResUtil;
 public class HomeGridView extends VerticalGridView {
 
     private boolean freeScroll;
+    private boolean pinning;
     private float wheelCarry;
     private final OverScroller scroller;
     private final Runnable endFreeScroll = () -> {
         freeScroll = false;
         syncSelectionToVisible();
+        int pos = getSelectedPosition();
+        if (pos == 0) {
+            pinTopRow();
+        } else if (pos > 0) {
+            HomeGridView.super.scrollToPosition(pos);
+        }
     };
     private final Runnable wheelFling = new Runnable() {
         @Override
@@ -56,6 +65,20 @@ public class HomeGridView extends VerticalGridView {
     public HomeGridView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         scroller = new OverScroller(context, new DecelerateInterpolator());
+        addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (position == 0) post(HomeGridView.this::pinTopRow);
+            }
+        });
+        addOnScrollListener(new OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == SCROLL_STATE_IDLE && getSelectedPosition() == 0) {
+                    pinTopRow();
+                }
+            }
+        });
     }
 
     @Override
@@ -76,7 +99,6 @@ public class HomeGridView extends VerticalGridView {
             float scroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
             if (scroll != 0f) {
                 beginFreeScroll();
-                // Accumulate fractional ticks for smoother, smaller steps than a full page jump.
                 wheelCarry += -scroll * ResUtil.dp2px(48);
                 int dy = (int) wheelCarry;
                 if (dy != 0) {
@@ -96,13 +118,34 @@ public class HomeGridView extends VerticalGridView {
     @Override
     public void scrollToPosition(int position) {
         if (freeScroll) return;
+        if (position == 0) {
+            stopScroll();
+            setSelectedPosition(0);
+            pinTopRow();
+            return;
+        }
         super.scrollToPosition(position);
     }
 
     @Override
     public void smoothScrollToPosition(int position) {
         if (freeScroll) return;
+        if (position == 0) {
+            scrollToPosition(0);
+            return;
+        }
         super.smoothScrollToPosition(position);
+    }
+
+    @Override
+    public boolean onRequestFocusInDescendants(int direction, Rect previouslyFocusedRect) {
+        if (direction == View.FOCUS_DOWN || direction == View.FOCUS_FORWARD) {
+            if (getAdapter() != null && getAdapter().getItemCount() > 0 && getSelectedPosition() != 0) {
+                setSelectedPosition(0);
+            }
+            post(this::pinTopRow);
+        }
+        return super.onRequestFocusInDescendants(direction, previouslyFocusedRect);
     }
 
     private void trackPointer(MotionEvent e) {
@@ -157,5 +200,22 @@ public class HomeGridView extends VerticalGridView {
         freeScroll = true;
         setSelectedPosition(pos);
         freeScroll = keep;
+    }
+
+    /**
+     * Title-to-icon spacing is owned by toolbar paddingBottom (same as paddingTop).
+     * When row 0 is selected, keep scroll offset at 0 so Leanback cannot change that gap.
+     */
+    private void pinTopRow() {
+        if (freeScroll || pinning || getSelectedPosition() != 0) return;
+        stopScroll();
+        int offset = computeVerticalScrollOffset();
+        if (offset == 0) return;
+        pinning = true;
+        try {
+            scrollBy(0, -offset);
+        } finally {
+            pinning = false;
+        }
     }
 }

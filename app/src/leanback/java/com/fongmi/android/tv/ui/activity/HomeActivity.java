@@ -181,11 +181,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         selector.addPresenter(String.class, new ProgressPresenter());
         selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), FuncPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_NONE), FuncPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
-        mBinding.recycler.setWindowAlignment(BaseGridView.WINDOW_ALIGN_BOTH_EDGE);
+        // NO_EDGE avoids Leanback shifting row 0 between y=0 and paddingTop (visible gap jump).
+        mBinding.recycler.setWindowAlignment(BaseGridView.WINDOW_ALIGN_NO_EDGE);
         mBinding.recycler.setWindowAlignmentOffsetPercent(BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED);
         mBinding.recycler.setItemAlignmentOffsetPercent(BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED);
     }
@@ -493,7 +494,16 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (KeyUtil.isMenuKey(event)) showDialog();
-        if (KeyUtil.isActionDown(event) & KeyUtil.isDownKey(event) && getCurrentFocus() == mBinding.title) return mBinding.recycler.getChildAt(0).requestFocus();
+        if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && getCurrentFocus() == mBinding.title) {
+            mBinding.recycler.setSelectedPosition(0);
+            mBinding.recycler.scrollToPosition(0);
+            mBinding.recycler.post(() -> {
+                View child = mBinding.recycler.getChildAt(0);
+                if (child != null) child.requestFocus();
+                else mBinding.recycler.requestFocus();
+            });
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
 
