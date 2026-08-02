@@ -20,21 +20,29 @@ public class LivePlaybackController {
     private final LiveFallbackPolicy fallbackPolicy;
     private final LivePlaybackState state;
     private final LivePlaybackHost host;
-    private final Runnable refreshRunnable;
+    private final Runnable channelRefreshRunnable;
+    private final Runnable lineRefreshRunnable;
     private long pendingStartPositionMs;
     private boolean pendingKeepLine;
+    private boolean channelRefreshScheduled;
 
     public LivePlaybackController(LivePlaybackHost host, LivePlaybackState state) {
         this.state = state;
         this.host = host;
         this.navigationPolicy = new LiveNavigationPolicy(this, state, host);
         this.fallbackPolicy = new LiveFallbackPolicy(this, state, host);
-        this.refreshRunnable = this::refreshNow;
+        this.channelRefreshRunnable = () -> {
+            channelRefreshScheduled = false;
+            refreshNow();
+        };
+        this.lineRefreshRunnable = this::refreshNow;
         this.pendingStartPositionMs = C.TIME_UNSET;
     }
 
     public void reset() {
-        App.removeCallbacks(refreshRunnable);
+        App.removeCallbacks(channelRefreshRunnable);
+        App.removeCallbacks(lineRefreshRunnable);
+        channelRefreshScheduled = false;
         state.reset();
     }
 
@@ -80,8 +88,19 @@ public class LivePlaybackController {
 
     private void scheduleRefresh(long startPositionMs, boolean keepLine) {
         pendingStartPositionMs = startPositionMs;
-        pendingKeepLine = keepLine;
-        App.post(refreshRunnable, SWITCH_DEBOUNCE_MS);
+        if (!keepLine) {
+            // Channel change: cancel pending line-only refresh and pick best line.
+            App.removeCallbacks(lineRefreshRunnable);
+            pendingKeepLine = false;
+            channelRefreshScheduled = true;
+            App.post(channelRefreshRunnable, SWITCH_DEBOUNCE_MS);
+            return;
+        }
+        // Line change: if channel refresh already queued, keep the user's line on that channel.
+        pendingKeepLine = true;
+        if (channelRefreshScheduled) return;
+        App.removeCallbacks(lineRefreshRunnable);
+        App.post(lineRefreshRunnable, SWITCH_DEBOUNCE_MS);
     }
 
     private void refreshNow() {
@@ -173,7 +192,9 @@ public class LivePlaybackController {
     }
 
     private void requestCatchup(EpgData data, long startPositionMs) {
-        App.removeCallbacks(refreshRunnable);
+        App.removeCallbacks(channelRefreshRunnable);
+        App.removeCallbacks(lineRefreshRunnable);
+        channelRefreshScheduled = false;
         Channel channel = state.getChannel();
         if (channel == null) return;
         LivePlayRequest request = LivePlayRequest.catchup(channel, data, startPositionMs);

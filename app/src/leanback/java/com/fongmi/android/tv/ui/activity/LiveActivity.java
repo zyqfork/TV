@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
@@ -666,7 +667,12 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     public void onItemClick(EpgData item) {
-        mLive.selectEpg(item, player().getPosition());
+        // Catchup offset from EPG window, not live player position (unrelated timeline).
+        long startPositionMs = C.TIME_UNSET;
+        if (item.isInRange() && item.getStartTime() > 0) {
+            startPositionMs = Math.max(0, System.currentTimeMillis() - item.getStartTime());
+        }
+        mLive.selectEpg(item, startPositionMs);
     }
 
     private void addKeep(Channel item) {

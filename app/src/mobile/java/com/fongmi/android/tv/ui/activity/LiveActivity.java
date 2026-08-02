@@ -611,7 +611,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     public void onItemClick(EpgData item) {
-        mLive.selectEpg(item, player().getPosition());
+        // Catchup offset from EPG window, not live player position (unrelated timeline).
+        long startPositionMs = C.TIME_UNSET;
+        if (item.isInRange() && item.getStartTime() > 0) {
+            startPositionMs = Math.max(0, System.currentTimeMillis() - item.getStartTime());
+        }
+        mLive.selectEpg(item, startPositionMs);
     }
 
     private void addKeep(Channel item) {

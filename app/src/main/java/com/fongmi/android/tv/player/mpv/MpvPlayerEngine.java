@@ -12,8 +12,6 @@ import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.utils.Task;
 
-import java.util.concurrent.TimeUnit;
-
 public class MpvPlayerEngine implements PlayerEngine {
 
     private final MpvErrorMsgProvider provider;
@@ -108,17 +106,14 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public boolean isLive() {
         if (player == null) return false;
-        long duration = player.getDuration();
-        if (duration == C.TIME_UNSET) return false;
-        return duration < TimeUnit.MINUTES.toMillis(1);
+        // Prefer liveMode from PlayerManager; do not treat short finite VODs as live.
+        return live;
     }
 
     @Override
     public boolean isVod() {
         if (player == null) return false;
-        long duration = player.getDuration();
-        if (duration == C.TIME_UNSET) return false;
-        return duration >= TimeUnit.MINUTES.toMillis(1);
+        return !live;
     }
 
     @Override

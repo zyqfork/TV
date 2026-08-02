@@ -82,7 +82,20 @@ public class SmbDataSource extends BaseDataSource {
             if (bytesRemaining != C.LENGTH_UNSET) toRead = (int) Math.min(toRead, bytesRemaining);
             int read = file.read(buffer, readPosition, offset, toRead);
             if (read < 0) return C.RESULT_END_OF_INPUT;
-            if (read == 0) return C.RESULT_END_OF_INPUT;
+            // SMB can briefly return 0 under network jitter; retry before treating as EOF.
+            if (read == 0) {
+                for (int i = 0; i < 3 && read == 0; i++) {
+                    try {
+                        Thread.sleep(40);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return C.RESULT_END_OF_INPUT;
+                    }
+                    read = file.read(buffer, readPosition, offset, toRead);
+                    if (read < 0) return C.RESULT_END_OF_INPUT;
+                }
+                if (read == 0) return C.RESULT_END_OF_INPUT;
+            }
             readPosition += read;
             if (bytesRemaining != C.LENGTH_UNSET) bytesRemaining -= read;
             bytesTransferred(read);

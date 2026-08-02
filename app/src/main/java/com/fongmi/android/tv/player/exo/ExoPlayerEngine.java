@@ -13,8 +13,6 @@ import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.utils.Notify;
 
-import java.util.concurrent.TimeUnit;
-
 public class ExoPlayerEngine implements PlayerEngine {
 
     private final ErrorMsgProvider provider;
@@ -96,17 +94,16 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
+        // Prefer MediaItem / liveMode; do not treat short finite VODs as live.
+        if (player.isCurrentMediaItemLive()) return true;
         long duration = player.getDuration();
-        if (duration == C.TIME_UNSET) return player.isCurrentMediaItemLive();
-        // Exclusive partition at 60s: <1min → live heuristic, >=1min → vod.
-        return duration < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+        if (duration == C.TIME_UNSET) return live;
+        return false;
     }
 
     @Override
     public boolean isVod() {
-        long duration = player.getDuration();
-        if (duration == C.TIME_UNSET) return !player.isCurrentMediaItemLive();
-        return duration >= TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        return !isLive();
     }
 
     @Override

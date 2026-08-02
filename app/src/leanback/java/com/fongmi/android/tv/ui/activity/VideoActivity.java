@@ -1537,7 +1537,11 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     @Override
     protected void onStop() {
         super.onStop();
-        if (PlayerSetting.isBackgroundOff()) mClock.stop();
+        if (PlayerSetting.isBackgroundOff()) {
+            // Persist progress before process can be killed while paused in background.
+            saveHistory(false);
+            mClock.stop();
+        }
     }
 
     @Override

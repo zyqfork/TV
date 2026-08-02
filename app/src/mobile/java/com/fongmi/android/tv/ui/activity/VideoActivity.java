@@ -1618,7 +1618,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     @Override
     protected void onStop() {
         super.onStop();
-        if (PlayerSetting.isBackgroundOff()) mClock.stop();
+        if (PlayerSetting.isBackgroundOff()) {
+            saveHistory(false);
+            mClock.stop();
+        }
         if (!isAudioOnly()) setStop(true);
     }
 
