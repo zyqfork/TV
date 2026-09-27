@@ -147,13 +147,14 @@ public class Keep implements Diffable<Keep> {
         this.cid = cid;
     }
 
+    /** See {@link History#getVodId()} — the split must not carry a limit or the cid is glued on. */
     public String getSiteKey() {
-        String[] parts = getKey().split(AppDatabase.SYMBOL, 2);
+        String[] parts = getKey().split(AppDatabase.SYMBOL);
         return parts.length > 0 ? parts[0] : "";
     }
 
     public String getVodId() {
-        String[] parts = getKey().split(AppDatabase.SYMBOL, 2);
+        String[] parts = getKey().split(AppDatabase.SYMBOL);
         return parts.length > 1 ? parts[1] : "";
     }
 

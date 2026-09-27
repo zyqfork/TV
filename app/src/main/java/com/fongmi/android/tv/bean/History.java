@@ -266,13 +266,20 @@ public class History implements Diffable<History> {
         return VodConfig.get().getSite(getSiteKey()).getName();
     }
 
+    /**
+     * Keys are built as {@code siteKey@@@vodId@@@cid}, so the split must not carry a limit: with
+     * a limit of 2 the trailing {@code @@@cid} stays glued to the last element and getVodId()
+     * returns "vodId@@@cid". Every caller that hands that value back to a site (playing from
+     * history or favourites, detail lookups) then asks for a vod that does not exist, and
+     * rebuilding the key from it produces {@code site@@@vodId@@@cid@@@cid}.
+     */
     public String getSiteKey() {
-        String[] parts = getKey().split(AppDatabase.SYMBOL, 2);
+        String[] parts = getKey().split(AppDatabase.SYMBOL);
         return parts.length > 0 ? parts[0] : "";
     }
 
     public String getVodId() {
-        String[] parts = getKey().split(AppDatabase.SYMBOL, 2);
+        String[] parts = getKey().split(AppDatabase.SYMBOL);
         return parts.length > 1 ? parts[1] : "";
     }
 
