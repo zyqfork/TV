@@ -502,6 +502,9 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
                 showProgress();
                 break;
             case Player.STATE_READY:
+                // A running stream cannot still be failing; drop a stale error panel (and re-arm
+                // the progress indicator that showProgress() skips while it is visible).
+                hideError();
                 hideProgress();
                 player().reset();
                 break;
@@ -728,6 +731,10 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         int type = mChannel != null ? mChannel.getPlayerType() : PlayerSetting.PLAYER_TYPE_FOLLOW;
         if (type < 0) type = getHome().getPlayerType();
         player().setEngineForNextPlayback(PlayerSetting.resolveEngine(true, type));
+        // A new channel/line is a new attempt: the previous fatal error is stale. showProgress()
+        // deliberately keeps an error visible for in-place retries, so clearing it here (and on
+        // STATE_READY) is the only thing that removes it again.
+        hideError();
         mPlaybackKey = result.getRealUrl();
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
     }

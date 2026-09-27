@@ -28,6 +28,7 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.player.effect.PlayerEffectManager;
 import com.fongmi.android.tv.player.effect.audio.AudioEffectBands;
+import com.fongmi.android.tv.player.engine.PlaybackRecoveryPolicy;
 import com.fongmi.android.tv.player.engine.PlaybackCapabilities;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.engine.PlayerEngineFactory;
@@ -50,6 +51,16 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class PlayerManager implements ParseCallback {
+
+    /** Extra first-frame rounds MPV may request while a slow HLS master is still opening. */
+    private static final int MAX_FIRST_FRAME_EXTENSIONS = 3;
+    /**
+     * Source-level restarts allowed for one item before the failure is treated as fatal. Kept in
+     * step with PlaybackRecoveryPolicy.MAX_ATTEMPTS: the engine only decides RETRY while its own
+     * budget lasts, and this is how many restarts PlayerManager is willing to perform. Exo no
+     * longer retries internally, so lowering this silently halves the recovery budget.
+     */
+    private static final int MAX_SOURCE_RETRY = 2;
 
     private final Runnable runnable;
     private final Runnable firstFrameRunnable;
@@ -727,14 +738,15 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void handleSourceRetry(PlaybackException e) {
-        if (++sourceRetry > 1) {
+        if (++sourceRetry > MAX_SOURCE_RETRY) {
             App.removeCallbacks(sourceRetryRunnable);
             handleFatalError(e);
             return;
         }
-        if (sourceRetry == 1) Notify.show(R.string.error_play_retry);
+        Notify.show(R.string.error_play_retry);
         App.removeCallbacks(sourceRetryRunnable);
-        App.post(sourceRetryRunnable, sourceRetry * 800L);
+        // Share the policy's backoff so delay and budget stay defined in one place.
+        App.post(sourceRetryRunnable, PlaybackRecoveryPolicy.retryDelayMs(sourceRetry - 1));
     }
 
     private void onSourceRetry() {
@@ -786,9 +798,15 @@ public class PlayerManager implements ParseCallback {
 
     private void onFirstFrameTimeout() {
         if (openReported || spec == null || isReleased()) return;
-        // MPV may advance position before STATE_READY; only extend after a real open.
-        if (engine.getType() == PlayerEngine.Type.MPV && openReported && firstFrameExtendCount < 3) {
+        // MPV only reports STATE_READY once its file is loaded, and an HLS master with many
+        // renditions can take longer than a single timeout to get there. Position is not evidence
+        // of progress here (a resumed item already starts at position > 0) and MPV publishes no
+        // "opening" signal before FILE_LOADED, so MPV simply gets a bounded number of extra
+        // rounds. Exo keeps failing fast, and the total wait stays capped at
+        // (1 + MAX_FIRST_FRAME_EXTENSIONS) x firstFrameTimeoutMs().
+        if (engine.getType() == PlayerEngine.Type.MPV && firstFrameExtendCount < MAX_FIRST_FRAME_EXTENSIONS) {
             firstFrameExtendCount++;
+            firstFrameDeadlineMs = SystemClock.elapsedRealtime() + firstFrameTimeoutMs();
             scheduleFirstFrameTimeout();
             return;
         }
@@ -850,18 +868,24 @@ public class PlayerManager implements ParseCallback {
     public void start(PlaySpec spec, long timeout, long startPositionMs) {
         // New URL resets retry/watchdog state. Same-URL restarts must not, or a
         // dead endpoint loops forever through start() -> budgets cleared.
-        String nextUrl = spec == null ? null : spec.getUrl();
-        String prevUrl = this.spec == null ? null : this.spec.getUrl();
-        if (!java.util.Objects.equals(prevUrl, nextUrl)) {
-            sourceRetry = 0;
-            retry = 0;
-            firstFrameDeadlineMs = 0;
-            firstFrameExtendCount = 0;
-        }
+        resetBudgetsIfUrlChanged(this.spec == null ? null : this.spec.getUrl(), spec == null ? null : spec.getUrl());
         if (this.spec != spec) clearSecondarySubTransient();
         this.spec = spec;
         restoreSecondarySubtitle(spec);
         setMediaItem(timeout, startPositionMs);
+    }
+
+    /**
+     * A different URL means a different source, so retry and watchdog budgets start over. The same
+     * URL restarting (source retry, decode switch) deliberately keeps them, which is what stops a
+     * dead endpoint from retrying forever.
+     */
+    private void resetBudgetsIfUrlChanged(String prevUrl, String nextUrl) {
+        if (java.util.Objects.equals(prevUrl, nextUrl)) return;
+        sourceRetry = 0;
+        retry = 0;
+        firstFrameDeadlineMs = 0;
+        firstFrameExtendCount = 0;
     }
 
     public void parse(String key, Result result, boolean useParse, MediaMetadata metadata) {
@@ -961,6 +985,10 @@ public class PlayerManager implements ParseCallback {
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!TextUtils.isEmpty(from)) Notify.show(ResUtil.getString(R.string.parse_from, from));
         if (headers != null) headers.remove(HttpHeaders.RANGE);
+        // parse() mutates the spec in place and restarts through startCurrent(), which bypasses the
+        // URL-change check in start(). A parse result is a new source, so reset the budgets here;
+        // otherwise the new URL inherits the previous attempt's watchdog deadline and retry count.
+        resetBudgetsIfUrlChanged(spec == null ? null : spec.getUrl(), url);
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
         startCurrent(pendingStartPositionMs);

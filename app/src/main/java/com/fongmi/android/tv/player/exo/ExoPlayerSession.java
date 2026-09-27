@@ -7,7 +7,6 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.ExoPlayer;
 
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.engine.PlaybackRecoveryPolicy;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
@@ -19,7 +18,6 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 /** Owns one ExoPlayer instance and all resources whose lifecycle must match that instance. */
 final class ExoPlayerSession {
 
-    private final Runnable retryRunnable = this::retryTransient;
     private final ExoVolumeGain volumeGain;
     private final ExoPlayerEffect effect;
     private final PreCache preCache;
@@ -29,7 +27,6 @@ final class ExoPlayerSession {
 
     private PlaySpec spec;
     private int attempts;
-    private long retryPositionMs;
     private boolean released;
 
     ExoPlayerSession(int decode, Player.Listener listener) {
@@ -70,7 +67,6 @@ final class ExoPlayerSession {
             attempts = 0;
         }
         this.spec = spec;
-        cancelPendingRetry();
         startInternal(startPositionMs);
     }
 
@@ -83,15 +79,12 @@ final class ExoPlayerSession {
     }
 
     void stop() {
-        cancelPendingRetry();
         preCache.stop();
         player.stop();
     }
 
+    /** Called when playback reaches READY, i.e. the current attempt recovered. */
     void resetErrorBudget() {
-        // READY means the current attempt recovered. A queued transient retry must not restart a
-        // healthy stream a moment later with its stale position.
-        cancelPendingRetry();
         attempts = 0;
     }
 
@@ -110,7 +103,7 @@ final class ExoPlayerSession {
             case SEEK_DEFAULT -> seekToDefaultPosition();
             case SWITCH_DECODE -> PlayerEngine.ErrorAction.DECODE;
             case RETRY_FORMAT -> retryFormat(error.errorCode);
-            case RETRY_TRANSIENT -> retryTransientLater();
+            case RETRY_TRANSIENT -> requestRetry();
             case FATAL -> PlayerEngine.ErrorAction.FATAL;
         };
     }
@@ -118,7 +111,6 @@ final class ExoPlayerSession {
     void release() {
         if (released) return;
         released = true;
-        cancelPendingRetry();
         preCache.release();
         volumeGain.release();
         player.removeListener(effectListener);
@@ -151,21 +143,14 @@ final class ExoPlayerSession {
         return PlayerEngine.ErrorAction.RECOVERED;
     }
 
-    private PlayerEngine.ErrorAction retryTransientLater() {
+    /**
+     * Reports a transient transport failure upward instead of retrying here. PlayerManager owns the
+     * schedule (delay, toast, budget, fatal), and retrying in both places restarted the stream
+     * twice for a single failure.
+     */
+    private PlayerEngine.ErrorAction requestRetry() {
         attempts++;
-        retryPositionMs = Math.max(0, player.getCurrentPosition());
-        cancelPendingRetry();
-        // PlayerManager owns the retry schedule (toast + budget + fatal).
-        // Do not also post retryRunnable here or the stream restarts twice.
         return PlayerEngine.ErrorAction.RETRY;
-    }
-
-    private void retryTransient() {
-        if (!released && spec != null) startInternal(retryPositionMs);
-    }
-
-    private void cancelPendingRetry() {
-        App.removeCallbacks(retryRunnable);
     }
 
     private final Player.Listener effectListener = new Player.Listener() {

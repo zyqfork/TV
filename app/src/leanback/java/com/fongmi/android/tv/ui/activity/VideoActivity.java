@@ -542,6 +542,10 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         mBinding.scroll.scrollTo(0, 0);
         mClock.setCallback(null);
         updateNavigationKey();
+        // Switching to another episode/line is a new attempt: the previous fatal error is stale.
+        // showProgress() deliberately keeps an error visible for in-place retries, so clearing it
+        // here (and on STATE_READY) is the only thing that removes it again.
+        hideError();
         player().reset();
         player().stop();
     }
@@ -1347,6 +1351,9 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
                 mClock.setCallback(null);
                 break;
             case Player.STATE_READY:
+                // A running stream cannot still be failing; drop a stale error panel (and re-arm
+                // the progress indicator that showProgress() skips while it is visible).
+                hideError();
                 hideProgress();
                 player().reset();
                 mClock.setCallback(this);
