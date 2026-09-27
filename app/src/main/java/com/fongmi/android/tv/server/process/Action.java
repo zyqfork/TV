@@ -148,8 +148,9 @@ public class Action implements Process {
     }
 
     private void post(Device device, String type, FormBody.Builder body) {
-        try {
-            OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=" + type), body.build()).execute();
+        // The response is not read, but it still owns the connection: without closing it every
+        // sync attempt leaks one, and this runs once per history/keep push.
+        try (okhttp3.Response ignored = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=" + type), body.build()).execute()) {
         } catch (Exception e) {
             App.post(() -> Notify.show(e.getMessage()));
         }

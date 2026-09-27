@@ -64,19 +64,29 @@ public class TsRaw implements Process {
             return Nano.error("segment too large");
         }
         InputStream input = body.byteStream();
-        byte[] head = PngTsUnwrap.readProbe(input, PngTsUnwrap.probeSize());
-        int offset = PngTsUnwrap.findTsOffset(head);
-        InputStream unwrapped = PngTsUnwrap.unwrap(head, input);
-        InputStream output = new FilterInputStream(unwrapped) {
-            @Override
-            public void close() throws IOException {
-                try {
-                    super.close();
-                } finally {
-                    upstream.close();
+        // Nothing owns `upstream` until `output` exists, so a failure while probing or unwrapping
+        // has to close it here. Otherwise a mid-read upstream failure leaks the connection while
+        // the caller only reports "segment unavailable".
+        int offset;
+        InputStream output;
+        try {
+            byte[] head = PngTsUnwrap.readProbe(input, PngTsUnwrap.probeSize());
+            offset = PngTsUnwrap.findTsOffset(head);
+            InputStream unwrapped = PngTsUnwrap.unwrap(head, input);
+            output = new FilterInputStream(unwrapped) {
+                @Override
+                public void close() throws IOException {
+                    try {
+                        super.close();
+                    } finally {
+                        upstream.close();
+                    }
                 }
-            }
-        };
+            };
+        } catch (Exception e) {
+            upstream.close();
+            throw e;
+        }
         long payloadLength = sourceLength >= 0 && offset >= 0 ? Math.max(0, sourceLength - offset) : -1;
         if (payloadLength < 0) {
             byte[] payload;
