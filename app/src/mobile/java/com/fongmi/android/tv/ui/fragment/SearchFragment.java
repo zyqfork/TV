@@ -110,7 +110,7 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
             @Override
             public void afterTextChanged(Editable s) {
                 requireActivity().invalidateOptionsMenu();
-                getWord(s.toString());
+                scheduleWord(s.toString());
             }
         });
         getParentFragmentManager().setFragmentResultListener("result", getViewLifecycleOwner(), (requestKey, bundle) -> {
@@ -121,7 +121,10 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     private void checkKeyword() {
         boolean visible = requireActivity().getSupportFragmentManager().findFragmentByTag(CollectFragment.class.getSimpleName()) != null;
         if (TextUtils.isEmpty(getKeyword()) && !visible) Util.showKeyboard(mBinding.keyword);
+        // setText() fires afterTextChanged, which schedules a debounced suggest fetch. Fetch once
+        // now and drop that pending duplicate so opening the page does not query twice.
         setKeyword(getKeyword());
+        App.removeCallbacks(wordRunnable);
         getWord(getKeyword());
     }
 
@@ -149,37 +152,73 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
         ft.setReorderingAllowed(true).addToBackStack(null).commit();
     }
 
-    private void getWord(String text) {
-        if (text.isEmpty()) getHot();
-        else getSuggest(text);
+    private String pendingWord = "";
+    private Call suggestCall;
+    private Call hotCall;
+    private long wordSeq;
+    private final Runnable wordRunnable = () -> getWord(pendingWord);
+
+    private void scheduleWord(String text) {
+        pendingWord = text == null ? "" : text;
+        App.removeCallbacks(wordRunnable);
+        // Debounce typing so every keystroke does not fire a suggest request.
+        App.post(wordRunnable, 280L);
     }
 
-    private void getHot() {
+    private void getWord(String text) {
+        final long seq = ++wordSeq;
+        cancel(suggestCall);
+        suggestCall = null;
+        cancel(hotCall);
+        hotCall = null;
+        if (text == null || text.isEmpty()) getHot(seq);
+        else getSuggest(text, seq);
+    }
+
+    private static void cancel(Call call) {
+        if (call != null) call.cancel();
+    }
+
+    private void getHot(final long seq) {
         mBinding.word.setText(R.string.search_hot);
         mWordAdapter.setItems(Word.objectFrom(Setting.getHot()).getData());
-        OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Map.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).enqueue(getCallback(true));
-    }
-
-    private void getSuggest(String text) {
-        mBinding.word.setText(R.string.search_suggest);
-        OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(text)).enqueue(getCallback(false));
-    }
-
-    private Callback getCallback(boolean hot) {
-        return new Callback() {
+        hotCall = OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Map.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general"));
+        hotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String result = response.body().string();
+                String result = response.body() == null ? "" : response.body().string();
                 if (TextUtils.isEmpty(result)) return;
-                App.post(() -> setWordAdapter(result, hot));
+                App.post(() -> {
+                    // The hot list only describes an empty search box. A late response must not
+                    // replace suggestions for text typed since, nor overwrite the saved hot list.
+                    if (seq != wordSeq || !empty()) return;
+                    Setting.putHot(result);
+                    mWordAdapter.setItems(Word.objectFrom(result).getData());
+                });
             }
-        };
+        });
     }
 
-    private void setWordAdapter(String result, boolean save) {
-        if (!save && mBinding.keyword.getText().toString().trim().isEmpty()) return;
+    private void getSuggest(String text, final long seq) {
+        mBinding.word.setText(R.string.search_suggest);
+        suggestCall = OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(text));
+        suggestCall.enqueue(new Callback() {
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                String result = response.body() == null ? "" : response.body().string();
+                if (TextUtils.isEmpty(result)) return;
+                App.post(() -> {
+                    if (seq != wordSeq) return;
+                    setWordAdapter(result);
+                });
+            }
+        });
+    }
+
+    private void setWordAdapter(String result) {
+        // A late suggest response must not repopulate the list after the box was cleared.
+        if (empty()) return;
         mWordAdapter.setItems(Word.objectFrom(result).getData());
-        if (save) Setting.putHot(result);
     }
 
     private void onReset() {
@@ -232,6 +271,13 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        // In-flight suggest/hot requests outlive the view; cancel them and drop the pending
+        // debounce so a late response cannot touch a detached adapter.
+        App.removeCallbacks(wordRunnable);
+        cancel(suggestCall);
+        suggestCall = null;
+        cancel(hotCall);
+        hotCall = null;
         requireActivity().removeMenuProvider(this);
     }
 }

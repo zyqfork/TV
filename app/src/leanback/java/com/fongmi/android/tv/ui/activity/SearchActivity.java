@@ -101,7 +101,8 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private String pendingWord = "";
-    private okhttp3.Call suggestCall;
+    private Call suggestCall;
+    private Call hotCall;
     private long wordSeq;
     private final Runnable wordRunnable = () -> fetchWord(pendingWord);
 
@@ -113,13 +114,13 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void fetchWord(String text) {
-        long seq = ++wordSeq;
-        if (suggestCall != null) {
-            suggestCall.cancel();
-            suggestCall = null;
-        }
+        final long seq = ++wordSeq;
+        cancel(suggestCall);
+        suggestCall = null;
+        cancel(hotCall);
+        hotCall = null;
         if (text == null || text.isEmpty()) {
-            getHot();
+            getHot(seq);
             return;
         }
         mBinding.word.setText(R.string.search_suggest);
@@ -131,10 +132,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 if (TextUtils.isEmpty(result)) return;
                 App.post(() -> {
                     if (seq != wordSeq) return;
-                    setAdapter(result, false);
+                    setAdapter(result);
                 });
             }
         });
+    }
+
+    private static void cancel(Call call) {
+        if (call != null) call.cancel();
     }
 
     private void setRecyclerView() {
@@ -148,7 +153,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void checkKeyword() {
+        // setText() fires afterTextChanged, which schedules a debounced suggest fetch. Fetch once
+        // now and drop that pending duplicate so opening the page does not query twice.
         setKeyword(getKeyword());
+        App.removeCallbacks(wordRunnable);
         getWord(getKeyword());
     }
 
@@ -162,26 +170,29 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         fetchWord(pendingWord);
     }
 
-    private void getHot() {
+    private void getHot(final long seq) {
         mBinding.word.setText(R.string.search_hot);
         mWordAdapter.setItems(Word.objectFrom(Setting.getHot()).getData());
-        OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Map.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).enqueue(getCallback(true));
-    }
-
-    private Callback getCallback(boolean hot) {
-        return new Callback() {
+        hotCall = OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Map.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general"));
+        hotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String result = response.body().string();
+                String result = response.body() == null ? "" : response.body().string();
                 if (TextUtils.isEmpty(result)) return;
-                App.post(() -> setAdapter(result, hot));
+                App.post(() -> {
+                    // The hot list only describes an empty search box. A late response must not
+                    // replace suggestions for text typed since, nor overwrite the saved hot list.
+                    if (seq != wordSeq || !empty()) return;
+                    Setting.putHot(result);
+                    mWordAdapter.setItems(Word.objectFrom(result).getData());
+                });
             }
-        };
+        });
     }
 
-    private void setAdapter(String result, boolean save) {
-        if (!save && empty()) return;
-        if (save) Setting.putHot(result);
+    private void setAdapter(String result) {
+        // A late suggest response must not repopulate the list after the box was cleared.
+        if (empty()) return;
         mWordAdapter.setItems(Word.objectFrom(result).getData());
     }
 
@@ -346,10 +357,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     @Override
     protected void onDestroy() {
         App.removeCallbacks(wordRunnable);
-        if (suggestCall != null) {
-            suggestCall.cancel();
-            suggestCall = null;
-        }
+        cancel(suggestCall);
+        suggestCall = null;
+        cancel(hotCall);
+        hotCall = null;
         super.onDestroy();
         mBinding.mic.destroy();
     }
