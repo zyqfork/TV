@@ -38,6 +38,7 @@ import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.media.ArtworkBitmapLoader;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.Task;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
@@ -160,10 +161,17 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     @Override
     public boolean onUnbind(Intent intent) {
         if (isBrowserBind(intent)) releaseBrowser();
-        // Background playback / still playing: keep the service and audio alive.
-        if (isLocalBind(intent) && !com.fongmi.android.tv.setting.PlayerSetting.isBackgroundOn()
-                && !player.isPlaying()) tryShutdown();
+        // Keep the service only while audio is actually live or still loading. With "background
+        // playback" enabled an idle player used to pin the service and its foreground notification
+        // forever after the last activity unbound.
+        if (isLocalBind(intent) && !shouldKeepAlive()) tryShutdown();
         return super.onUnbind(intent);
+    }
+
+    private boolean shouldKeepAlive() {
+        if (player.isPlaying()) return true;
+        if (!PlayerSetting.isBackgroundOn()) return false;
+        return player.getPlaybackState() != Player.STATE_IDLE;
     }
 
     @Override
@@ -402,16 +410,22 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     private long lastChildrenNotifyAt;
     private final Runnable childrenNotifyRunnable = () -> {
         if (session == null) return;
+        // Stamp when the notification actually goes out, not when it was requested. Otherwise the
+        // deferred run leaves the timestamp stale and the next call fires immediately anyway.
+        lastChildrenNotifyAt = android.os.SystemClock.elapsedRealtime();
         session.notifyChildrenChanged("VOD", 0, null);
     };
+
+    /** Minimum spacing between MediaSession library refreshes. */
+    private static final long CHILDREN_NOTIFY_WINDOW_MS = 800L;
 
     /** Collapse rapid identical library refreshes that spam system MediaSession. */
     private void notifyVodChildrenDebounced() {
         if (session == null) return;
         long now = android.os.SystemClock.elapsedRealtime();
-        if (now - lastChildrenNotifyAt < 800L) {
+        if (now - lastChildrenNotifyAt < CHILDREN_NOTIFY_WINDOW_MS) {
             App.removeCallbacks(childrenNotifyRunnable);
-            App.post(childrenNotifyRunnable, 800L);
+            App.post(childrenNotifyRunnable, CHILDREN_NOTIFY_WINDOW_MS);
             return;
         }
         lastChildrenNotifyAt = now;

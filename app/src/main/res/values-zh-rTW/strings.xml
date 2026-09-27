@@ -374,6 +374,7 @@
     <string name="network_storage_edit">編輯</string>
     <string name="network_storage_delete">刪除</string>
     <string name="network_storage_unsupported_file">不支援的檔案類型，僅可播放：%1$s</string>
+    <string name="network_storage_supported_types">影片/音訊/串流，如 mp4 mkv ts m3u8 mp3 flac</string>
     <string name="network_storage_browse">瀏覽</string>
     <string name="network_storage_invalid">請填寫必要欄位</string>
     <string name="network_storage_list_fail">目錄讀取失敗</string>

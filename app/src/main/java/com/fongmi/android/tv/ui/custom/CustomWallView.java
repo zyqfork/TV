@@ -49,6 +49,8 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private GifDrawable drawable;
     private PlayerView video;
     private ExoPlayer player;
+    /** Incremented per refresh so a slower earlier decode cannot overwrite a newer wallpaper. */
+    private int wallGeneration;
 
     public CustomWallView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -72,6 +74,9 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         stop();
         // Built-in wallpapers are cheap; custom image/gif decode + Palette must leave
         // the main thread or every activity enter pays for it (high input latency).
+        // Wallpaper switches can overlap, so a task may only apply its result while it is still
+        // the newest request; otherwise the slower of two switches wins and the wrong wall shows.
+        final int generation = ++wallGeneration;
         int wall = Setting.getWall();
         int type = Setting.getWallType();
         if (isBuiltIn(wall, type)) {
@@ -84,7 +89,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
                 int color = getWallColor();
                 Drawable poster = cache();
                 App.post(() -> {
-                    if (binding == null) return;
+                    if (binding == null || generation != wallGeneration) return;
                     loadVideo(Path.wall(wall), poster);
                     applyThemeColor(color);
                 });
@@ -94,7 +99,11 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
             Drawable decoded = gifDraw != null ? gifDraw : cache();
             int color = getWallColor();
             App.post(() -> {
-                if (binding == null) return;
+                if (binding == null || generation != wallGeneration) {
+                    // Never leak a decoded GIF that lost the race.
+                    if (gifDraw != null) gifDraw.recycle();
+                    return;
+                }
                 if (gifDraw != null) {
                     drawable = gifDraw;
                     binding.image.setImageDrawable(gifDraw);

@@ -154,17 +154,30 @@ public class NetworkStorageStore {
     }
 
     public static synchronized void delete(String id) {
+        // An empty id is not a target: callers delete a listed item, and an empty id used to be a
+        // no-op. Sweeping every id-less entry from here deleted unrelated tiles by accident, so
+        // legacy stubs go through delete(NetworkStorage) instead.
+        if (TextUtils.isEmpty(id)) return;
         List<NetworkStorage> list = getAll();
-        if (TextUtils.isEmpty(id)) {
-            // Anonymous stubs have no id; treat delete as "remove remaining stubs".
-            list.removeIf(item -> TextUtils.isEmpty(item.getId()));
-        } else {
-            list.removeIf(item -> id.equals(item.getId()));
-        }
+        list.removeIf(item -> id.equals(item.getId()));
         Prefers.put(KEY, GSON.toJson(list));
-        if (!TextUtils.isEmpty(id)) {
-            NetworkCredentialStore.remove(id);
-            clearHomeIf(id);
+        NetworkCredentialStore.remove(id);
+        clearHomeIf(id);
+    }
+
+    /**
+     * Deletes exactly one stored entry. Legacy entries saved before ids existed cannot be addressed
+     * by id, so those are matched by endpoint; anything else would have to guess which tile the
+     * user picked.
+     */
+    public static synchronized void delete(NetworkStorage target) {
+        if (target == null) return;
+        if (!TextUtils.isEmpty(target.getId())) {
+            delete(target.getId());
+            return;
         }
+        List<NetworkStorage> list = getAll();
+        if (!list.removeIf(item -> sameEndpoint(item, target))) return;
+        Prefers.put(KEY, GSON.toJson(list));
     }
 }

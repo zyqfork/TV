@@ -166,7 +166,7 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
                 .setTitle(R.string.network_storage_delete)
                 .setMessage(item.displayTitle())
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> {
-                    NetworkStorageStore.delete(item.getId());
+                    NetworkStorageStore.delete(item);
                     ConfigEvent.common();
                     refresh();
                 })

@@ -83,7 +83,10 @@ public abstract class BaseActivity extends AppCompatActivity {
         });
     }
 
-    // design_width_in_dp=960 on leanback; density must track window width / 960.
+    // MUST match <meta-data android:name="design_width_in_dp" android:value="960"/> in
+    // app/src/leanback/AndroidManifest.xml, which is the value AutoSizeCompat converts to.
+    // If they diverge the drift check below is always true: AutoSize keeps being re-applied and
+    // this optimization silently becomes a no-op (slow, not broken). Change both together.
     private static final float DESIGN_WIDTH_DP = 960f;
 
     private Resources hackResources(Resources resources) {
