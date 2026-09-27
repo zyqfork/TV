@@ -16,17 +16,15 @@ import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
-import org.json.JSONObject;
-
 import java.io.File;
 
 public class Updater implements Download.Callback, UpdateListener {
 
-    private final Download download;
+    /** Created once the release tag is known, so the download targets that exact release. */
+    private Download download;
     private UpdateDialog dialog;
 
     private Updater() {
-        this.download = Download.create(getApk(), getFile());
     }
 
     public static Updater create() {
@@ -41,8 +39,8 @@ public class Updater implements Download.Callback, UpdateListener {
         return Github.getJson();
     }
 
-    private String getApk() {
-        return Github.getApk(BuildConfig.FLAVOR_mode + "-" + BuildConfig.FLAVOR_abi);
+    private String getApk(String tag) {
+        return Github.getApk(tag, BuildConfig.FLAVOR_mode + "-" + BuildConfig.FLAVOR_abi);
     }
 
     public Updater force() {
@@ -58,34 +56,34 @@ public class Updater implements Download.Callback, UpdateListener {
 
     private void doInBackground(FragmentActivity activity) {
         try {
-            JSONObject object = new JSONObject(OkHttp.string(getJson()));
-            String tag = object.optString("tag_name");
-            if (tag.isEmpty()) tag = object.optString("name");
-            final String name = tag;
-            final String desc = object.optString("body");
+            // VERSION_NAME carries the source revision for tag-built releases (see the CI stamping
+            // step). Without it a "-source.N" tag would compare as newer forever and the dialog
+            // would reappear after every install.
             int currentSource = Github.parseSourceRevision(BuildConfig.VERSION_NAME);
-            if (!Github.isNewer(name, BuildConfig.VERSION_CODE, currentSource)) return;
-            App.post(() -> show(activity, name, desc));
+            Github.Release release = Github.findNewer(OkHttp.string(getJson()), BuildConfig.VERSION_CODE, currentSource);
+            if (release == null) return;
+            App.post(() -> show(activity, release));
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void show(FragmentActivity activity, String version, String desc) {
+    private void show(FragmentActivity activity, Github.Release release) {
         dismiss();
-        dialog = UpdateDialog.create().title(ResUtil.getString(R.string.update_version, version)).desc(desc).listener(this).show(activity);
+        download = Download.create(getApk(release.tag()), getFile());
+        dialog = UpdateDialog.create().title(ResUtil.getString(R.string.update_version, release.tag())).desc(release.desc()).listener(this).show(activity);
     }
 
     @Override
     public void onConfirm(View view) {
         view.setEnabled(false);
-        download.start(this);
+        if (download != null) download.start(this);
     }
 
     @Override
     public void onCancel(View view) {
         Setting.putUpdate(false);
-        download.cancel();
+        if (download != null) download.cancel();
         dismiss();
     }
 

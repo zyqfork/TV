@@ -1,18 +1,74 @@
 package com.fongmi.android.tv.utils;
 
+import androidx.annotation.Nullable;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 public class Github {
 
     public static final String OWNER = "zyqfork";
     public static final String REPO = "TV";
-    public static final String API_LATEST = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases/latest";
-    public static final String DOWNLOAD = "https://github.com/" + OWNER + "/" + REPO + "/releases/latest/download";
+    /**
+     * Deliberately the release <em>list</em> and not {@code /releases/latest}: GitHub picks "latest"
+     * by publish time, so a later manual/test release (the repo has {@code v0.0.0-manual.*} tags)
+     * can take that slot. Its version parses to 0, which silently switched updates off for everyone.
+     * Scanning the list and taking the highest version is independent of publish order.
+     */
+    public static final String API_RELEASES = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases?per_page=30";
 
     public static String getJson() {
-        return API_LATEST;
+        return API_RELEASES;
     }
 
-    public static String getApk(String name) {
-        return DOWNLOAD + "/" + name + ".apk";
+    /**
+     * Downloads from the exact release tag instead of {@code releases/latest/download}, which
+     * carries the same "latest may not be the newest version" problem as {@link #API_RELEASES}.
+     */
+    public static String getApk(String tag, String name) {
+        return "https://github.com/" + OWNER + "/" + REPO + "/releases/download/" + tag + "/" + name + ".apk";
+    }
+
+    /** A release that is strictly newer than the installed build. */
+    public record Release(String tag, String desc) {
+    }
+
+    /**
+     * Picks the newest published, non-prerelease entry of a {@code /releases} payload.
+     *
+     * @param json          raw GitHub releases list
+     * @param currentCode   installed VERSION_CODE (5.5.8 -&gt; 558)
+     * @param currentSource installed source revision, 0 when the build carries none
+     * @return the newest release that is newer than the installed build, or {@code null} if none
+     */
+    @Nullable
+    public static Release findNewer(String json, int currentCode, int currentSource) throws JSONException {
+        JSONArray releases = new JSONArray(json);
+        Release best = null;
+        int bestCode = 0;
+        int bestSource = 0;
+        for (int i = 0; i < releases.length(); i++) {
+            JSONObject item = releases.optJSONObject(i);
+            if (item == null || item.optBoolean("draft") || item.optBoolean("prerelease")) continue;
+            String tag = item.optString("tag_name");
+            if (tag.isEmpty()) tag = item.optString("name");
+            int code = parseCode(tag);
+            // A tag with no comparable version (v0.0.0-manual.N) is never an update candidate.
+            if (code <= 0) continue;
+            int source = parseSourceRevision(tag);
+            if (compare(code, source, bestCode, bestSource) <= 0) continue;
+            bestCode = code;
+            bestSource = source;
+            best = new Release(tag, item.optString("body"));
+        }
+        if (best == null) return null;
+        return compare(bestCode, bestSource, currentCode, currentSource) > 0 ? best : null;
+    }
+
+    private static int compare(int codeA, int sourceA, int codeB, int sourceB) {
+        if (codeA != codeB) return Integer.compare(codeA, codeB);
+        return Integer.compare(sourceA, sourceB);
     }
 
     /**
@@ -50,18 +106,5 @@ public class Github {
         } catch (NumberFormatException e) {
             return 0;
         }
-    }
-
-    /**
-     * @param tag               GitHub release tag (e.g. {@code v5.5.6-source.8})
-     * @param currentCode       BuildConfig.VERSION_CODE (5.5.6 -> 556)
-     * @param currentSource     installed source revision, 0 if unknown
-     */
-    public static boolean isNewer(String tag, int currentCode, int currentSource) {
-        int code = parseCode(tag);
-        if (code <= 0) return false;
-        if (code != currentCode) return code > currentCode;
-        int src = parseSourceRevision(tag);
-        return src > currentSource;
     }
 }

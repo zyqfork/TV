@@ -59,6 +59,30 @@ jobs:
           # airplay third_party: libplist + ffmpeg are git submodules required by CMake
           submodules: recursive
 
+      # The in-app updater compares its own VERSION_NAME/VERSION_CODE against the release tag.
+      # Without this stamp an installed v5.5.8-source.2 build reports VERSION_NAME=5.5.8, so every
+      # "-source.N" tag would look newer forever and the update dialog would return after install.
+      # gradle.properties is intentionally absent from the Gradle cache key, so this is cache-safe.
+      - name: Stamp version from release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          base="${tag%%-*}"
+          IFS=. read -r major minor patch <<< "$base"
+          major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+          case "${major}${minor}${patch}" in
+            '' | *[!0-9]*) echo "Tag ${GITHUB_REF_NAME} has no numeric X.Y.Z version; keeping gradle.properties"; exit 0 ;;
+          esac
+          code=$(( major * 100 + minor * 10 + patch ))
+          if [ "$code" -le 0 ]; then
+            echo "Tag ${GITHUB_REF_NAME} parses to VERSION_CODE=${code}; keeping gradle.properties"
+            exit 0
+          fi
+          sed -i "s|^VERSION_CODE=.*|VERSION_CODE=${code}|" gradle.properties
+          sed -i "s|^VERSION_NAME=.*|VERSION_NAME=${tag}|" gradle.properties
+          grep -n '^VERSION_' gradle.properties
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
