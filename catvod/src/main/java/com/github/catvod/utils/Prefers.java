@@ -72,18 +72,25 @@ public class Prefers {
         }
     }
 
+    /**
+     * Writes are intentionally asynchronous ({@code apply()}): this is the default single-process
+     * SharedPreferences, so reads observe the new value immediately anyway, while {@code commit()}
+     * would block the calling (often main) thread on disk I/O for every setting change.
+     * The one case that argued for {@code commit()} — a following {@code System.exit} dropping
+     * pending writes — no longer exists; the app has no forced-exit path.
+     */
     public static void put(String key, Object obj) {
         if (obj == null) return;
         if (obj instanceof String val) {
-            getPrefers().edit().putString(key, val).commit();
+            getPrefers().edit().putString(key, val).apply();
         } else if (obj instanceof Boolean val) {
-            getPrefers().edit().putBoolean(key, val).commit();
+            getPrefers().edit().putBoolean(key, val).apply();
         } else if (obj instanceof Float val) {
-            getPrefers().edit().putFloat(key, val).commit();
+            getPrefers().edit().putFloat(key, val).apply();
         } else if (obj instanceof Integer val) {
-            getPrefers().edit().putInt(key, val).commit();
+            getPrefers().edit().putInt(key, val).apply();
         } else if (obj instanceof Long val) {
-            getPrefers().edit().putLong(key, val).commit();
+            getPrefers().edit().putLong(key, val).apply();
         } else if (obj instanceof Number val) {
             if (val.toString().contains(".")) put(key, val.floatValue());
             else put(key, val.intValue());
@@ -91,6 +98,6 @@ public class Prefers {
     }
 
     public static void remove(String key) {
-        getPrefers().edit().remove(key).commit();
+        getPrefers().edit().remove(key).apply();
     }
 }
