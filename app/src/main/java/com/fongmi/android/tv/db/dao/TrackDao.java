@@ -12,6 +12,9 @@ import java.util.List;
 @Dao
 public abstract class TrackDao extends BaseDao<Track> {
 
+    @Query("SELECT * FROM Track")
+    public abstract List<Track> findAll();
+
     @Query("SELECT * FROM Track WHERE `key` = :key")
     public abstract List<Track> find(String key);
 

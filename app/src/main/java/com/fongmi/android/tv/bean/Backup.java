@@ -52,12 +52,21 @@ public class Backup {
     }
 
     public void restore() {
-        AppDatabase.get().clearAllTables();
-        AppDatabase.get().getSiteDao().insertOrUpdate(getSite());
-        AppDatabase.get().getLiveDao().insertOrUpdate(getLive());
-        AppDatabase.get().getKeepDao().insertOrUpdate(getKeep());
-        AppDatabase.get().getConfigDao().insertOrUpdate(getConfig());
-        AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
+        AppDatabase db = AppDatabase.get();
+        // clearAllTables() drops every table, but a backup only carries site/live/keep/config/
+        // history plus the preferences. Cast devices and per-video track choices are not in it, so
+        // they have to be carried across the wipe by hand — otherwise every restore silently
+        // deletes them.
+        List<Device> devices = db.getDeviceDao().findAll();
+        List<Track> tracks = db.getTrackDao().findAll();
+        db.clearAllTables();
+        db.getSiteDao().insertOrUpdate(getSite());
+        db.getLiveDao().insertOrUpdate(getLive());
+        db.getKeepDao().insertOrUpdate(getKeep());
+        db.getConfigDao().insertOrUpdate(getConfig());
+        db.getHistoryDao().insertOrUpdate(getHistory());
+        db.getDeviceDao().insertOrUpdate(devices);
+        db.getTrackDao().insertOrUpdate(tracks);
         for (Map.Entry<String, ?> entry : getPrefers().entrySet()) Prefers.put(entry.getKey(), entry.getValue());
     }
 
