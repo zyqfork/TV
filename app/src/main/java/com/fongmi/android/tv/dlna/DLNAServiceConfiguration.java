@@ -18,7 +18,8 @@ import java.net.NetworkInterface;
 
 public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
 
-    private final boolean bindPreferredOnly;
+    /** Renderer mode: the HTTP stream server must listen on a stable, predictable port. */
+    private final boolean fixedListenPort;
 
     /** jUPnP stream server port; 0 means "any free port" but some controllers ignore ephemeral LOCATIONs. */
     private static final int DEFAULT_STREAM_PORT = 49152;
@@ -27,13 +28,13 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
         this(false);
     }
 
-    public DLNAServiceConfiguration(boolean bindPreferredOnly) {
-        super(resolveListenPort(bindPreferredOnly), 0);
-        this.bindPreferredOnly = bindPreferredOnly;
+    public DLNAServiceConfiguration(boolean fixedListenPort) {
+        super(resolveListenPort(fixedListenPort), 0);
+        this.fixedListenPort = fixedListenPort;
     }
 
-    private static int resolveListenPort(boolean bindPreferredOnly) {
-        if (!bindPreferredOnly) return 0;
+    private static int resolveListenPort(boolean fixedListenPort) {
+        if (!fixedListenPort) return 0;
         int port = DlnaSetting.getHttpPort();
         return port > 0 ? port : DEFAULT_STREAM_PORT;
     }
@@ -55,15 +56,15 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
     @Override
     @SuppressWarnings("rawtypes")
     public StreamServer createStreamServer(NetworkAddressFactory networkAddressFactory) {
-        boolean fallbackToEphemeral = bindPreferredOnly && DlnaSetting.getHttpPort() == 0;
+        boolean fallbackToEphemeral = fixedListenPort && DlnaSetting.getHttpPort() == 0;
         return new SocketHttpStreamServer(new SocketHttpStreamServer.Configuration(networkAddressFactory.getStreamListenPort(), fallbackToEphemeral));
     }
 
     @Override
     protected NetworkAddressFactory createNetworkAddressFactory(int streamListenPort, int multicastResponsePort) {
-        // Always bind only the real LAN iface (and IPv4). Hosts like rk3588 + Docker expose
-        // docker0/br-*/tailscale0 and dozens of IPv6 temps; binding them multiplies SSDP
-        // sockets and delays MediaServer discovery (e.g. slow IPTV boxes).
+        // Narrow the bound interfaces for both roles (renderer and control point). Hosts like
+        // rk3588 + Docker expose docker0/br-*/tailscale0 plus dozens of IPv6 temporaries, and every
+        // extra address adds SSDP sockets that delay MediaServer discovery (e.g. slow IPTV boxes).
         String iface = DlnaSetting.resolveInterfaceName();
         return new AndroidNetworkAddressFactory(streamListenPort, multicastResponsePort) {
             @Override
@@ -75,7 +76,10 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
 
             @Override
             protected boolean isUsableAddress(NetworkInterface networkInterface, InetAddress address) {
-                return address instanceof Inet4Address && super.isUsableAddress(networkInterface, address);
+                // Prefer IPv4, but never reject a host that only has IPv6: dropping every address
+                // leaves jUPnP with nothing to bind and the service silently never starts.
+                boolean preferIpv4 = address instanceof Inet4Address || TextUtils.isEmpty(DlnaNetwork.firstIpv4(networkInterface));
+                return preferIpv4 && super.isUsableAddress(networkInterface, address);
             }
         };
     }

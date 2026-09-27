@@ -37,6 +37,8 @@ public class DlnaBrowseActivity extends BaseActivity implements DlnaEntryAdapter
     private String mUuid;
     private String mRootName;
     private boolean mManagerBound;
+    /** Incremented per browse request; stale callbacks compare against it and drop their result. */
+    private int mLoadToken;
 
     public static void start(Activity activity, String uuid, String name) {
         start(activity, uuid, name, "0", name);
@@ -86,11 +88,15 @@ public class DlnaBrowseActivity extends BaseActivity implements DlnaEntryAdapter
     }
 
     private void load(String objectId) {
+        // Browse pages arrive asynchronously and the adapter is shared, so a browse that is left
+        // behind (back press, or opening another folder) would otherwise append its own entries to
+        // the new folder's list — or wipe it with its own error. Only the newest request may write.
+        final int token = ++mLoadToken;
         mBinding.progressLayout.showProgress();
         DlnaMediaManager.get().browse(mUuid, objectId, new DlnaMediaManager.BrowseCallback() {
             @Override
             public void onPage(java.util.List<DlnaEntry> entries, boolean firstPage, boolean done) {
-                if (isFinishing()) return;
+                if (isFinishing() || token != mLoadToken) return;
                 if (firstPage) {
                     mAdapter.setItems(entries);
                     mBinding.recycler.setSelectedPosition(0);
@@ -103,7 +109,7 @@ public class DlnaBrowseActivity extends BaseActivity implements DlnaEntryAdapter
 
             @Override
             public void onSuccess(java.util.List<DlnaEntry> entries) {
-                if (isFinishing()) return;
+                if (isFinishing() || token != mLoadToken) return;
                 mAdapter.setItems(entries);
                 mBinding.recycler.setSelectedPosition(0);
                 mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
@@ -111,7 +117,7 @@ public class DlnaBrowseActivity extends BaseActivity implements DlnaEntryAdapter
 
             @Override
             public void onError(String msg) {
-                if (isFinishing()) return;
+                if (isFinishing() || token != mLoadToken) return;
                 mAdapter.setItems(null);
                 mBinding.progressLayout.showContent(true, 0);
                 Notify.show(TextUtils.isEmpty(msg) ? getString(R.string.dlna_library_browse_fail) : msg);

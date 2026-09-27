@@ -98,7 +98,7 @@ public class DlnaNetwork {
         return true;
     }
 
-    private static String firstIpv4(NetworkInterface nif) {
+    static String firstIpv4(NetworkInterface nif) {
         try {
             for (InetAddress address : Collections.list(nif.getInetAddresses())) {
                 if (address instanceof Inet4Address && !address.isLoopbackAddress()) return address.getHostAddress();

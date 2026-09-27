@@ -17,6 +17,7 @@ import org.jupnp.controlpoint.ControlPoint;
 import org.jupnp.model.action.ActionInvocation;
 import org.jupnp.model.message.UpnpResponse;
 import org.jupnp.model.message.header.DeviceTypeHeader;
+import org.jupnp.model.message.header.STAllHeader;
 import org.jupnp.model.meta.RemoteDevice;
 import org.jupnp.model.meta.RemoteService;
 import org.jupnp.model.types.UDADeviceType;
@@ -44,6 +45,8 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     private static final UDADeviceType SERVER_TYPE = new UDADeviceType("MediaServer", 1);
     private static final UDAServiceType CDS_TYPE = new UDAServiceType("ContentDirectory", 1);
     private static final long BROWSE_COUNT = 500L;
+    /** Conservative page size some older ContentDirectory servers need; see browsePage(). */
+    private static final long BROWSE_COUNT_FALLBACK = 200L;
     private static final int MAX_BROWSE_ENTRIES = 2000;
     private static final int MAX_TITLE_LENGTH = 512;
     private static final int MAX_URL_LENGTH = 8192;
@@ -58,7 +61,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     private final Set<DeviceListener> deviceListeners = new CopyOnWriteArraySet<>();
     private final Runnable firstRescan = this::searchIfBound;
     private final Runnable secondRescan = this::searchIfBound;
-    private final Runnable lateRescan = this::searchIfBound;
+    private final Runnable lateRescan = this::lateRescanOrFallback;
     private AndroidUpnpService upnpService;
     private Context appContext;
     private int bindCount;
@@ -127,6 +130,15 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
         if (control != null) control.search(new DeviceTypeHeader(SERVER_TYPE));
     }
 
+    /**
+     * Broad safety net for devices that only answer {@code ssdp:all}, which cheap IPTV boxes
+     * frequently do even though UPnP requires a response to their implemented device type.
+     */
+    private void searchAll() {
+        ControlPoint control = getControlPoint();
+        if (control != null) control.search(new STAllHeader());
+    }
+
     /** Immediate search plus early retries for devices that answer M-SEARCH late. */
     public void searchWithRescan() {
         search();
@@ -145,6 +157,17 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
 
     private synchronized void searchIfBound() {
         if (bindCount > 0) search();
+    }
+
+    /**
+     * Last scheduled attempt. If the type-targeted searches found nothing, widen once to
+     * {@code ssdp:all} so a non-compliant box is still discovered; an empty result here is also
+     * indistinguishable from a LAN that genuinely has no media server, so this stays bounded.
+     */
+    private synchronized void lateRescanOrFallback() {
+        if (bindCount <= 0) return;
+        if (getRegistered().isEmpty()) searchAll();
+        else search();
     }
 
     public List<Device> getRegistered() {
@@ -196,12 +219,12 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
             if (callback != null) App.post(() -> callback.onError("Invalid ContentDirectory object ID"));
             return;
         }
-        browsePage(control, service, id, 0, new ArrayList<>(), callback);
+        browsePage(control, service, id, 0, new ArrayList<>(), BROWSE_COUNT, callback);
     }
 
     private void browsePage(ControlPoint control, RemoteService service, String id, long start,
-                            List<DlnaEntry> accumulated, BrowseCallback callback) {
-        control.execute(new Browse(service, id, BrowseFlag.DIRECT_CHILDREN, Browse.CAPS_WILDCARD, start, BROWSE_COUNT) {
+                            List<DlnaEntry> accumulated, long count, BrowseCallback callback) {
+        control.execute(new Browse(service, id, BrowseFlag.DIRECT_CHILDREN, Browse.CAPS_WILDCARD, start, count) {
             private long numberReturned = -1;
             private long totalMatches = -1;
 
@@ -227,7 +250,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
                 long returned = numberReturned >= 0 ? numberReturned
                         : didl == null ? 0 : didl.getContainers().size() + didl.getItems().size();
                 long next = start + returned;
-                boolean serverHasMore = totalMatches > 0 ? next < totalMatches : returned >= BROWSE_COUNT;
+                boolean serverHasMore = totalMatches > 0 ? next < totalMatches : returned >= count;
                 if (callback != null) {
                     // Emit only this page so the UI can append without duplicating
                     // the accumulated list.
@@ -240,7 +263,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
                 }
                 if (returned > 0 && serverHasMore && next < MAX_BROWSE_ENTRIES
                         && accumulated.size() < MAX_BROWSE_ENTRIES) {
-                    browsePage(control, service, id, next, accumulated, callback);
+                    browsePage(control, service, id, next, accumulated, count, callback);
                 }
             }
 
@@ -250,6 +273,13 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
 
             @Override
             public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+                // Some ContentDirectory servers fail the whole browse when RequestedCount is larger
+                // than they expect. Retry the first page once with a conservative size instead of
+                // reporting an empty library.
+                if (count > BROWSE_COUNT_FALLBACK && start == 0) {
+                    browsePage(control, service, id, start, accumulated, BROWSE_COUNT_FALLBACK, callback);
+                    return;
+                }
                 if (callback != null) App.post(() -> callback.onError(safeError(defaultMsg)));
             }
         });
