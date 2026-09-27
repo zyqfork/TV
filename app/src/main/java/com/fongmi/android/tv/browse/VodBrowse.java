@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.browse;
 
+import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -21,12 +22,14 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.utils.Trans;
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
@@ -37,7 +40,19 @@ class VodBrowse {
     static final String VOD_SEARCH = "VS:";
 
     private static final int SEARCH_LIMIT = 50;
-    private static final int SEARCH_TIMEOUT = 5;
+    /**
+     * Patience for one search, as a whole.
+     *
+     * <p>This used to be a per-site timeout: every site got its own {@code get(5s)} and the results
+     * were taken in submission order, so a config with a handful of unresponsive sites made the user
+     * wait five seconds for each one (a dead site is paid for in full even though the sites behind
+     * it had not even started). Spending the same five seconds once, as a budget for the whole
+     * search, keeps the patience for any single site unchanged while removing that growth.
+     *
+     * <p>A healthy config never reaches the budget: the loop ends as soon as every site has
+     * reported, so only unresponsive sites consume it.
+     */
+    private static final long SEARCH_BUDGET_MS = 5000L;
     private static final char KEY_SEPARATOR = '|';
     private static final VodHistoryPolicy policy = new VodHistoryPolicy();
     private static final Map<String, Vod> vodCache = new ConcurrentHashMap<>();
@@ -70,8 +85,7 @@ class VodBrowse {
         String keyword = searchKey(query);
         if (TextUtils.isEmpty(keyword)) return ImmutableList.of();
         List<Site> sites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
-        List<ListenableFuture<List<MediaItem>>> futures = sites.stream().map(site -> Task.largeExecutor().submit(() -> searchSite(site, keyword))).toList();
-        List<MediaItem> items = collectResults(futures);
+        List<MediaItem> items = collectResults(sites, keyword);
         items.sort((a, b) -> matchScore(b, keyword) - matchScore(a, keyword));
         ImmutableList<MediaItem> results = ImmutableList.copyOf(items.subList(0, Math.min(items.size(), SEARCH_LIMIT)));
         searchCacheMap.put(keyword, results);
@@ -84,14 +98,41 @@ class VodBrowse {
         return result.getList().stream().map(vod -> BrowseTree.playable(searchId(site.getKey(), vod.getId()), vod.getName(), vod.getRemarks(), vod.getPic())).toList();
     }
 
-    private static List<MediaItem> collectResults(@NonNull List<ListenableFuture<List<MediaItem>>> futures) {
+    /**
+     * Runs every site concurrently and takes results in completion order, under one shared budget.
+     *
+     * <p>Waiting on the futures in submission order made the total wait the sum of the slow sites:
+     * a dead site cost a full timeout while the sites queued behind it had not even started, so a
+     * config with a handful of unresponsive sites could stall a search for minutes. Taking whichever
+     * site finishes next means an unresponsive site only delays the search once, not once per site
+     * behind it.
+     */
+    private static List<MediaItem> collectResults(@NonNull List<Site> sites, @NonNull String keyword) {
         List<MediaItem> items = new ArrayList<>();
-        for (ListenableFuture<List<MediaItem>> future : futures) {
+        if (sites.isEmpty()) return items;
+        ExecutorCompletionService<List<MediaItem>> completion = new ExecutorCompletionService<>(Task.largeExecutor());
+        for (Site site : sites) completion.submit(() -> searchSite(site, keyword));
+        long deadline = SystemClock.elapsedRealtime() + SEARCH_BUDGET_MS;
+        for (int i = 0; i < sites.size() && items.size() < SEARCH_LIMIT; i++) {
+            long remaining = deadline - SystemClock.elapsedRealtime();
+            if (remaining <= 0) break;
+            Future<List<MediaItem>> finished;
             try {
-                List<MediaItem> result = future.get(SEARCH_TIMEOUT, TimeUnit.SECONDS);
+                finished = completion.poll(remaining, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            if (finished == null) break;
+            try {
+                List<MediaItem> result = finished.get();
                 if (result != null) items.addAll(result);
-                if (items.size() >= SEARCH_LIMIT) break;
-            } catch (Exception ignored) {
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (ExecutionException ignored) {
+                // One site failing must not drop the results of the others. The task has already
+                // completed, so this cannot block and no other exception can reach here.
             }
         }
         return items;
