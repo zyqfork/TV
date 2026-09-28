@@ -341,6 +341,9 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     private void notifyState() {
         if (avTransportImpl == null || player == null || !isDlnaActive) return;
+        // Cache the rate here (main thread): the AVTransport action methods run on jUPnP threads
+        // and must never touch the player themselves.
+        avTransportImpl.updateSpeedCache(player.getSpeed());
         int state = player.getPlaybackState();
         if (state == Player.STATE_IDLE) return;
         avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
@@ -357,7 +360,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         @Override
         public void run() {
             if (!isDlnaActive || player == null) return;
-            if (avTransportImpl != null && player.isPlaying()) avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
+            if (avTransportImpl != null) {
+                avTransportImpl.updateSpeedCache(player.getSpeed());
+                if (player.isPlaying()) avTransportImpl.updatePositionCache(player.getPosition(), getDuration());
+            }
             App.post(this, 1000);
         }
     };

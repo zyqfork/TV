@@ -64,6 +64,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     private volatile long seekingToMs = -1;
     /** Atomic snapshot so PositionInfo never mixes position/duration from different updates. */
     private volatile PosCache posCache = PosCache.EMPTY;
+    /** Playback rate, written on the main thread only (see getTransportInfo). */
+    private volatile float speedCache = 1f;
 
     private static final class PosCache {
         static final PosCache EMPTY = new PosCache(-1, -1);
@@ -98,6 +100,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
         pendingSeekMs = -1;
         seekingToMs = -1;
         posCache = PosCache.EMPTY;
+        speedCache = 1f;
         currentMetaData = "";
         currentPlayMode = PlayMode.NORMAL;
         fireStateChange(RenderState.IDLE);
@@ -110,6 +113,11 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
             seekingToMs = -1;
         }
         posCache = new PosCache(position, duration);
+    }
+
+    /** Call from the main thread only; see getTransportInfo for why this is cached. */
+    public void updateSpeedCache(float speed) {
+        if (speed > 0) speedCache = speed;
     }
 
     public long consumePendingSeekMs() {
@@ -166,8 +174,12 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
 
     @Override
     public TransportInfo getTransportInfo(UnsignedIntegerFourBytes instanceId) {
-        String speed = (player != null && dlnaActive) ? String.valueOf(player.getSpeed()) : "1";
-        return new TransportInfo(currentState, TransportStatus.OK, speed);
+        // Never touch the player here: jUPnP invokes actions on its own threads and Media3 throws
+        // "Player is accessed on the wrong thread" (getPlaybackParameters verifies the application
+        // thread), which turns this action into a SOAP 500 for every controller that polls it —
+        // and controllers that get a 500 after a cast drop the renderer from their device list.
+        // The rate is cached on the main thread instead, like the position/duration cache below.
+        return new TransportInfo(currentState, TransportStatus.OK, dlnaActive ? String.valueOf(speedCache) : "1");
     }
 
     @Override
