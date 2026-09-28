@@ -66,7 +66,7 @@ public final class CastNetworkWatcher {
      * persistent service bound to a stale interface after Wi-Fi/Ethernet changes.
      */
     public static synchronized void unregisterIfUnused(Context context) {
-        if (DlnaSetting.isEnabled() || AirPlaySetting.isEnabled() || Setting.isDlnaLibrary()) return;
+        if (DlnaSetting.isEnabled() || CastPlatform.isAirPlayEnabled() || Setting.isDlnaLibrary()) return;
         unregister(context);
     }
 

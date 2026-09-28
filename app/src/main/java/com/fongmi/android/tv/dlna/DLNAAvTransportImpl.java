@@ -300,7 +300,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     }
 
     private boolean canPrevious() {
-        // Allow Previous even before CastActivity marks dlnaActive (URI already known).
+        // Allow Previous even before the cast page marks dlnaActive (URI already known).
         return !prevURI.isEmpty();
     }
 
