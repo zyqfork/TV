@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.custom;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.util.AttributeSet;
@@ -42,6 +43,13 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     private static final int[] WALL_PAPERS = {0, R.drawable.wallpaper_1, R.drawable.wallpaper_2, R.drawable.wallpaper_3, R.drawable.wallpaper_4};
     private static final int[] WALL_COLORS = {0, 0xFF40C090, 0xFF4870E0, 0xFF48B0C0, 0xFF404040};
+    /**
+     * Contrast to keep for the white text that every layout draws straight onto the wallpaper.
+     * 6:1 leaves room for the translucent white cards layered on top of it (a 10% white card still
+     * lands above 4.5:1) while keeping the scrim as light as possible.
+     */
+    private static final double TARGET_CONTRAST = 6.0;
+    private static final int MAX_SCRIM = 204;
     private static final int TYPE_RES = 0;
     private static final int TYPE_GIF = 1;
     private static final int TYPE_VIDEO = 2;
@@ -81,7 +89,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         int type = Setting.getWallType();
         if (isBuiltIn(wall, type)) {
             loadRes(WALL_PAPERS[wall]);
-            applyThemeColor(getWallColor());
+            applyWallColor(getWallColor());
             return;
         }
         Task.execute(() -> {
@@ -91,7 +99,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
                 App.post(() -> {
                     if (binding == null || generation != wallGeneration) return;
                     loadVideo(Path.wall(wall), poster);
-                    applyThemeColor(color);
+                    applyWallColor(color);
                 });
                 return;
             }
@@ -112,9 +120,44 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
                 } else {
                     binding.image.setImageResource(R.drawable.wallpaper_1);
                 }
-                applyThemeColor(color);
+                applyWallColor(color);
             });
         });
+    }
+
+    private void applyWallColor(int color) {
+        applyScrim(color);
+        applyThemeColor(color);
+    }
+
+    /**
+     * Darken the wallpaper just enough for the white text on top of it to stay readable. A scrim
+     * beats shipping darker art because the wallpaper can be any photo the user picked, and it
+     * stays out of the way for the wallpapers that were already dark enough.
+     */
+    private void applyScrim(int color) {
+        binding.scrim.setBackgroundColor(Color.argb(scrimFor(color), 0, 0, 0));
+    }
+
+    private int scrimFor(int color) {
+        double target = 1.05 / TARGET_CONTRAST - 0.05;
+        int alpha = 0;
+        while (alpha < MAX_SCRIM && luminance(darken(color, alpha)) > target) alpha += 4;
+        return alpha;
+    }
+
+    private static int darken(int color, int alpha) {
+        int keep = 255 - alpha;
+        return Color.rgb(Color.red(color) * keep / 255, Color.green(color) * keep / 255, Color.blue(color) * keep / 255);
+    }
+
+    private static double luminance(int color) {
+        return 0.2126 * channel(Color.red(color)) + 0.7152 * channel(Color.green(color)) + 0.0722 * channel(Color.blue(color));
+    }
+
+    private static double channel(int value) {
+        double v = value / 255.0;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
     }
 
     private void applyThemeColor(int newColor) {
@@ -178,7 +221,8 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private void ensureVideoView() {
         if (video != null) return;
         video = (PlayerView) LayoutInflater.from(getContext()).inflate(R.layout.view_wall_video, this, false);
-        addView(video, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        // Insert below the scrim so a video wallpaper gets darkened like any other wallpaper.
+        addView(video, 1, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
     }
 
     private boolean hasVideo() {

@@ -9,4 +9,15 @@
         android:layout_height="match_parent"
         android:scaleType="centerCrop" />
 
+    <!--
+      The whole UI draws white text straight onto the wallpaper, so a light wallpaper makes it
+      unreadable: the built-in wallpaper_1 and wallpaper_3 average only ~2.2:1 against white.
+      CustomWallView sizes this scrim to whatever the wallpaper actually needs, so dark art is
+      left untouched and a bright photo still gets readable text.
+    -->
+    <View
+        android:id="@+id/scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
 </FrameLayout>
