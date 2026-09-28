@@ -57,6 +57,10 @@ public class NetworkStorageStore {
             String username = stringValue(object.get("username"));
             String password = stringValue(object.get("password"));
             NetworkStorage item = list.get(i);
+            // put() is a no-op for an entry without an id, so rewriting the list afterwards would
+            // drop the plaintext copy (username/password are transient) without having stored the
+            // secret anywhere — the user's password would be gone for good. Leave those alone.
+            if (TextUtils.isEmpty(item.getId())) continue;
             if (!TextUtils.isEmpty(username) || !TextUtils.isEmpty(password)) {
                 NetworkCredentialStore.put(item.getId(), username, password);
             }
@@ -177,7 +181,13 @@ public class NetworkStorageStore {
             return;
         }
         List<NetworkStorage> list = getAll();
-        if (!list.removeIf(item -> sameEndpoint(item, target))) return;
-        Prefers.put(KEY, GSON.toJson(list));
+        for (int i = 0; i < list.size(); i++) {
+            if (!sameEndpoint(list.get(i), target)) continue;
+            // Remove the single tile the user picked. removeIf() took out every legacy entry that
+            // happens to point at the same share, which is not what "delete this one" means.
+            list.remove(i);
+            Prefers.put(KEY, GSON.toJson(list));
+            return;
+        }
     }
 }

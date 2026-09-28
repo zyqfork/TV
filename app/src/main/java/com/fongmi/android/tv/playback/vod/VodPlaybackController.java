@@ -14,7 +14,6 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 
-import java.util.Collections;
 import java.util.List;
 
 public class VodPlaybackController {
@@ -70,6 +69,10 @@ public class VodPlaybackController {
 
     public void updateVod(Vod item) {
         History history = state.getHistory();
+        // A VOD refresh can arrive before the detail request has produced a history (the page is
+        // already open, the detail call is still in flight), or after it failed while the page
+        // stayed up. Every sibling setter guards for that; this one dereferenced null and crashed.
+        if (history == null) return;
         String id = item.getId();
         String pic = item.getPic();
         String name = item.getName();
@@ -318,7 +321,10 @@ public class VodPlaybackController {
 
     public void reverseEpisode(boolean scroll) {
         if (!state.hasFlags()) return;
-        for (Flag flag : state.getFlags()) Collections.reverse(flag.getEpisodes());
+        // reverseEpisodes() re-points Flag.position as well: it is an index into the list, and
+        // reversing without re-pointing made the current episode and next/previous resolve against
+        // the pre-reversal order.
+        for (Flag flag : state.getFlags()) flag.reverseEpisodes();
         host.renderReverseEpisodes(state.getFlag().getEpisodes(), scroll);
     }
 

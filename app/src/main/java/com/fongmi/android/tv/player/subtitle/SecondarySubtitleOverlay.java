@@ -50,7 +50,9 @@ public final class SecondarySubtitleOverlay {
     private final Runnable updater = this::update;
 
     private SecondarySubtitleTimeline timeline;
-    private PlayerManager player;
+    // Set on the main thread by bind()/release(), read on a Task thread by load() for the request
+    // headers, so it needs to be volatile.
+    private volatile PlayerManager player;
     private String loadedUrl = "";
     private boolean active;
     private boolean hadCues;

@@ -17,6 +17,7 @@ import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Text;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -137,6 +138,22 @@ public class Flag implements Parcelable, Diffable<Flag> {
 
     private boolean isPositionValid() {
         return getPosition() >= 0 && getPosition() < getEpisodes().size();
+    }
+
+    /**
+     * Reverses the episode order in place and re-points {@link #position} at the selected episode.
+     * {@link #setSelected(Episode)} records the selection as an index into the list as it was, so
+     * reversing without this leaves the index addressing a different episode — and {@code position}
+     * is what the playback layer uses to resolve the current episode and the next/previous one.
+     */
+    public void reverseEpisodes() {
+        Collections.reverse(episodes);
+        for (int i = 0; i < episodes.size(); i++) {
+            if (episodes.get(i).isSelected()) {
+                setPosition(i);
+                return;
+            }
+        }
     }
 
     public void mergeEpisodes(List<Episode> items, boolean rev) {

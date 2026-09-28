@@ -10,6 +10,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 public class DlnaPinStore {
 
@@ -18,17 +19,21 @@ public class DlnaPinStore {
     private static final Type LIST_TYPE = new TypeToken<List<DlnaPin>>() {
     }.getType();
 
-    public static List<DlnaPin> getAll() {
+    public static synchronized List<DlnaPin> getAll() {
         String json = Prefers.getString(KEY, "[]");
         try {
             List<DlnaPin> list = GSON.fromJson(json, LIST_TYPE);
-            return list == null ? new ArrayList<>() : new ArrayList<>(list);
+            if (list == null) return new ArrayList<>();
+            // A hand-edited or partially written store can deserialise to a null element, and every
+            // caller below dereferences each entry — one null made the whole favourites list crash.
+            list.removeIf(Objects::isNull);
+            return new ArrayList<>(list);
         } catch (Exception e) {
             return new ArrayList<>();
         }
     }
 
-    public static boolean contains(String key) {
+    public static synchronized boolean contains(String key) {
         if (TextUtils.isEmpty(key)) return false;
         for (DlnaPin pin : getAll()) {
             if (key.equals(pin.getKey())) return true;
@@ -40,7 +45,7 @@ public class DlnaPinStore {
         return pin != null && contains(pin.getKey());
     }
 
-    public static void add(DlnaPin pin) {
+    public static synchronized void add(DlnaPin pin) {
         if (pin == null || TextUtils.isEmpty(pin.getUuid())) return;
         List<DlnaPin> list = getAll();
         for (int i = 0; i < list.size(); i++) {
@@ -54,7 +59,7 @@ public class DlnaPinStore {
         Prefers.put(KEY, GSON.toJson(list));
     }
 
-    public static void remove(String key) {
+    public static synchronized void remove(String key) {
         if (TextUtils.isEmpty(key)) return;
         List<DlnaPin> list = getAll();
         Iterator<DlnaPin> it = list.iterator();
@@ -68,7 +73,8 @@ public class DlnaPinStore {
         if (pin != null) remove(pin.getKey());
     }
 
-    public static boolean toggle(DlnaPin pin) {
+    /** Read-modify-write, so the whole toggle has to be atomic or two taps lose one of them. */
+    public static synchronized boolean toggle(DlnaPin pin) {
         if (pin == null) return false;
         if (contains(pin)) {
             remove(pin);

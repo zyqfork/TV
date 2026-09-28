@@ -25,11 +25,23 @@ abstract class VideoAdjustShaderProgram extends BaseGlShaderProgram {
     VideoAdjustShaderProgram(boolean useHdr, String fragmentShader) throws VideoFrameProcessingException {
         super(false, 1);
         if (useHdr) throw new VideoFrameProcessingException("Video adjustment does not support HDR");
+        GlProgram program = null;
         try {
-            glProgram = new GlProgram(VERTEX_SHADER, fragmentShader);
-            glProgram.setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE);
+            program = new GlProgram(VERTEX_SHADER, fragmentShader);
+            program.setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE);
+            glProgram = program;
         } catch (GlUtil.GlException e) {
+            // Media3 never calls release() on a shader program whose constructor threw, so a failure
+            // after the program was linked (setBufferAttribute, say) leaked it and its VBO.
+            if (program != null) deleteQuietly(program);
             throw new VideoFrameProcessingException(e);
+        }
+    }
+
+    private static void deleteQuietly(GlProgram program) {
+        try {
+            program.delete();
+        } catch (GlUtil.GlException ignored) {
         }
     }
 

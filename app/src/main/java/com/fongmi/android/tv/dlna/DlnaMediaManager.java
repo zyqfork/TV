@@ -62,7 +62,10 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     private final Runnable firstRescan = this::searchIfBound;
     private final Runnable secondRescan = this::searchIfBound;
     private final Runnable lateRescan = this::lateRescanOrFallback;
-    private AndroidUpnpService upnpService;
+    // Written under synchronized(this) but read without the lock by getRegistry()/getControlPoint(),
+    // which are reachable from jUPnP callbacks on other threads — volatile keeps them from seeing a
+    // stale service after detach() nulls it.
+    private volatile AndroidUpnpService upnpService;
     private Context appContext;
     private int bindCount;
     private int attachGeneration;

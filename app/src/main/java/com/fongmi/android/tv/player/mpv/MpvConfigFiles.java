@@ -66,7 +66,11 @@ public final class MpvConfigFiles {
             String line = stripComment(sourceLine).trim();
             if (line.isEmpty()) continue;
             if (line.startsWith("[") && line.endsWith("]")) {
-                global = false;
+                // mpv applies the [default] profile without being asked, so options inside it are as
+                // global as the ones before any section — getDefaultOptions() below already treats
+                // them that way. Ignoring them here let the app overwrite a user's [default] vo/hwdec.
+                String profile = line.substring(1, line.length() - 1).trim();
+                global = profile.isEmpty() || "default".equals(profile);
                 continue;
             }
             if (!global) continue;

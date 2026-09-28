@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.ui.playback;
 
+import android.util.Log;
+
 import androidx.annotation.Nullable;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
@@ -14,6 +16,8 @@ import com.github.catvod.net.OkHttp;
  * lifecycle restore, or settings changes so both EXO and MPV stay consistent.
  */
 public final class PlaybackOverlayBinder {
+
+    private static final String TAG = "TV-overlay";
 
     private PlaybackOverlayBinder() {
     }
@@ -31,7 +35,10 @@ public final class PlaybackOverlayBinder {
             if (player != null && !player.isReleased()) {
                 playerView.setDanmakuSource(player.getSelectedDanmakuUri());
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable e) {
+            // Danmaku is optional, so a failure here must not break playback — but swallowing it
+            // silently made "danmaku does not show" impossible to diagnose from a log.
+            Log.w(TAG, "applyDanmaku failed", e);
         }
     }
 

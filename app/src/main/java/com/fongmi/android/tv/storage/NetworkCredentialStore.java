@@ -13,6 +13,7 @@ import com.google.gson.Gson;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 
+import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -47,10 +48,18 @@ final class NetworkCredentialStore {
             Credentials value = GSON.fromJson(new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8), Credentials.class);
             return value == null ? Credentials.EMPTY : value;
         } catch (Exception e) {
-            // Restored backups cannot use the old device-bound key. Discard only the invalid secret.
-            prefs().edit().remove(id).apply();
+            // A backup restored onto another device cannot be decrypted with this device's key, so
+            // the secret really is unrecoverable and dropping just that entry is right. Anything
+            // else — the keystore being briefly unavailable, say — must not destroy the password.
+            if (isUnrecoverable(e)) prefs().edit().remove(id).apply();
             return Credentials.EMPTY;
         }
+    }
+
+    private static boolean isUnrecoverable(Exception e) {
+        // Bad tag: the payload was encrypted with a different key. Illegal argument: the stored
+        // payload itself is malformed. Both mean the ciphertext can never be read again.
+        return e instanceof AEADBadTagException || e instanceof IllegalArgumentException;
     }
 
     static synchronized void put(String id, String username, String password) {
