@@ -35,12 +35,23 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
     /** jUPnP stream server port; 0 means "any free port" but some controllers ignore ephemeral LOCATIONs. */
     private static final int DEFAULT_STREAM_PORT = 49152;
 
+    /**
+     * Keep SSDP search replies on the well-known port. UPnP permits an ephemeral response port and
+     * jUPnP defaults to one, but several control points only accept a reply from the same UDP/1900
+     * endpoint to which they sent M-SEARCH. The affected Bilibili client did not emit M-SEARCH at
+     * all in our capture, so its primary compatibility path is the frequent alive pulse below; this
+     * fixed port still makes active discovery interoperable with stricter controllers.
+     */
+    private static final int SSDP_RESPONSE_PORT = 1900;
+
     public DLNAServiceConfiguration() {
         this(false);
     }
 
     public DLNAServiceConfiguration(boolean fixedListenPort) {
-        super(resolveListenPort(fixedListenPort), 0);
+        // Only the renderer needs this compatibility endpoint. Browser/DMC instances keep an
+        // ephemeral port so both roles can run in the same process without competing for 1900.
+        super(resolveListenPort(fixedListenPort), fixedListenPort ? SSDP_RESPONSE_PORT : 0);
         this.fixedListenPort = fixedListenPort;
     }
 
@@ -53,12 +64,11 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
     /**
      * DLNA device capability element.
      *
-     * jUPnP emits a plain UPnP description, but DLNA controllers expect the device to declare what
-     * it is. Strict controllers — 哔哩哔哩 is one — filter the device list on
-     * {@code <dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC>} and simply never show a renderer that omits
-     * it, while laxer apps (西瓜视频) list the same renderer without complaint. Without this element
-     * discovery, description, SOAP and eventing all work and the device is still invisible to those
-     * apps.
+     * jUPnP emits a plain UPnP description, but DLNA-aware controllers can filter device lists using
+     * {@code <dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC>}. Declare the renderer profile explicitly
+     * instead of relying on controllers to infer it from the UPnP MediaRenderer device type. The
+     * observed Bilibili discovery failure had an additional, independently verified passive-SSDP
+     * cause; keeping this declaration still improves interoperability with capability filters.
      */
     private static final String DLNA_DOC = "<dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\">DMR-1.50</dlna:X_DLNADOC>";
 

@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -39,6 +40,7 @@ import org.jupnp.model.meta.ManufacturerDetails;
 import org.jupnp.model.meta.ModelDetails;
 import org.jupnp.model.types.UDADeviceType;
 import org.jupnp.model.types.UDN;
+import org.jupnp.protocol.async.SendingNotificationAlive;
 import org.jupnp.support.avtransport.lastchange.AVTransportLastChangeParser;
 import org.jupnp.support.model.ProtocolInfo;
 import org.jupnp.support.model.ProtocolInfos;
@@ -48,6 +50,9 @@ import org.jupnp.support.renderingcontrol.lastchange.RenderingControlLastChangeP
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public class DLNARendererService extends AndroidUpnpServiceImpl implements ServiceConnection {
 
@@ -60,16 +65,28 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private DLNAAvTransportImpl avTransportImpl;
     private PlaybackService playbackService;
     private Player currentListenerPlayer;
+    private LocalDevice rendererDevice;
     private boolean bound;
     private boolean upnpStarted;
+    private volatile boolean destroyed;
 
     private static Runnable pendingApply;
     private static Runnable pendingStart;
-    private static Runnable alivePulse;
+    private Runnable alivePulse;
+    private final Runnable startupAlive = this::sendCompatibilityAlive;
+    private final ExecutorService healthExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "dlna-health");
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    // Immediate republish happens at session boundaries; a five-minute safety pulse is enough
-    // to refresh controller caches without waking a TV every minute while idle.
-    private static final long ALIVE_PULSE_MS = 5 * 60_000L;
+    // Bilibili on the observed 10.0.0.243 device sends no M-SEARCH at all; it opens a short passive
+    // window for ssdp:alive. One- or five-minute advertisements therefore only work by chance, while
+    // toggling DLNA works because it broadcasts immediately. Pulse every five seconds while the
+    // receiver screen is interactive, and back off to one minute while idle to protect mobile power.
+    private static final long ACTIVE_ALIVE_PULSE_MS = 5_000L;
+    private static final long IDLE_ALIVE_PULSE_MS = 60_000L;
+    private static final long[] STARTUP_ALIVE_DELAYS_MS = {1_000L, 3_000L};
 
     /** Gap between stopService and startForegroundService in {@link #apply(Context)}. */
     private static final long RESTART_GAP_MS = 1500L;
@@ -118,7 +135,6 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     @Override
     public void onCreate() {
         super.onCreate();
-        scheduleHealthCheck();
         Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT).setSmallIcon(R.drawable.ic_notification).setContentTitle(getString(R.string.app_name)).setSilent(true).build();
         startForeground(Notify.ID + 1, notification);
         if (!DlnaSetting.isEnabled()) {
@@ -141,7 +157,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
             // CastNetworkWatcher already restarts the stack on network changes, so jUPnP's own
             // receiver is redundant; dropping it removes the churn and that half-torn-down state.
             if (upnpService.getRouter() instanceof AndroidRouter router) router.unregisterBroadcastReceiver();
-            if (registerLocalDevice()) scheduleAlivePulse();
+            if (registerLocalDevice()) {
+                scheduleAlivePulse();
+                scheduleHealthCheck();
+            }
         } catch (RuntimeException e) {
             android.util.Log.e("DlnaRenderer", "DLNA renderer startup failed", e);
             stopSelf();
@@ -169,20 +188,26 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private final Runnable healthCheck = new Runnable() {
         @Override
         public void run() {
-            // The probe has to run off the main thread: a socket connect on the main thread throws
-            // NetworkOnMainThreadException, which would look exactly like "the server is gone" and
-            // would restart the renderer every interval.
-            new Thread(() -> {
-                boolean reachable = isStreamServerReachable();
-                App.post(() -> {
-                    if (upnpStarted && DlnaSetting.isEnabled() && !reachable) {
-                        android.util.Log.w("DlnaRenderer", "HTTP stream server unreachable, restarting the renderer");
-                        apply(DLNARendererService.this);
-                        return;
-                    }
-                    App.post(healthCheck, HEALTH_CHECK_MS);
+            if (destroyed || healthExecutor.isShutdown()) return;
+            // Reuse one worker instead of creating a new thread every 15 seconds. The destroyed
+            // check on both sides also prevents an in-flight probe from resurrecting callbacks
+            // after onDestroy() removed them.
+            try {
+                healthExecutor.execute(() -> {
+                    boolean reachable = isStreamServerReachable();
+                    App.post(() -> {
+                        if (destroyed) return;
+                        if (upnpStarted && DlnaSetting.isEnabled() && !reachable) {
+                            android.util.Log.w("DlnaRenderer", "HTTP stream server unreachable, restarting the renderer");
+                            apply(DLNARendererService.this);
+                            return;
+                        }
+                        App.post(healthCheck, HEALTH_CHECK_MS);
+                    });
                 });
-            }, "dlna-health").start();
+            } catch (RejectedExecutionException ignored) {
+                // onDestroy() won the race after the initial isShutdown() check.
+            }
         }
     };
 
@@ -207,14 +232,23 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     private void scheduleAlivePulse() {
         if (alivePulse != null) App.removeCallbacks(alivePulse);
+        App.removeCallbacks(startupAlive);
+        // The first addDevice advertisement can happen before a control-point opens its scan page.
+        // These early pulses cover that startup race before the regular compatibility cadence.
+        for (long delay : STARTUP_ALIVE_DELAYS_MS) App.post(startupAlive, delay);
         alivePulse = new Runnable() {
             @Override
             public void run() {
-                republish();
-                App.post(this, ALIVE_PULSE_MS);
+                sendCompatibilityAlive();
+                App.post(this, getAlivePulseDelayMs());
             }
         };
-        App.post(alivePulse, ALIVE_PULSE_MS);
+        App.post(alivePulse, getAlivePulseDelayMs());
+    }
+
+    private long getAlivePulseDelayMs() {
+        PowerManager power = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        return power != null && power.isInteractive() ? ACTIVE_ALIVE_PULSE_MS : IDLE_ALIVE_PULSE_MS;
     }
 
     private boolean registerLocalDevice() {
@@ -227,6 +261,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         try {
             LocalDevice device = new LocalDevice(identity, type, details, new LocalService[]{avTransport, connManager, renderControl});
             upnpService.getRegistry().addDevice(device);
+            rendererDevice = device;
             android.util.Log.i("DlnaRenderer", "MediaRenderer registered udn=" + identity.getUdn()
                     + " name=" + DlnaSetting.getDisplayName()
                     + " iface=" + com.fongmi.android.tv.setting.DlnaSetting.resolveInterfaceName());
@@ -257,19 +292,23 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     /**
      * Media formats the renderer accepts, advertised through ConnectionManager.GetProtocolInfo.
      *
-     * A DLNA renderer with an empty Sink list is unusable to strict controllers: 哔哩哔哩 hides the
-     * device even though discovery, description, SOAP and eventing all work, while 西瓜视频 ignores
-     * the list and shows it anyway — which is exactly the difference reported for this box.
+     * A DLNA renderer with an empty Sink list is unusable to strict controllers because they use
+     * this action to filter devices before offering them as playback targets. Discovery testing later
+     * showed that Bilibili also has an independent passive-SSDP compatibility requirement.
      */
     private static final ProtocolInfos SINK_PROTOCOLS = new ProtocolInfos(
             "http-get:*:video/mp4:*,http-get:*:video/x-matroska:*,http-get:*:video/x-msvideo:*,"
-                    + "http-get:*:video/mpeg:*,http-get:*:video/quicktime:*,http-get:*:video/webm:*,"
-                    + "http-get:*:video/x-flv:*,http-get:*:video/3gpp:*,http-get:*:video/x-ms-wmv:*,"
-                    + "http-get:*:video/vnd.dlna.mpeg-tts:*,http-get:*:application/vnd.apple.mpegurl:*,"
-                    + "http-get:*:audio/mpeg:*,http-get:*:audio/mp4:*,http-get:*:audio/x-ms-wma:*,"
-                    + "http-get:*:audio/flac:*,http-get:*:audio/x-flac:*,http-get:*:audio/x-wav:*,"
-                    + "http-get:*:audio/ogg:*,http-get:*:audio/aac:*,"
-                    + "http-get:*:image/jpeg:*,http-get:*:image/png:*,http-get:*:image/gif:*,"
+                    + "http-get:*:video/mpeg:*,http-get:*:video/mp2t:*,http-get:*:video/quicktime:*,"
+                    + "http-get:*:video/webm:*,http-get:*:video/x-flv:*,http-get:*:video/3gpp:*,"
+                    + "http-get:*:video/x-ms-wmv:*,http-get:*:video/vnd.dlna.mpeg-tts:*,"
+                    + "http-get:*:application/vnd.apple.mpegurl:*,http-get:*:application/x-mpegURL:*,"
+                    + "http-get:*:audio/mpegurl:*,http-get:*:audio/x-mpegurl:*,"
+                    + "http-get:*:application/dash+xml:*,http-get:*:audio/mpeg:*,"
+                    + "http-get:*:audio/mp4:*,http-get:*:audio/mp4a-latm:*,"
+                    + "http-get:*:audio/x-ms-wma:*,http-get:*:audio/flac:*,http-get:*:audio/x-flac:*,"
+                    + "http-get:*:audio/wav:*,http-get:*:audio/x-wav:*,http-get:*:audio/ogg:*,"
+                    + "http-get:*:audio/aac:*,http-get:*:image/jpeg:*,http-get:*:image/png:*,"
+                    + "http-get:*:image/gif:*,http-get:*:image/webp:*,"
                     + "http-get:*:application/octet-stream:*");
 
     private static final ProtocolInfos SOURCE_PROTOCOLS = new ProtocolInfos(new ProtocolInfo[0]);
@@ -308,7 +347,11 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     @Override
     public void onDestroy() {
+        destroyed = true;
+        rendererDevice = null;
         App.removeCallbacks(healthCheck);
+        App.removeCallbacks(startupAlive);
+        healthExecutor.shutdownNow();
         if (alivePulse != null) {
             App.removeCallbacks(alivePulse);
             alivePulse = null;
@@ -401,6 +444,30 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
             android.util.Log.i("DlnaRenderer", "republish alive isDlnaActive=" + isDlnaActive);
         } catch (RuntimeException e) {
             android.util.Log.w("DlnaRenderer", "republish failed", e);
+        }
+    }
+
+    /**
+     * One complete alive set (root, UDN, device type and every service type).
+     *
+     * jUPnP's normal advertisement repeats that set three times 150ms apart, which is appropriate
+     * for startup/session changes. Doing the same every five seconds would produce unnecessary LAN
+     * traffic, so the passive-client compatibility pulse sends one set. Frequent pulses provide
+     * the packet-loss redundancy while cutting steady-state traffic to one third.
+     */
+    private void sendCompatibilityAlive() {
+        LocalDevice device = rendererDevice;
+        if (!upnpStarted || destroyed || device == null) return;
+        try {
+            SendingNotificationAlive protocol = new SendingNotificationAlive(upnpService, device) {
+                @Override
+                protected int getBulkRepeat() {
+                    return 1;
+                }
+            };
+            upnpService.getConfiguration().getAsyncProtocolExecutor().execute(protocol);
+        } catch (RuntimeException e) {
+            android.util.Log.w("DlnaRenderer", "compatibility alive failed", e);
         }
     }
 
