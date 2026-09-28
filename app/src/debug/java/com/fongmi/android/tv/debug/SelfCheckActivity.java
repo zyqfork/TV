@@ -275,6 +275,14 @@ public final class SelfCheckActivity extends Activity {
             expect("png_ts_unwrap_sync", payload[0] & 0xff, 0x47);
             expect("png_ts_unwrap_length", payload.length, wrapped.length - offset);
             expect("png_ts_passthrough", PngTsUnwrap.findTsOffset(new byte[]{0x47, 0, 1}), 0);
+            // TS beginning exactly at length - 376: only two packets fit, so the three-point
+            // probe cannot be confirmed and the call must fall back to pass-through. The loop
+            // used to read one byte past the end here and throw instead of returning -1.
+            byte[] boundary = new byte[496];
+            System.arraycopy(new byte[]{(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, 0, boundary, 0, 8);
+            boundary[120] = 0x47;
+            boundary[120 + 188] = 0x47;
+            expect("png_ts_boundary_no_throw", PngTsUnwrap.findTsOffset(boundary), -1);
         } catch (Throwable e) {
             failures.add("png_ts_unwrap_threw " + e);
             Log.e(TAG, "PNG-TS unwrap check threw", e);

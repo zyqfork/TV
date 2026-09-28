@@ -69,7 +69,16 @@ public final class PngTsUnwrap {
     }
 
     private static int findTsSync(byte[] data, int start) {
-        int limit = Math.min(data.length - TS_PACKET * 2, start + PROBE);
+        // The body reads data[i + TS_PACKET * 2], so the last verifiable index is
+        // length - TS_PACKET * 2 - 1. Stopping at length - TS_PACKET * 2 instead lets the final
+        // iteration read one byte past the end: on a buffer whose TS begins exactly at
+        // length - TS_PACKET * 2 the two shorter probes pass, the third throws
+        // ArrayIndexOutOfBoundsException, and -1 is never returned. That made every caller's
+        // fallback (the `from` offset below, and the -1 pass-through documented on
+        // findTsOffset) unreachable, so a segment that should have streamed through raw
+        // instead failed: TsRaw answers "segment unavailable" and MpvHlsPngTs.prepare
+        // swallows the throw and leaves the playlist wrapped.
+        int limit = Math.min(data.length - TS_PACKET * 2 - 1, start + PROBE);
         for (int i = Math.max(0, start); i <= limit; i++) {
             if (data[i] == 0x47 && data[i + TS_PACKET] == 0x47 && data[i + TS_PACKET * 2] == 0x47) return i;
         }
