@@ -2,15 +2,29 @@ package com.fongmi.android.tv.dlna;
 
 import android.text.TextUtils;
 
+import com.google.gson.annotations.SerializedName;
+
+/**
+ * Persisted to preferences as JSON (the pinned entries in the media library), so every field
+ * carries its wire name — see {@code NetworkStorage} for what happens without one.
+ */
 public class DlnaPin {
 
+    @SerializedName("key")
     private String key;
+    @SerializedName("uuid")
     private String uuid;
+    @SerializedName("serverName")
     private String serverName;
+    @SerializedName("objectId")
     private String objectId;
+    @SerializedName("title")
     private String title;
+    @SerializedName("container")
     private boolean container;
+    @SerializedName("url")
     private String url;
+    @SerializedName("mime")
     private String mime;
 
     public DlnaPin() {

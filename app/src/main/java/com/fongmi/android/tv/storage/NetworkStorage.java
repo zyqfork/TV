@@ -3,24 +3,47 @@ package com.fongmi.android.tv.storage;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.UUID;
 
+/**
+ * Persisted to preferences as JSON, so every field carries its wire name.
+ *
+ * Without {@code @SerializedName} R8 renames the fields in a release build and Gson then writes —
+ * and reads — whatever the obfuscator chose. That round-trips inside a single build, which is why
+ * it goes unnoticed, but the mapping changes as the code changes: saved storages (and the
+ * credential-store keys derived from {@code id}) would silently stop loading after an update.
+ */
 public class NetworkStorage {
 
     public static final String TYPE_SMB = "smb";
     public static final String TYPE_WEBDAV = "webdav";
 
+    @SerializedName("id")
     private String id;
+    @SerializedName("type")
     private String type;
+    @SerializedName("name")
     private String name;
+    @SerializedName("host")
     private String host;
+    @SerializedName("port")
     private int port;
+    @SerializedName("share")
     private String share;
+    @SerializedName("path")
     private String path;
+    /** Never serialised here: credentials live in the keystore-backed NetworkCredentialStore. */
+    @SerializedName("username")
     private transient String username;
+    @SerializedName("password")
     private transient String password;
+    @SerializedName("https")
     private boolean https;
+    @SerializedName("allowInsecureAuth")
     private boolean allowInsecureAuth;
+    @SerializedName("allowSmbEncryptionDowngrade")
     private boolean allowSmbEncryptionDowngrade;
 
     public static NetworkStorage create(String type) {

@@ -9,6 +9,7 @@ import android.util.Base64;
 
 import com.fongmi.android.tv.App;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -108,7 +109,10 @@ final class NetworkCredentialStore {
 
     static final class Credentials {
         static final Credentials EMPTY = new Credentials("", "");
+        /** Encrypted with the keystore key, but still JSON — the names must survive R8. */
+        @SerializedName("username")
         private String username;
+        @SerializedName("password")
         private String password;
 
         Credentials(String username, String password) {

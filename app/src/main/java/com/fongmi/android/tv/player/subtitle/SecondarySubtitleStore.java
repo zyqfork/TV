@@ -8,6 +8,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.github.catvod.utils.Prefers;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
@@ -73,7 +74,10 @@ public final class SecondarySubtitleStore {
     }
 
     public static final class Entry {
+        /** Remembered in preferences as JSON, so the names must survive R8 obfuscation. */
+        @SerializedName("sub")
         private Sub sub;
+        @SerializedName("offsetMs")
         private long offsetMs;
 
         private Entry(Sub sub, long offsetMs) {
