@@ -9,7 +9,6 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.service.DLNARendererService;
@@ -26,7 +25,7 @@ public final class CastNetworkWatcher {
     private static final Runnable APPLY = () -> {
         Context app = App.get();
         if (DlnaSetting.isEnabled()) DLNARendererService.apply(app);
-        if (AirPlaySetting.isEnabled()) CastPlatform.applyAirPlay(app);
+        if (CastPlatform.isAirPlayEnabled()) CastPlatform.applyAirPlay(app);
         if (Setting.isDlnaLibrary()) DlnaMediaManager.get().search();
     };
 

@@ -6,6 +6,7 @@ import android.content.Intent;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.service.AirPlayServer;
+import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.ui.activity.AirPlayCastActivity;
 import com.fongmi.android.tv.ui.activity.CastActivity;
 
@@ -48,6 +49,11 @@ public final class CastPlatform {
     /** Re-bind AirPlay discovery after a network switch. */
     public static void applyAirPlay(Context context) {
         AirPlayServer.apply(context);
+    }
+
+    /** Whether the AirPlay receiver is switched on (a TV-only setting). */
+    public static boolean isAirPlayEnabled() {
+        return AirPlaySetting.isEnabled();
     }
 
     private static void finishIf(Class<? extends Activity> type) {

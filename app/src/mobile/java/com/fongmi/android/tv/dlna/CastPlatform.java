@@ -37,4 +37,9 @@ public final class CastPlatform {
     /** No AirPlay on the phone. */
     public static void applyAirPlay(Context context) {
     }
+
+    /** No AirPlay on the phone. */
+    public static boolean isAirPlayEnabled() {
+        return false;
+    }
 }
