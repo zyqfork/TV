@@ -7,14 +7,25 @@ import com.fongmi.android.tv.setting.DlnaSetting;
 
 import org.jupnp.android.AndroidNetworkAddressFactory;
 import org.jupnp.android.AndroidUpnpServiceConfiguration;
+import org.jupnp.binding.xml.DescriptorBindingException;
+import org.jupnp.binding.xml.DeviceDescriptorBinder;
+import org.jupnp.model.Namespace;
 import org.jupnp.model.ServerClientTokens;
+import org.jupnp.model.meta.Device;
+import org.jupnp.model.profile.RemoteClientInfo;
 import org.jupnp.transport.spi.NetworkAddressFactory;
 import org.jupnp.transport.spi.StreamClient;
 import org.jupnp.transport.spi.StreamServer;
 
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+
+import java.io.StringReader;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+
+import javax.xml.parsers.DocumentBuilderFactory;
 
 public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
 
@@ -37,6 +48,63 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
         if (!fixedListenPort) return 0;
         int port = DlnaSetting.getHttpPort();
         return port > 0 ? port : DEFAULT_STREAM_PORT;
+    }
+
+    /**
+     * DLNA device capability element.
+     *
+     * jUPnP emits a plain UPnP description, but DLNA controllers expect the device to declare what
+     * it is. Strict controllers — 哔哩哔哩 is one — filter the device list on
+     * {@code <dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC>} and simply never show a renderer that omits
+     * it, while laxer apps (西瓜视频) list the same renderer without complaint. Without this element
+     * discovery, description, SOAP and eventing all work and the device is still invisible to those
+     * apps.
+     */
+    private static final String DLNA_DOC = "<dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\">DMR-1.50</dlna:X_DLNADOC>";
+
+    @Override
+    public DeviceDescriptorBinder getDeviceDescriptorBinderUDA10() {
+        DeviceDescriptorBinder delegate = super.getDeviceDescriptorBinderUDA10();
+        return new DeviceDescriptorBinder() {
+            @Override
+            public <T extends Device> T describe(T device, String descriptorXml) throws DescriptorBindingException, org.jupnp.model.ValidationException {
+                return delegate.describe(device, descriptorXml);
+            }
+
+            @Override
+            public <T extends Device> T describe(T device, Document descriptor) throws DescriptorBindingException, org.jupnp.model.ValidationException {
+                return delegate.describe(device, descriptor);
+            }
+
+            @Override
+            public String generate(Device device, RemoteClientInfo clientInfo, Namespace namespace) throws DescriptorBindingException {
+                return injectDlnaDoc(delegate.generate(device, clientInfo, namespace));
+            }
+
+            @Override
+            public Document buildDOM(Device device, RemoteClientInfo clientInfo, Namespace namespace) throws DescriptorBindingException {
+                return toDocument(injectDlnaDoc(delegate.generate(device, clientInfo, namespace)));
+            }
+        };
+    }
+
+    private static String injectDlnaDoc(String xml) {
+        if (xml == null || xml.contains("X_DLNADOC")) return xml;
+        for (String anchor : new String[]{"</modelNumber>", "</UDN>", "</friendlyName>"}) {
+            int at = xml.indexOf(anchor);
+            if (at >= 0) return xml.substring(0, at + anchor.length()) + DLNA_DOC + xml.substring(at + anchor.length());
+        }
+        return xml.replace("</device>", DLNA_DOC + "</device>");
+    }
+
+    private static Document toDocument(String xml) throws DescriptorBindingException {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            return factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
+        } catch (Exception e) {
+            throw new DescriptorBindingException("Could not build device descriptor DOM", e);
+        }
     }
 
     @Override
