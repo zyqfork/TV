@@ -110,6 +110,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     @Override
     public void onCreate() {
         super.onCreate();
+        scheduleHealthCheck();
         Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT).setSmallIcon(R.drawable.ic_notification).setContentTitle(getString(R.string.app_name)).setSilent(true).build();
         startForeground(Notify.ID + 1, notification);
         if (!DlnaSetting.isEnabled()) {
@@ -121,6 +122,17 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
             DlnaMulticastLock.acquire(this, this);
             upnpService.startup();
             upnpStarted = true;
+            // jUPnP's Android router rebuilds every transport on each CONNECTIVITY_CHANGE
+            // (disable() then enable()). This box's network churns constantly — IPv6 temporary
+            // addresses rotate and docker/tailscale interfaces come and go — and a disable() that
+            // is not followed by a successful enable() leaves the router holding a stream server
+            // whose socket is already closed. The renderer then keeps answering M-SEARCH and
+            // advertising LOCATION http://<ip>:49152/…, but nothing listens there, so every
+            // controller fails to load the description and the device never appears in its list —
+            // until the whole stack is restarted from the settings page.
+            // CastNetworkWatcher already restarts the stack on network changes, so jUPnP's own
+            // receiver is redundant; dropping it removes the churn and that half-torn-down state.
+            if (upnpService.getRouter() instanceof AndroidRouter router) router.unregisterBroadcastReceiver();
             if (registerLocalDevice()) scheduleAlivePulse();
         } catch (RuntimeException e) {
             android.util.Log.e("DlnaRenderer", "DLNA renderer startup failed", e);
@@ -131,6 +143,53 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         return START_STICKY;
+    }
+
+    /**
+     * Guard against the renderer advertising a dead LOCATION.
+     *
+     * The device is only useful if the URL in its SSDP replies actually serves the description, so
+     * every so often connect to it locally. If nothing answers, rebuild the stack (the same thing
+     * the settings toggle does) instead of staying invisible on the LAN forever.
+     */
+    private static final long HEALTH_CHECK_MS = 30_000L;
+
+    private void scheduleHealthCheck() {
+        App.post(healthCheck, HEALTH_CHECK_MS * 3);
+    }
+
+    private final Runnable healthCheck = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                if (upnpStarted && DlnaSetting.isEnabled() && !isStreamServerReachable()) {
+                    android.util.Log.w("DlnaRenderer", "HTTP stream server unreachable, restarting the renderer");
+                    apply(DLNARendererService.this);
+                    return;
+                }
+            } catch (Throwable ignored) {
+            }
+            App.post(this, HEALTH_CHECK_MS);
+        }
+    };
+
+    private boolean isStreamServerReachable() {
+        if (upnpService == null || upnpService.getRouter() == null) return true;
+        java.util.List<org.jupnp.model.NetworkAddress> servers;
+        try {
+            servers = upnpService.getRouter().getActiveStreamServers(null);
+        } catch (Exception e) {
+            return true;
+        }
+        if (servers.isEmpty()) return false;
+        for (org.jupnp.model.NetworkAddress address : servers) {
+            try (java.net.Socket socket = new java.net.Socket()) {
+                socket.connect(new java.net.InetSocketAddress(address.getAddress(), address.getPort()), 500);
+                return true;
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
     }
 
     private void scheduleAlivePulse() {
@@ -211,6 +270,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     @Override
     public void onDestroy() {
+        App.removeCallbacks(healthCheck);
         if (alivePulse != null) {
             App.removeCallbacks(alivePulse);
             alivePulse = null;
