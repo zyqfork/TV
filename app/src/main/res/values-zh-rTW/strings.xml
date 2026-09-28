@@ -451,7 +451,6 @@
 
     <string name="detail_path">路徑：<xliff:g name="name">%s</xliff:g></string>
     <string name="network_storage_manual">手動輸入</string>
-    <string name="setting_dlna_library">媒體庫</string>
     <string name="dlna_library_refresh">重新整理</string>
     <string name="dlna_library_empty">未發現媒體伺服器</string>
     <string name="dlna_library_browse_fail">瀏覽目錄失敗</string>
