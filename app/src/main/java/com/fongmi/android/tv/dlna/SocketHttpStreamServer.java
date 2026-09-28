@@ -41,6 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServer.Configuration> {
 
     private static final int ACCEPT_BACKLOG = 50;
+    private static final int BIND_ATTEMPTS = 5;
+    private static final long BIND_RETRY_MS = 300L;
     private static final int MAX_WORKERS = 8;
     private static final int MAX_QUEUED_CONNECTIONS = 32;
     private static final int MAX_REQUEST_LINE_BYTES = 8 * 1024;
@@ -84,7 +86,7 @@ public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServ
                 new ThreadPoolExecutor.AbortPolicy());
         workers.allowCoreThreadTimeOut(true);
         try {
-            serverSocket = bind(bindAddress, configuration.getListenPort());
+            serverSocket = bindWithRetry(bindAddress, configuration.getListenPort());
         } catch (BindException e) {
             if (!configuration.fallbackToEphemeral() || configuration.getListenPort() == 0) {
                 workers.shutdownNow();
@@ -100,6 +102,34 @@ public class SocketHttpStreamServer implements StreamServer<SocketHttpStreamServ
             workers.shutdownNow();
             throw new InitializationException("Could not bind HTTP server socket on " + bindAddress, e);
         }
+    }
+
+    /**
+     * Bind the configured port, retrying briefly before giving up.
+     *
+     * A renderer restart (a network change, or the settings toggle) destroys the old jUPnP instance
+     * and starts a new one ~400ms later, but jUPnP tears the old transports down on a background
+     * thread — so the previous listen socket can still be open when the new instance binds. Without
+     * this retry the fixed port loses that race, the server silently falls back to a random port,
+     * and every SSDP reply advertises a LOCATION that nothing serves: controllers then discover the
+     * device and never manage to load its description, so it stays out of their device list.
+     */
+    private ServerSocket bindWithRetry(InetAddress address, int port) throws IOException {
+        BindException last = null;
+        for (int attempt = 0; attempt < BIND_ATTEMPTS; attempt++) {
+            try {
+                return bind(address, port);
+            } catch (BindException e) {
+                last = e;
+                try {
+                    Thread.sleep(BIND_RETRY_MS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw last;
+                }
+            }
+        }
+        throw last;
     }
 
     private ServerSocket bind(InetAddress address, int port) throws IOException {

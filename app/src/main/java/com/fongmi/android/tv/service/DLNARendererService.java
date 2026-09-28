@@ -69,6 +69,9 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     // to refresh controller caches without waking a TV every minute while idle.
     private static final long ALIVE_PULSE_MS = 5 * 60_000L;
 
+    /** Gap between stopService and startForegroundService in {@link #apply(Context)}. */
+    private static final long RESTART_GAP_MS = 1500L;
+
     public static void start(Context context) {
         if (!DlnaSetting.isEnabled()) return;
         ContextCompat.startForegroundService(context, new Intent(context, DLNARendererService.class));
@@ -97,7 +100,10 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
                 pendingStart = null;
                 start(app);
             };
-            App.post(pendingStart, 400);
+            // Long enough for the old jUPnP instance to finish its asynchronous teardown: jUPnP
+            // closes the old listen socket on a background thread, and rebinding 49152 while it is
+            // still open used to leave the renderer advertising a port nothing served.
+            App.post(pendingStart, RESTART_GAP_MS);
         };
         App.post(pendingApply, 1000);
     }
@@ -152,7 +158,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
      * every so often connect to it locally. If nothing answers, rebuild the stack (the same thing
      * the settings toggle does) instead of staying invisible on the LAN forever.
      */
-    private static final long HEALTH_CHECK_MS = 30_000L;
+    private static final long HEALTH_CHECK_MS = 15_000L;
 
     private void scheduleHealthCheck() {
         App.post(healthCheck, HEALTH_CHECK_MS * 3);
@@ -161,15 +167,20 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     private final Runnable healthCheck = new Runnable() {
         @Override
         public void run() {
-            try {
-                if (upnpStarted && DlnaSetting.isEnabled() && !isStreamServerReachable()) {
-                    android.util.Log.w("DlnaRenderer", "HTTP stream server unreachable, restarting the renderer");
-                    apply(DLNARendererService.this);
-                    return;
-                }
-            } catch (Throwable ignored) {
-            }
-            App.post(this, HEALTH_CHECK_MS);
+            // The probe has to run off the main thread: a socket connect on the main thread throws
+            // NetworkOnMainThreadException, which would look exactly like "the server is gone" and
+            // would restart the renderer every interval.
+            new Thread(() -> {
+                boolean reachable = isStreamServerReachable();
+                App.post(() -> {
+                    if (upnpStarted && DlnaSetting.isEnabled() && !reachable) {
+                        android.util.Log.w("DlnaRenderer", "HTTP stream server unreachable, restarting the renderer");
+                        apply(DLNARendererService.this);
+                        return;
+                    }
+                    App.post(healthCheck, HEALTH_CHECK_MS);
+                });
+            }, "dlna-health").start();
         }
     };
 
