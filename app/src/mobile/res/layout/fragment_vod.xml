@@ -40,6 +40,25 @@
 
         </com.google.android.material.appbar.MaterialToolbar>
 
+        <!--
+          App-level destinations, same list the TV home shows (HomeFuncs). The phone previously had
+          no way to reach 推送 / 网盘 / 媒体库 from the home screen at all.
+        -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/func"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:overScrollMode="never"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            app:layout_scrollFlags="scroll|enterAlways"
+            tools:listitem="@layout/adapter_home_func" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/type"
             android:layout_width="match_parent"

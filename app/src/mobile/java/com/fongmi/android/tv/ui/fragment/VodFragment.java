@@ -19,6 +19,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Value;
@@ -33,10 +34,15 @@ import com.fongmi.android.tv.impl.FilterListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
+import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.KeepActivity;
+import com.fongmi.android.tv.ui.activity.NetworkBrowseActivity;
+import com.fongmi.android.tv.ui.activity.DlnaServerActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
+import com.fongmi.android.tv.ui.adapter.HomeFuncAdapter;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.home.HomeFuncs;
 import com.fongmi.android.tv.ui.dialog.FilterDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LinkDialog;
@@ -54,11 +60,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-public class VodFragment extends BaseFragment implements ConfigListener, SiteListener, FilterListener, TypeAdapter.OnClickListener {
+public class VodFragment extends BaseFragment implements ConfigListener, SiteListener, FilterListener, TypeAdapter.OnClickListener, HomeFuncAdapter.OnClickListener {
 
     private FragmentVodBinding mBinding;
     private SiteViewModel mViewModel;
     private TypeAdapter mAdapter;
+    private HomeFuncAdapter mFuncAdapter;
     private Result mResult;
 
     public static VodFragment newInstance() {
@@ -87,6 +94,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         EventBus.getDefault().register(this);
         mBinding.title.setSelected(true);
         setRecyclerView();
+        setFunc();
         setViewModel();
         showProgress();
         setTitle();
@@ -191,6 +199,31 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         return true;
     }
 
+    private void setFunc() {
+        mBinding.func.setHasFixedSize(true);
+        mBinding.func.setAdapter(mFuncAdapter = new HomeFuncAdapter(this));
+        mFuncAdapter.setItems(HomeFuncs.create());
+    }
+
+    /**
+     * The same destinations the TV home offers, so the two cannot drift apart again. Where the
+     * phone has no equivalent page the closest action stands in: 推送 opens the paste-a-link
+     * dialog instead of the TV's receive page.
+     */
+    @Override
+    public void onItemClick(Func item) {
+        HomeActivity activity = (HomeActivity) requireActivity();
+        int resId = item.getResId();
+        if (resId == R.string.home_vod) activity.showTab(R.id.vod);
+        else if (resId == R.string.home_live) activity.showTab(R.id.live);
+        else if (resId == R.string.home_setting) activity.showTab(R.id.setting);
+        else if (resId == R.string.home_search) SearchActivity.start(activity);
+        else if (resId == R.string.home_keep) KeepActivity.start(activity);
+        else if (resId == R.string.home_push) LinkDialog.show(this);
+        else if (resId == R.string.home_network_storage) NetworkBrowseActivity.start(activity, item.getId());
+        else if (resId == R.string.home_media_library) DlnaServerActivity.start(activity);
+    }
+
     private void showProgress() {
         mBinding.progress.getRoot().setVisibility(View.VISIBLE);
     }
@@ -232,6 +265,8 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onConfigEvent(ConfigEvent event) {
         if (event.type() == ConfigEvent.Type.VOD) setLogo();
+        // The entry row depends on whether a live config exists and whether a storage is pinned.
+        if (mFuncAdapter != null) mFuncAdapter.setItems(HomeFuncs.create());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

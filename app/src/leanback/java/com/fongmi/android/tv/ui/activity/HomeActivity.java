@@ -61,6 +61,7 @@ import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
+import com.fongmi.android.tv.ui.home.HomeFuncs;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
 import com.fongmi.android.tv.ui.presenter.HeaderPresenter;
 import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
@@ -300,17 +301,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setFunc() {
-        List<Func> items = new ArrayList<>();
-        items.add(Func.create(R.string.home_vod));
-        if (LiveConfig.hasUrl()) items.add(Func.create(R.string.home_live));
-        items.add(Func.create(R.string.home_search));
-        items.add(Func.create(R.string.home_keep));
-        items.add(Func.create(R.string.home_push));
-        NetworkStorage homeStorage = NetworkStorageStore.getHome();
-        if (homeStorage != null) items.add(Func.create(R.string.home_network_storage, null, homeStorage.getId()));
-        if (Setting.isDlnaLibrary()) items.add(Func.create(R.string.home_media_library));
-        items.add(Func.create(R.string.home_setting));
-        mFuncAdapter.setItems(items, new BaseDiffCallback<Func>());
+        // Shared with the phone flavour so the two entry rows cannot drift apart.
+        mFuncAdapter.setItems(HomeFuncs.create(), new BaseDiffCallback<Func>());
     }
 
     private void getHistory() {

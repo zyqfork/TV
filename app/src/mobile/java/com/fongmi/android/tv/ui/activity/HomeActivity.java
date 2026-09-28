@@ -161,6 +161,11 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         mBinding.navigation.getMenu().findItem(R.id.live).setVisible(LiveConfig.hasUrl());
     }
 
+    /** Lets the home screen's entry row (see HomeFuncs) drive the bottom navigation. */
+    public void showTab(int itemId) {
+        mBinding.navigation.setSelectedItemId(itemId);
+    }
+
     private boolean openLive() {
         LiveActivity.start(this);
         return false;
