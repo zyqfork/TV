@@ -13,7 +13,7 @@
         android:layout_height="?attr/actionBarSize"
         app:contentInsetEnd="16dp"
         app:navigationIconTint="@android:color/white"
-        app:title="@string/home_media_library"
+        app:title="@string/setting_dlna_library"
         app:titleTextAppearance="@style/ToolbarTextAppearance" />
 
     <com.google.android.material.textview.MaterialTextView
