@@ -118,6 +118,19 @@
             android:supportsPictureInPicture="true" />
 
         <activity
+            android:name=".ui.activity.NetworkBrowseActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
+            android:name=".ui.activity.NetworkStorageActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
+            android:name=".ui.activity.NetworkStorageEditActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
             android:name=".ui.activity.ScanActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout" />
 

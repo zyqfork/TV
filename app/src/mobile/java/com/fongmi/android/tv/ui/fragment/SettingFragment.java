@@ -27,7 +27,10 @@ import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.storage.NetworkStorage;
+import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
+import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -100,6 +103,21 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
+        setStorageText();
+    }
+
+    /**
+     * The phone settings page had no way in to network storage at all — the TV flavour reaches it
+     * through 投屏 → DLNA, and that menu cannot exist here because AirPlay is a leanback-only
+     * dependency.
+     */
+    private void setStorageText() {
+        NetworkStorage home = NetworkStorageStore.getHome();
+        if (home == null) {
+            List<NetworkStorage> list = NetworkStorageStore.getAll();
+            home = list.isEmpty() ? null : list.get(0);
+        }
+        mBinding.networkStorageText.setText(home == null ? "" : home.displayTitle());
     }
 
     private void setCacheText() {
@@ -115,6 +133,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     protected void initEvent() {
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
+        mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
@@ -299,6 +318,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         OkHttp.dns().setDoh(doh);
         Setting.putDoh(doh.toString());
         mBinding.dohText.setText(doh.getName());
+    }
+
+    private void onNetworkStorage(View view) {
+        NetworkStorageActivity.start(getActivity());
     }
 
     private void onCache(View view) {

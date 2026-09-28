@@ -66,6 +66,7 @@ import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
@@ -73,6 +74,7 @@ import com.fongmi.android.tv.ui.adapter.QuickAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.ChapterDialog;
@@ -300,6 +302,14 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mFrameParams = mBinding.video.getLayoutParams();
         mBinding.progressLayout.showProgress();
         mBinding.swipeLayout.setEnabled(false);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background — a flat grey that had nothing
+        // to do with the user's colour, which is what made this page look unrelated to the rest of
+        // the app. Paint the colour the wallpaper-backed pages resolve to instead. An explicit
+        // theme colour wins over the colour derived from the wallpaper.
+        int themeColor = Setting.getThemeColor();
+        mBinding.swipeLayout.setBackgroundColor(CustomWallView.readableBackdrop(
+                themeColor > 0 ? themeColor : Setting.getWallColor()));
         mObserveDetail = this::onDetailObserved;
         mObservePlayer = this::onPlayerObserved;
         mObserveSearch = this::onSearchObserved;

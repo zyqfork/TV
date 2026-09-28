@@ -139,7 +139,19 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         binding.scrim.setBackgroundColor(Color.argb(scrimFor(color), 0, 0, 0));
     }
 
-    private int scrimFor(int color) {
+    /**
+     * The colour a self-drawn backdrop should end up as for white text to stay readable.
+     *
+     * Exposed because the playback pages deliberately skip the wallpaper layer (see
+     * {@code PlaybackActivity.customWall()}) — no image decode, no video behind a video. Without
+     * this their backdrop was the theme's window background, a flat grey that ignored the user's
+     * colour entirely, so the detail page looked nothing like the wallpaper-backed pages.
+     */
+    public static int readableBackdrop(int color) {
+        return darken(color, scrimFor(color));
+    }
+
+    private static int scrimFor(int color) {
         double target = 1.05 / TARGET_CONTRAST - 0.05;
         int alpha = 0;
         while (alpha < MAX_SCRIM && luminance(darken(color, alpha)) > target) alpha += 4;
