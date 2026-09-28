@@ -483,4 +483,14 @@
 
     <string name="network_storage_insecure_auth">Allow credentials over HTTP</string>
     <string name="network_storage_smb_downgrade">Allow unencrypted SMB fallback</string>
+    <string name="home_vod">Vod</string>
+    <string name="home_live">Live</string>
+    <string name="home_search">Search</string>
+    <string name="home_keep">Keep</string>
+    <string name="home_push">Push</string>
+    <string name="home_network_storage">Drive</string>
+    <string name="home_media_library">Media</string>
+    <string name="home_setting">Setting</string>
+    <string name="home_history">History</string>
+    <string name="home_recommend">Recommend</string>
 </resources>
