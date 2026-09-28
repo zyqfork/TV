@@ -79,6 +79,9 @@ public class AirPlayCastActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        // The leanback BaseActivity hides the system UI itself; the phone's does not, and a cast
+        // page should be edge to edge. Bars come back with a swipe (BEHAVIOR_SHOW_TRANSIENT_BARS).
+        if (Util.isMobile()) Util.hideSystemUI(this);
         mHandler = new Handler(Looper.getMainLooper());
         mClock = Clock.create(mBinding.widget.clock);
         mHideControl = this::hideControl;

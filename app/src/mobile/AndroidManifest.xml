@@ -149,6 +149,44 @@
             android:parentActivityName=".ui.activity.HomeActivity"
             android:supportsPictureInPicture="true" />
 
+        <!-- 投屏设置 → DLNA 设置 / AirPlay 设置 / AirPlay 高级设置.
+             Shared with the TV flavour; each page shows its title bar on the phone only. -->
+        <activity
+            android:name=".ui.activity.SettingCastActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" />
+
+        <activity
+            android:name=".ui.activity.SettingDlnaActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name=".ui.activity.SettingAirPlayActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name=".ui.activity.SettingAirPlayAdvancedActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:windowSoftInputMode="adjustPan" />
+
+        <!-- The AirPlay receiver's session page.
+             The airplay module launches `${applicationId}.airplay` when a sender connects and
+             falls back to its own Compose activity (overview + logs tabs) when nothing handles it.
+             The TV flavour has handled this action all along; the phone did not, which is why a
+             cast on the phone landed on the module's overview/logs screen with no video. -->
+        <activity
+            android:name=".ui.activity.AirPlayCastActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape">
+            <intent-filter>
+                <action android:name="${applicationId}.airplay" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".receiver.ShortcutReceiver"
             android:exported="false" />

@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.fragment;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,14 +27,13 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
-import com.fongmi.android.tv.service.AirPlayServer;
-import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.activity.DlnaServerActivity;
+import com.fongmi.android.tv.ui.activity.SettingCastActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -108,15 +108,14 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
-        mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
-        mBinding.airplayCastText.setText(Setting.getSwitch(AirPlaySetting.isEnabled()));
+        mBinding.castText.setText(getCastText());
         setStorageText();
     }
 
     /**
-     * The phone settings page had no way in to network storage at all — the TV flavour reaches it
-     * through 投屏 → DLNA, and that menu cannot exist here because AirPlay is a leanback-only
-     * dependency.
+     * The phone settings page had no way in to network storage at all; the TV flavour reaches it
+     * through 投屏 → DLNA. Kept as its own row rather than folded into 投屏设置 because browsing a
+     * DLNA server is a source, not a receiver setting.
      */
     private void setStorageText() {
         NetworkStorage home = NetworkStorageStore.getHome();
@@ -125,6 +124,14 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
             home = list.isEmpty() ? null : list.get(0);
         }
         mBinding.networkStorageText.setText(home == null ? "" : home.displayTitle());
+    }
+
+    /** Which cast receivers are on, so the single 投屏设置 row still says something useful. */
+    private String getCastText() {
+        List<String> on = new ArrayList<>();
+        if (DlnaSetting.isEnabled()) on.add(getString(R.string.setting_dlna));
+        if (AirPlaySetting.isEnabled()) on.add(getString(R.string.setting_airplay));
+        return on.isEmpty() ? getString(R.string.setting_off) : TextUtils.join(" · ", on);
     }
 
     private void setCacheText() {
@@ -142,8 +149,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
         mBinding.dlna.setOnClickListener(this::onDlna);
-        mBinding.dlnaCast.setOnClickListener(this::onDlnaCast);
-        mBinding.airplayCast.setOnClickListener(this::onAirPlayCast);
+        mBinding.cast.setOnClickListener(this::onCast);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
@@ -339,18 +345,9 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         DlnaServerActivity.start(getActivity());
     }
 
-    /** Turns this phone into a DLNA renderer other devices on the LAN can cast to. */
-    private void onDlnaCast(View view) {
-        DlnaSetting.putEnabled(!DlnaSetting.isEnabled());
-        DLNARendererService.apply(getActivity());
-        mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
-    }
-
-    /** Turns this phone into an AirPlay receiver (the airplay module posts its own notification). */
-    private void onAirPlayCast(View view) {
-        AirPlaySetting.putEnabled(!AirPlaySetting.isEnabled());
-        AirPlayServer.apply(getActivity());
-        mBinding.airplayCastText.setText(Setting.getSwitch(AirPlaySetting.isEnabled()));
+    /** 投屏设置: DLNA / AirPlay receiver settings, same pages the TV flavour opens. */
+    private void onCast(View view) {
+        SettingCastActivity.start(getActivity());
     }
 
     private void onCache(View view) {
@@ -404,6 +401,13 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // returning from 投屏设置: a receiver switch may have changed
+        if (mBinding != null) mBinding.castText.setText(getCastText());
     }
 
     @Override

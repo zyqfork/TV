@@ -27,6 +27,15 @@
         <item name="android:windowBackground">@color/grey_700</item>
     </style>
 
+    <!-- Text shadow for white-on-video text. The cast pages are shared with the TV flavour now,
+         so the phone needs the same style the leanback source set already defines. -->
+    <style name="Shadow">
+        <item name="android:shadowColor">#B0000000</item>
+        <item name="android:shadowDx">1.5</item>
+        <item name="android:shadowDy">1.5</item>
+        <item name="android:shadowRadius">2</item>
+    </style>
+
     <style name="Control">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -36,10 +45,7 @@
         <item name="android:padding">8dp</item>
     </style>
 
-    <style name="ToolbarTextAppearance" parent="TextAppearance.Material3.TitleLarge">
-        <item name="android:textSize">20sp</item>
-        <item name="android:textColor">@color/white</item>
-        <item name="titleTextColor">@color/white</item>
-    </style>
+    <!-- ToolbarTextAppearance moved to main: the cast settings pages are shared with the leanback
+         flavour, so the style has to resolve in both. -->
 
 </resources>

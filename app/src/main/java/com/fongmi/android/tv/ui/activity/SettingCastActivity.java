@@ -6,8 +6,10 @@ import android.os.Bundle;
 
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingCastBinding;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.base.CastSettingPage;
 
 public class SettingCastActivity extends BaseActivity {
 
@@ -24,6 +26,7 @@ public class SettingCastActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_cast_setting);
         mBinding.dlna.requestFocus();
     }
 

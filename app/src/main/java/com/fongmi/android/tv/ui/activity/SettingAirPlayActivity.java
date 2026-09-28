@@ -15,6 +15,7 @@ import com.fongmi.android.tv.service.AirPlayServer;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.base.CastSettingPage;
 import com.fongmi.android.tv.ui.dialog.AirPlayInputDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -38,6 +39,7 @@ public class SettingAirPlayActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_airplay);
         mBinding.enabled.requestFocus();
         refresh();
     }

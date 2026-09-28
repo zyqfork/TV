@@ -364,8 +364,10 @@
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
+            <!-- One entry for the whole cast receiver, like the TV flavour's 投屏设置 → DLNA /
+                 AirPlay. The two receiver switches used to sit here as separate rows. -->
             <androidx.appcompat.widget.LinearLayoutCompat
-                android:id="@+id/dlnaCast"
+                android:id="@+id/cast"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -376,41 +378,17 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="16dp"
-                    android:text="@string/setting_dlna_setting"
+                    android:text="@string/setting_cast_setting"
                     android:textColor="@color/white"
                     android:textSize="16sp" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    android:id="@+id/dlnaCastText"
+                    android:id="@+id/castText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:ellipsize="middle"
                     android:gravity="end"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
-
-            </androidx.appcompat.widget.LinearLayoutCompat>
-
-            <androidx.appcompat.widget.LinearLayoutCompat
-                android:id="@+id/airplayCast"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/shape_item"
-                android:orientation="horizontal">
-
-                <com.google.android.material.textview.MaterialTextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:text="@string/setting_airplay"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
-
-                <com.google.android.material.textview.MaterialTextView
-                    android:id="@+id/airplayCastText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
+                    android:singleLine="true"
                     android:textColor="@color/white"
                     android:textSize="16sp" />
 

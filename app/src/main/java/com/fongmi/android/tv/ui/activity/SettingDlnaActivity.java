@@ -15,6 +15,7 @@ import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.base.CastSettingPage;
 import com.fongmi.android.tv.ui.dialog.DlnaInputDialog;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -37,6 +38,7 @@ public class SettingDlnaActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_dlna_setting);
         mBinding.enabled.requestFocus();
         refresh();
     }
