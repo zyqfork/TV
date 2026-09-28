@@ -162,11 +162,16 @@ public class ExoUtil {
                                                VideoRendererEventListener eventListener,
                                                long allowedVideoJoiningTimeMs,
                                                ArrayList<Renderer> out) {
+                // `videoPrefer` ("视频软解") used to only flip the extension renderer mode, which is a
+                // no-op here because this project's Media3 FFmpeg extension is audio-only — so the
+                // setting looked alive in the UI but never changed video decoding. Route it to the
+                // codec selector, which is what actually decides software vs hardware for video.
                 super.buildVideoRenderers(context,
                         preferByDecode || videoPrefer
                                 ? EXTENSION_RENDERER_MODE_PREFER
                                 : EXTENSION_RENDERER_MODE_ON,
-                        codecSelector, enableDecoderFallback, eventHandler, eventListener,
+                        videoPrefer ? MediaCodecSelector.PREFER_SOFTWARE : mediaCodecSelector,
+                        enableDecoderFallback, eventHandler, eventListener,
                         allowedVideoJoiningTimeMs, out);
             }
 

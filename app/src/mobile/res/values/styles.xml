@@ -1,6 +1,14 @@
 <resources>
 
-    <style name="Theme.Base" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
+    <!--
+      Dark, not DayNight. The whole app is drawn on a dark-only palette: values/colors.xml defines
+      nothing but black/white with alphas, every mobile layout hardcodes @color/white text, and the
+      leanback variant pins Theme.Material3.Dark. With a DayNight parent the app followed the system
+      setting, so on a phone in light mode colorSurface went light while the text stayed @color/white
+      — the VOD detail page rendered white-on-white and was unreadable. DynamicColors is kept so
+      Material You wallpaper theming still applies, just always in its dark variant.
+    -->
+    <style name="Theme.Base" parent="Theme.Material3.DynamicColors.Dark.NoActionBar">
         <item name="android:statusBarColor">@color/transparent</item>
         <item name="android:navigationBarColor">@color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
@@ -8,6 +16,7 @@
 
     <style name="Theme.Splash" parent="Theme.SplashScreen">
         <item name="postSplashScreenTheme">@style/Theme.App</item>
+        <item name="windowSplashScreenBackground">#141218</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
     </style>
 
