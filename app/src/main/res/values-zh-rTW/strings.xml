@@ -451,6 +451,19 @@
 
     <string name="detail_path">路徑：<xliff:g name="name">%s</xliff:g></string>
     <string name="network_storage_manual">手動輸入</string>
+    <string name="setting_dlna_library">媒體庫</string>
+    <string name="dlna_library_refresh">重新整理</string>
+    <string name="dlna_library_empty">未發現媒體伺服器</string>
+    <string name="dlna_library_browse_fail">瀏覽目錄失敗</string>
+    <string name="dlna_library_play_fail">沒有可播放的網址</string>
+    <string name="dlna_library_type">DLNA</string>
+    <string name="dlna_library_pin">固定到媒體庫首頁</string>
+    <string name="dlna_library_unpin">從媒體庫首頁移除</string>
+    <string name="dlna_library_pin_added">已固定到媒體庫首頁</string>
+    <string name="dlna_library_pin_removed">已從媒體庫首頁移除</string>
+    <string name="dlna_library_pinned">已固定</string>
+    <string name="dlna_library_folder">資料夾</string>
+    <string name="dlna_library_item">項目</string>
     <string name="network_storage_pin_home">顯示到首頁</string>
     <string name="network_storage_unpin_home">取消首頁顯示</string>
 

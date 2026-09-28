@@ -118,6 +118,14 @@
             android:supportsPictureInPicture="true" />
 
         <activity
+            android:name=".ui.activity.DlnaBrowseActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
+            android:name=".ui.activity.DlnaServerActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
             android:name=".ui.activity.NetworkBrowseActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout" />
 

@@ -29,6 +29,7 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
+import com.fongmi.android.tv.ui.activity.DlnaServerActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -134,6 +135,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
+        mBinding.dlna.setOnClickListener(this::onDlna);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
@@ -322,6 +324,15 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     private void onNetworkStorage(View view) {
         NetworkStorageActivity.start(getActivity());
+    }
+
+    /**
+     * Browsing a DLNA server on the LAN. The TV flavour also runs this device *as* a DLNA renderer
+     * from 投屏 → DLNA 设置, but that half is not portable: `DLNARendererService` and its
+     * AVTransport/RenderingControl implementations live in the leanback source set.
+     */
+    private void onDlna(View view) {
+        DlnaServerActivity.start(getActivity());
     }
 
     private void onCache(View view) {
