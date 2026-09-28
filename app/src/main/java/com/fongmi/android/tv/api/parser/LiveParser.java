@@ -39,9 +39,27 @@ public class LiveParser {
         return "";
     }
 
+    /**
+     * Reads a {@code key=value} attribute out of a whitespace-separated, <em>unquoted</em> header
+     * line. The quoted spellings are handled by the {@link Pattern} overloads above.
+     *
+     * <p>The split must carry a limit of 2. These values are frequently URLs, and a URL query
+     * string contains its own {@code =}: with an unlimited split, {@code url-tvg=http://host/e.xml?uid=1&key=2}
+     * yields {@code ["url-tvg", "http://host/e.xml?uid", "1&key", "2"]} and the EPG address is
+     * silently cut off at the first query parameter — no error, just an unusable program guide.
+     *
+     * <p>The length check keeps a token that merely <em>contains</em> a keyword but carries no
+     * {@code =} from throwing {@link ArrayIndexOutOfBoundsException}, so the helper stays safe if
+     * a future caller passes a bare keyword.
+     */
     private static String extract(String line, String... keywords) {
-        String[] splits = line.split(" ");
-        for (String split : splits) for (String keyword : keywords) if (split.contains(keyword)) return split.split("=")[1].replace("\"", "");
+        for (String split : line.split(" ")) {
+            for (String keyword : keywords) {
+                if (!split.contains(keyword)) continue;
+                String[] parts = split.split("=", 2);
+                if (parts.length > 1) return parts[1].replace("\"", "");
+            }
+        }
         return "";
     }
 
