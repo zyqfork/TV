@@ -81,6 +81,38 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
                 boolean preferIpv4 = address instanceof Inet4Address || TextUtils.isEmpty(DlnaNetwork.firstIpv4(networkInterface));
                 return preferIpv4 && super.isUsableAddress(networkInterface, address);
             }
+
+            /**
+             * jUPnP's own {@code isUsableAddress} rejects every non-IPv4 address, so the rest of this
+             * stack (bind addresses, datagram IOs, stream servers) is IPv4-only. The Android
+             * override of this method ignores that and hands back the interface's first <em>IPv6</em>
+             * address for multicast datagrams — typically a link-local {@code fe80::…%eth0}.
+             *
+             * Every SSDP request arrives on the multicast receiver, so that address becomes the
+             * incoming message's local address, and jUPnP then builds the response's NetworkAddress
+             * and LOCATION from it. A scoped link-local IPv6 cannot be turned into a usable URL, the
+             * response never leaves the box, and the renderer stays invisible on the LAN — while the
+             * registry, the router and the sockets all look perfectly healthy.
+             *
+             * Answer with the interface's IPv4 address instead: it is what the rest of the stack
+             * binds to, so the response is built from the address controllers can actually reach.
+             */
+            @Override
+            public InetAddress getLocalAddress(NetworkInterface networkInterface, boolean isMulticast, InetAddress remoteAddress) {
+                InetAddress ipv4 = firstIpv4Address(networkInterface);
+                return ipv4 != null ? ipv4 : super.getLocalAddress(networkInterface, isMulticast, remoteAddress);
+            }
         };
+    }
+
+    private static InetAddress firstIpv4Address(NetworkInterface networkInterface) {
+        if (networkInterface == null) return null;
+        try {
+            for (InetAddress address : java.util.Collections.list(networkInterface.getInetAddresses())) {
+                if (address instanceof Inet4Address && !address.isLoopbackAddress()) return address;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }
