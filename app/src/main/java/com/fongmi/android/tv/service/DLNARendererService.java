@@ -40,6 +40,8 @@ import org.jupnp.model.meta.ModelDetails;
 import org.jupnp.model.types.UDADeviceType;
 import org.jupnp.model.types.UDN;
 import org.jupnp.support.avtransport.lastchange.AVTransportLastChangeParser;
+import org.jupnp.support.model.ProtocolInfo;
+import org.jupnp.support.model.ProtocolInfos;
 import org.jupnp.support.connectionmanager.ConnectionManagerService;
 import org.jupnp.support.lastchange.LastChangeAwareServiceManager;
 import org.jupnp.support.renderingcontrol.lastchange.RenderingControlLastChangeParser;
@@ -252,11 +254,36 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
         return service;
     }
 
+    /**
+     * Media formats the renderer accepts, advertised through ConnectionManager.GetProtocolInfo.
+     *
+     * A DLNA renderer with an empty Sink list is unusable to strict controllers: 哔哩哔哩 hides the
+     * device even though discovery, description, SOAP and eventing all work, while 西瓜视频 ignores
+     * the list and shows it anyway — which is exactly the difference reported for this box.
+     */
+    private static final ProtocolInfos SINK_PROTOCOLS = new ProtocolInfos(
+            "http-get:*:video/mp4:*,http-get:*:video/x-matroska:*,http-get:*:video/x-msvideo:*,"
+                    + "http-get:*:video/mpeg:*,http-get:*:video/quicktime:*,http-get:*:video/webm:*,"
+                    + "http-get:*:video/x-flv:*,http-get:*:video/3gpp:*,http-get:*:video/x-ms-wmv:*,"
+                    + "http-get:*:video/vnd.dlna.mpeg-tts:*,http-get:*:application/vnd.apple.mpegurl:*,"
+                    + "http-get:*:audio/mpeg:*,http-get:*:audio/mp4:*,http-get:*:audio/x-ms-wma:*,"
+                    + "http-get:*:audio/flac:*,http-get:*:audio/x-flac:*,http-get:*:audio/x-wav:*,"
+                    + "http-get:*:audio/ogg:*,http-get:*:audio/aac:*,"
+                    + "http-get:*:image/jpeg:*,http-get:*:image/png:*,http-get:*:image/gif:*,"
+                    + "http-get:*:application/octet-stream:*");
+
+    private static final ProtocolInfos SOURCE_PROTOCOLS = new ProtocolInfos(new ProtocolInfo[0]);
+
     @SuppressWarnings("unchecked")
     private LocalService<ConnectionManagerService> createConnectionManager() {
         LocalService<ConnectionManagerService> service = new AnnotationLocalServiceBinder().read(ConnectionManagerService.class);
         if (service == null) throw new IllegalStateException("ConnectionManager LocalService null");
-        service.setManager(new DefaultServiceManager<>(service, ConnectionManagerService.class));
+        service.setManager(new DefaultServiceManager<>(service, ConnectionManagerService.class) {
+            @Override
+            protected ConnectionManagerService createServiceInstance() {
+                return new ConnectionManagerService(SOURCE_PROTOCOLS, SINK_PROTOCOLS);
+            }
+        });
         return service;
     }
 
