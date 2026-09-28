@@ -254,11 +254,6 @@
             android:name=".service.DlnaBrowserService"
             android:exported="false" />
 
-        <service
-            android:name=".service.DLNARendererService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
-
         <receiver
             android:name=".receiver.BootReceiver"
             android:exported="true"

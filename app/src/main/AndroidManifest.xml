@@ -105,6 +105,13 @@
             </intent-filter>
         </service>
 
+        <!-- DLNA renderer: lets another device cast to this one. Declared here rather than in a
+             flavour because both flavours now run it. -->
+        <service
+            android:name=".service.DLNARendererService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />

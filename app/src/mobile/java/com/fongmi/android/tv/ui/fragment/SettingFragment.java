@@ -26,6 +26,8 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.service.DLNARendererService;
+import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
@@ -104,6 +106,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
+        mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
         setStorageText();
     }
 
@@ -136,6 +139,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
         mBinding.dlna.setOnClickListener(this::onDlna);
+        mBinding.dlnaCast.setOnClickListener(this::onDlnaCast);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
@@ -326,13 +330,16 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         NetworkStorageActivity.start(getActivity());
     }
 
-    /**
-     * Browsing a DLNA server on the LAN. The TV flavour also runs this device *as* a DLNA renderer
-     * from 投屏 → DLNA 设置, but that half is not portable: `DLNARendererService` and its
-     * AVTransport/RenderingControl implementations live in the leanback source set.
-     */
+    /** Browse a DLNA server on the LAN (this device as controller). */
     private void onDlna(View view) {
         DlnaServerActivity.start(getActivity());
+    }
+
+    /** Turns this phone into a DLNA renderer other devices on the LAN can cast to. */
+    private void onDlnaCast(View view) {
+        DlnaSetting.putEnabled(!DlnaSetting.isEnabled());
+        DLNARendererService.apply(getActivity());
+        mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
     }
 
     private void onCache(View view) {

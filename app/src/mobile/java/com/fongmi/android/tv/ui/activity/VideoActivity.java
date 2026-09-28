@@ -188,8 +188,21 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         activity.startActivity(intent);
     }
 
-    private static void putPic(Intent intent, String pic) {
-        intent.removeExtra("pic");
+    /**
+     * Same as {@link #start(Activity, String, String, String)}, but callable with an application
+     * context: the DLNA receiver opens this page from a service callback, with no Activity around.
+     */
+    public static void start(Context context, String key, String id, String name) {
+        Intent intent = new Intent(context, VideoActivity.class);
+        intent.putExtra("collect", false);
+        intent.putExtra("name", name);
+        intent.putExtra("key", key);
+        intent.putExtra("id", id);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        context.startActivity(intent);
+    }
+
+    private static void putPic(Intent intent, String pic) {        intent.removeExtra("pic");
         pic = ImgUtil.cache(pic);
         if (!TextUtils.isEmpty(pic)) intent.putExtra("pic", pic);
     }

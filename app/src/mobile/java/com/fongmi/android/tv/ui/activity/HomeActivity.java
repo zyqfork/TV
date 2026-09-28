@@ -25,6 +25,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.BackupManager;
+import com.fongmi.android.tv.dlna.CastNetworkWatcher;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
@@ -33,7 +34,9 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
 import com.fongmi.android.tv.ui.fragment.SettingDanmakuFragment;
@@ -81,6 +84,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         orientation = getResources().getConfiguration().orientation;
         mBinding.navigation.setOnItemSelectedListener(this);
         PermissionUtil.requestNotify(this);
+        // Run the DLNA renderer while the app is open, so another device can cast to this phone.
+        DlnaSetting.ensureDefaultInterface();
+        DLNARendererService.start(this);
+        CastNetworkWatcher.register(this);
         initFragment(savedInstanceState);
         Updater.create().start(this);
         initConfig();
@@ -248,6 +255,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Override
     protected void onDestroy() {
+        CastNetworkWatcher.unregisterIfUnused(this);
+        // Same reasoning as the TV flavour: keep the renderer alive so the phone stays discoverable
+        // after the user leaves the home screen. The settings toggle still stops it via apply().
+        if (!DlnaSetting.isEnabled()) DLNARendererService.stop(this);
         LiveConfig.get().clear();
         VodConfig.get().clear();
         BackupManager.backup();
