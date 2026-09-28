@@ -34,8 +34,10 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.service.AirPlayServer;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
@@ -84,9 +86,12 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         orientation = getResources().getConfiguration().orientation;
         mBinding.navigation.setOnItemSelectedListener(this);
         PermissionUtil.requestNotify(this);
-        // Run the DLNA renderer while the app is open, so another device can cast to this phone.
+        // Run the DLNA renderer and the AirPlay receiver while the app is open, so another device
+        // can cast to this phone.
         DlnaSetting.ensureDefaultInterface();
+        AirPlaySetting.ensureDefaultInterface();
         DLNARendererService.start(this);
+        AirPlayServer.start(this);
         CastNetworkWatcher.register(this);
         initFragment(savedInstanceState);
         Updater.create().start(this);

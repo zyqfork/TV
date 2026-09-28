@@ -26,7 +26,9 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.service.AirPlayServer;
 import com.fongmi.android.tv.service.DLNARendererService;
+import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
@@ -107,6 +109,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
         mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
+        mBinding.airplayCastText.setText(Setting.getSwitch(AirPlaySetting.isEnabled()));
         setStorageText();
     }
 
@@ -140,6 +143,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
         mBinding.dlna.setOnClickListener(this::onDlna);
         mBinding.dlnaCast.setOnClickListener(this::onDlnaCast);
+        mBinding.airplayCast.setOnClickListener(this::onAirPlayCast);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
@@ -340,6 +344,13 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         DlnaSetting.putEnabled(!DlnaSetting.isEnabled());
         DLNARendererService.apply(getActivity());
         mBinding.dlnaCastText.setText(Setting.getSwitch(DlnaSetting.isEnabled()));
+    }
+
+    /** Turns this phone into an AirPlay receiver (the airplay module posts its own notification). */
+    private void onAirPlayCast(View view) {
+        AirPlaySetting.putEnabled(!AirPlaySetting.isEnabled());
+        AirPlayServer.apply(getActivity());
+        mBinding.airplayCastText.setText(Setting.getSwitch(AirPlaySetting.isEnabled()));
     }
 
     private void onCache(View view) {

@@ -106,7 +106,9 @@ dependencies {
     implementation project(':chaquo')
     implementation project(':quickjs')
     implementation project(':media3compat')
-    leanbackImplementation project(':airplay')
+    // Not leanback-only any more: `main` now contains the AirPlay receiver bridge, so both
+    // flavours need the module (and its native libraries).
+    implementation project(':airplay')
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media

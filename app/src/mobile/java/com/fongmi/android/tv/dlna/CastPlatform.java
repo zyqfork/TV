@@ -4,15 +4,18 @@ import android.content.Context;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.api.SiteApi;
+import com.fongmi.android.tv.service.AirPlayServer;
+import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 
 /**
  * The phone half of the cast-receiver subsystem.
  *
- * The phone can receive DLNA casts, but it has no AirPlay (that module is a leanback-only
- * dependency) and no dedicated cast playback page: the pushed media is simply played by the normal
- * player, so the yield hooks have nothing to do. `main` is written against this class and the TV
- * flavour provides its own copy with the same FQN.
+ * The phone has no dedicated cast playback page: DLNA pushes are simply played by the normal
+ * player. AirPlay is handled by the `airplay` module itself — it posts its own notification and
+ * Compose activity — so all the phone has to do here is run and re-bind that server.
+ *
+ * `main` is written against this class and the TV flavour provides its own copy with the same FQN.
  */
 public final class CastPlatform {
 
@@ -30,16 +33,17 @@ public final class CastPlatform {
     public static void hideDlnaSession() {
     }
 
-    /** No AirPlay on the phone, so nothing has to give way. */
+    /** No AirPlay local session to yield on the phone (the module owns its own playback). */
     public static void yieldToDlna(Context context) {
     }
 
-    /** No AirPlay on the phone. */
+    /** Re-bind AirPlay discovery after a network switch. */
     public static void applyAirPlay(Context context) {
+        AirPlayServer.apply(context);
     }
 
-    /** No AirPlay on the phone. */
+    /** Whether the AirPlay receiver is switched on. */
     public static boolean isAirPlayEnabled() {
-        return false;
+        return AirPlaySetting.isEnabled();
     }
 }
