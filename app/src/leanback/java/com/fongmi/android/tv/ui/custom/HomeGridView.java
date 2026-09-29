@@ -22,7 +22,7 @@ import com.fongmi.android.tv.utils.ResUtil;
  */
 public class HomeGridView extends VerticalGridView {
 
-    private static final long WHEEL_IDLE_MS = 250;
+    private static final long WHEEL_IDLE_MS = 400;
 
     private boolean freeScroll;
     private boolean pinning;
@@ -31,10 +31,13 @@ public class HomeGridView extends VerticalGridView {
     private float downY;
     private float wheelCarry;
     private final Runnable endFreeScroll = () -> {
-        freeScroll = false;
+        if (!freeScroll) return;
+        // Pick the visible row first, while alignment is still NO_EDGE — otherwise
+        // setSelectedPosition re-aligns the row and the list jumps.
         syncSelectionToVisible();
-        // Stay where the user left the list. Only pin when already on the top row so the
-        // wheel does not feel like it is fighting Leanback's "keep selection visible" scroll.
+        freeScroll = false;
+        setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
+        // Restoring LOW_EDGE would also snap; keep the viewport where the user left it.
         if (getSelectedPosition() == 0) pinTopRow();
     };
 
@@ -91,6 +94,14 @@ public class HomeGridView extends VerticalGridView {
     }
 
     @Override
+    public boolean requestChildRectangleOnScreen(View child, Rect rect, boolean immediate) {
+        // Leanback scrolls the selected/focused row back into its alignment slot as soon as
+        // anything calls this — that is the mid-wheel "jump". Ignore it while free-scrolling.
+        if (freeScroll) return false;
+        return super.requestChildRectangleOnScreen(child, rect, immediate);
+    }
+
+    @Override
     public void scrollToPosition(int position) {
         if (freeScroll) return;
         if (position == 0) {
@@ -114,6 +125,7 @@ public class HomeGridView extends VerticalGridView {
 
     @Override
     public boolean onRequestFocusInDescendants(int direction, Rect previouslyFocusedRect) {
+        if (freeScroll) return false;
         // Keep whatever row the user wheeled/dragged to. Jumping to 0 here made a click
         // after scrolling yank the list back to the top.
         if (getAdapter() != null && getAdapter().getItemCount() > 0 && getSelectedPosition() == NO_POSITION) {
@@ -136,8 +148,8 @@ public class HomeGridView extends VerticalGridView {
         int dy = (int) wheelCarry;
         if (dy != 0) {
             wheelCarry -= dy;
+            // Pure pixel scroll: do not touch selection, so Leanback cannot realign mid-gesture.
             scrollBy(0, dy);
-            syncSelectionToVisible();
         }
         endFreeScrollSoon();
         return true;
@@ -168,10 +180,10 @@ public class HomeGridView extends VerticalGridView {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 if (pointerDragged) {
-                    syncSelectionToVisible();
                     endFreeScrollSoon();
                 } else {
                     freeScroll = false;
+                    setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
                     removeCallbacks(endFreeScroll);
                 }
                 pointerDragged = false;
@@ -182,7 +194,14 @@ public class HomeGridView extends VerticalGridView {
     }
 
     private void beginFreeScroll() {
-        freeScroll = true;
+        if (!freeScroll) {
+            freeScroll = true;
+            // A focused poster scrolling off-screen moves focus and Leanback follows it.
+            setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
+            // Default LOW_EDGE alignment snaps the selected row back into its slot on every
+            // layout — that is the mid-wheel jump. Freeze alignment until the gesture ends.
+            setWindowAlignment(WINDOW_ALIGN_NO_EDGE);
+        }
         removeCallbacks(endFreeScroll);
     }
 
@@ -209,6 +228,7 @@ public class HomeGridView extends VerticalGridView {
         if (best == null) best = getChildAt(0);
         int pos = getChildAdapterPosition(best);
         if (pos == RecyclerView.NO_POSITION || pos == getSelectedPosition()) return;
+        // Update the selection without asking Leanback to scroll the row into its slot.
         boolean keep = freeScroll;
         freeScroll = true;
         setSelectedPosition(pos);
