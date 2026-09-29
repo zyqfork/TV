@@ -48,7 +48,7 @@
                         android:layout_marginEnd="16dp"
                         android:text="@string/setting_vod"
                         android:textColor="@color/white"
-                        android:textSize="16sp" />
+                        android:textSize="@dimen/setting_item_text_size" />
 
                     <com.google.android.material.textview.MaterialTextView
                         android:id="@+id/vodUrl"
@@ -58,7 +58,7 @@
                         android:gravity="end"
                         android:singleLine="true"
                         android:textColor="@color/white"
-                        android:textSize="16sp"
+                        android:textSize="@dimen/setting_item_text_size"
                         tools:text="https://" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -104,7 +104,7 @@
                         android:layout_marginEnd="16dp"
                         android:text="@string/setting_live"
                         android:textColor="@color/white"
-                        android:textSize="16sp" />
+                        android:textSize="@dimen/setting_item_text_size" />
 
                     <com.google.android.material.textview.MaterialTextView
                         android:id="@+id/liveUrl"
@@ -114,7 +114,7 @@
                         android:gravity="end"
                         android:singleLine="true"
                         android:textColor="@color/white"
-                        android:textSize="16sp"
+                        android:textSize="@dimen/setting_item_text_size"
                         tools:text="https://" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -160,7 +160,7 @@
                         android:layout_marginEnd="16dp"
                         android:text="@string/setting_wall"
                         android:textColor="@color/white"
-                        android:textSize="16sp" />
+                        android:textSize="@dimen/setting_item_text_size" />
 
                     <com.google.android.material.textview.MaterialTextView
                         android:id="@+id/wallUrl"
@@ -170,7 +170,7 @@
                         android:gravity="end"
                         android:singleLine="true"
                         android:textColor="@color/white"
-                        android:textSize="16sp"
+                        android:textSize="@dimen/setting_item_text_size"
                         tools:text="https://" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -207,7 +207,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/setting_player"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -224,7 +224,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/setting_danmaku"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -242,7 +242,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_incognito"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/incognitoText"
@@ -250,7 +250,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="Off" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -269,7 +269,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_size"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/sizeText"
@@ -277,7 +277,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="Medium" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -296,7 +296,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_doh"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/dohText"
@@ -304,7 +304,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="Google" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -323,7 +323,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_dlna_library"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/dlnaLibraryText"
@@ -333,7 +333,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -353,7 +353,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_cast_setting"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/castText"
@@ -363,7 +363,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -381,7 +381,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_network_storage"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/networkStorageText"
@@ -391,7 +391,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="NAS" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -410,7 +410,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_cache"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/cacheText"
@@ -418,7 +418,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="1.0 MB" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -443,7 +443,7 @@
                     android:paddingBottom="8dp"
                     android:text="@string/setting_backup"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/restore"
@@ -458,7 +458,7 @@
                     android:paddingBottom="8dp"
                     android:text="@string/setting_restore"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -476,7 +476,7 @@
                     android:layout_marginEnd="16dp"
                     android:text="@string/setting_version"
                     android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/setting_item_text_size" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/versionText"
@@ -484,7 +484,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/setting_item_text_size"
                     tools:text="1.2.1" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>

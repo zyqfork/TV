@@ -44,6 +44,7 @@ import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -305,10 +306,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void setSize(View view) {
-        int index = (PlayerSetting.getSize() + 1) % size.length;
-        mBinding.sizeText.setText(size[index]);
-        PlayerSetting.putSize(index);
-        RefreshEvent.size();
+        new MaterialAlertDialogBuilder(this).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
+            mBinding.sizeText.setText(size[which]);
+            PlayerSetting.putSize(which);
+            RefreshEvent.size();
+            dialog.dismiss();
+        }).show();
     }
 
     private void setDoh(View view) {
