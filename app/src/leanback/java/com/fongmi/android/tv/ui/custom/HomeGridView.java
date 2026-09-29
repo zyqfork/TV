@@ -7,8 +7,6 @@ import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
-import android.view.animation.DecelerateInterpolator;
-import android.widget.OverScroller;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24,36 +22,21 @@ import com.fongmi.android.tv.utils.ResUtil;
  */
 public class HomeGridView extends VerticalGridView {
 
+    private static final long WHEEL_IDLE_MS = 250;
+
     private boolean freeScroll;
     private boolean pinning;
     private boolean pointerDragged;
     private float downX;
     private float downY;
     private float wheelCarry;
-    private final OverScroller scroller;
     private final Runnable endFreeScroll = () -> {
         freeScroll = false;
         syncSelectionToVisible();
-        int pos = getSelectedPosition();
-        if (pos == 0) pinTopRow();
-        else if (pos > 0) HomeGridView.super.scrollToPosition(pos);
+        // Stay where the user left the list. Only pin when already on the top row so the
+        // wheel does not feel like it is fighting Leanback's "keep selection visible" scroll.
+        if (getSelectedPosition() == 0) pinTopRow();
     };
-    private final Runnable wheelFling = new Runnable() {
-        @Override
-        public void run() {
-            if (scroller.computeScrollOffset()) {
-                int y = scroller.getCurrY();
-                int dy = y - lastScrollerY;
-                lastScrollerY = y;
-                if (dy != 0) scrollBy(0, dy);
-                syncSelectionToVisible();
-                postOnAnimation(this);
-            } else {
-                endFreeScrollSoon();
-            }
-        }
-    };
-    private int lastScrollerY;
 
     public HomeGridView(@NonNull Context context) {
         this(context, null);
@@ -65,7 +48,6 @@ public class HomeGridView extends VerticalGridView {
 
     public HomeGridView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        scroller = new OverScroller(context, new DecelerateInterpolator());
         addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -83,6 +65,20 @@ public class HomeGridView extends VerticalGridView {
     }
 
     @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        // Rows are HorizontalGridViews and will swallow vertical wheel ticks before we see
+        // them. Handle the wheel here so the home list always scrolls under the pointer.
+        if (isWheelEvent(event) && handleWheel(event)) return true;
+        return super.dispatchGenericMotionEvent(event);
+    }
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        if (isWheelEvent(event) && handleWheel(event)) return true;
+        return super.onGenericMotionEvent(event);
+    }
+
+    @Override
     public boolean onInterceptTouchEvent(MotionEvent e) {
         if (isPointerFreeScrollSource(e)) trackPointer(e);
         return super.onInterceptTouchEvent(e);
@@ -92,29 +88,6 @@ public class HomeGridView extends VerticalGridView {
     public boolean onTouchEvent(MotionEvent e) {
         if (isPointerFreeScrollSource(e)) trackPointer(e);
         return super.onTouchEvent(e);
-    }
-
-    @Override
-    public boolean onGenericMotionEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)) {
-            float scroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
-            if (scroll != 0f) {
-                beginFreeScroll();
-                // Accumulate fractional ticks for smoother, smaller steps than a full page jump.
-                wheelCarry += -scroll * ResUtil.dp2px(48);
-                int dy = (int) wheelCarry;
-                if (dy != 0) {
-                    wheelCarry -= dy;
-                    scroller.forceFinished(true);
-                    lastScrollerY = 0;
-                    scroller.startScroll(0, 0, 0, dy, 120);
-                    removeCallbacks(wheelFling);
-                    postOnAnimation(wheelFling);
-                }
-                return true;
-            }
-        }
-        return super.onGenericMotionEvent(event);
     }
 
     @Override
@@ -141,11 +114,33 @@ public class HomeGridView extends VerticalGridView {
 
     @Override
     public boolean onRequestFocusInDescendants(int direction, Rect previouslyFocusedRect) {
-        if (direction == View.FOCUS_DOWN || direction == View.FOCUS_FORWARD) {
-            if (getAdapter() != null && getAdapter().getItemCount() > 0 && getSelectedPosition() != 0) setSelectedPosition(0);
-            post(this::pinTopRow);
+        // Keep whatever row the user wheeled/dragged to. Jumping to 0 here made a click
+        // after scrolling yank the list back to the top.
+        if (getAdapter() != null && getAdapter().getItemCount() > 0 && getSelectedPosition() == NO_POSITION) {
+            setSelectedPosition(0);
         }
         return super.onRequestFocusInDescendants(direction, previouslyFocusedRect);
+    }
+
+    private boolean isWheelEvent(MotionEvent event) {
+        return event.getAction() == MotionEvent.ACTION_SCROLL
+                && event.isFromSource(InputDevice.SOURCE_CLASS_POINTER);
+    }
+
+    private boolean handleWheel(MotionEvent event) {
+        float scroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+        if (scroll == 0f) return false;
+        beginFreeScroll();
+        // Fractional ticks accumulate so slow wheels still move one row-sized step.
+        wheelCarry += -scroll * ResUtil.dp2px(48);
+        int dy = (int) wheelCarry;
+        if (dy != 0) {
+            wheelCarry -= dy;
+            scrollBy(0, dy);
+            syncSelectionToVisible();
+        }
+        endFreeScrollSoon();
+        return true;
     }
 
     private boolean isPointerFreeScrollSource(MotionEvent e) {
@@ -156,8 +151,7 @@ public class HomeGridView extends VerticalGridView {
     private void trackPointer(MotionEvent e) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                scroller.forceFinished(true);
-                removeCallbacks(wheelFling);
+                stopScroll();
                 removeCallbacks(endFreeScroll);
                 pointerDragged = false;
                 downX = e.getX();
@@ -194,7 +188,7 @@ public class HomeGridView extends VerticalGridView {
 
     private void endFreeScrollSoon() {
         removeCallbacks(endFreeScroll);
-        post(endFreeScroll);
+        postDelayed(endFreeScroll, WHEEL_IDLE_MS);
     }
 
     private void syncSelectionToVisible() {
