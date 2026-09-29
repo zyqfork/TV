@@ -48,7 +48,7 @@
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_dlna"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/enabledText"
@@ -57,7 +57,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/setting_cast_text_size"
                 tools:text="On" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -78,7 +78,7 @@
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_dlna_name"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/nameText"
@@ -89,7 +89,7 @@
                 android:gravity="end"
                 android:singleLine="true"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/setting_cast_text_size"
                 tools:text="Device" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -110,7 +110,7 @@
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_dlna_iface"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/ifaceText"
@@ -121,7 +121,7 @@
                 android:gravity="end"
                 android:singleLine="true"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/setting_cast_text_size"
                 tools:text="默认 · eth0 (10.0.0.33)" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -142,7 +142,7 @@
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_dlna_http_port"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/httpPortText"
@@ -151,7 +151,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/setting_cast_text_size"
                 tools:text="Auto" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>

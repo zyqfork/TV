@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same size as the phone's own settings rows (fragment_setting.xml), so opening
+         投屏设置 does not feel like switching to the TV skin. -->
+    <dimen name="setting_cast_text_size">16sp</dimen>
+</resources>

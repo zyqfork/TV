@@ -39,7 +39,7 @@ public class SettingDlnaActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_dlna_setting);
-        mBinding.enabled.requestFocus();
+        CastSettingPage.focusFirst(mBinding.enabled);
         refresh();
     }
 

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
@@ -43,9 +44,20 @@
             <com.google.android.material.textview.MaterialTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
                 android:text="@string/setting_dlna_setting"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/dlnaText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:textColor="@color/white"
+                android:textSize="@dimen/setting_cast_text_size"
+                tools:text="On" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -62,9 +74,20 @@
             <com.google.android.material.textview.MaterialTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
                 android:text="@string/setting_airplay_setting"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/setting_cast_text_size" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/airplayText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:textColor="@color/white"
+                android:textSize="@dimen/setting_cast_text_size"
+                tools:text="On" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
     </androidx.appcompat.widget.LinearLayoutCompat>

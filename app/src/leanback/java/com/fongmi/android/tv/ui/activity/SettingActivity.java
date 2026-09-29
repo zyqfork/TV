@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.viewbinding.ViewBinding;
@@ -24,8 +25,12 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
+import com.fongmi.android.tv.setting.AirPlaySetting;
+import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.storage.NetworkStorage;
+import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.DohDialog;
@@ -86,6 +91,34 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
+        mBinding.castText.setText(getCastText());
+        setStorageText();
+    }
+
+    /** Which cast receivers are on, same summary the phone's 投屏设置 row shows. */
+    private String getCastText() {
+        List<String> on = new ArrayList<>();
+        if (DlnaSetting.isEnabled()) on.add(getString(R.string.setting_dlna));
+        if (AirPlaySetting.isEnabled()) on.add(getString(R.string.setting_airplay));
+        return on.isEmpty() ? getString(R.string.setting_off) : TextUtils.join(" · ", on);
+    }
+
+    private void setStorageText() {
+        NetworkStorage home = NetworkStorageStore.getHome();
+        if (home == null) {
+            List<NetworkStorage> list = NetworkStorageStore.getAll();
+            home = list.isEmpty() ? null : list.get(0);
+        }
+        mBinding.networkStorageText.setText(home == null ? "" : home.displayTitle());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mBinding != null) {
+            mBinding.castText.setText(getCastText());
+            setStorageText();
+        }
     }
 
     private void setCacheText() {

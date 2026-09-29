@@ -25,7 +25,6 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ViewWallBinding;
 import com.fongmi.android.tv.event.ConfigEvent;
-import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.utils.Path;
@@ -176,7 +175,6 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         int oldColor = Setting.getWallColor();
         if (newColor == oldColor) return;
         Setting.putWallColor(newColor);
-        if (Setting.getThemeColor() == 0) RefreshEvent.theme();
     }
 
     private void stop() {

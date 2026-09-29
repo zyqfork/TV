@@ -126,9 +126,7 @@
     <string name="setting_player">Player setting</string>
     <string name="setting_danmaku">Danmaku setting</string>
     <string name="setting_incognito">Incognito mode</string>
-    <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
-    <string name="setting_custom">Custom</string>
     <string name="setting_size">Image size</string>
     <string name="setting_doh">DoH</string>
     <string name="setting_proxy">Proxy</string>
@@ -419,7 +417,6 @@
     <string name="setting_dlna_setting">DLNA setting</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">Device name</string>
-    <string name="setting_dlna_iface_mode">Network mode</string>
     <string name="setting_dlna_iface">Network interface</string>
     <string name="setting_dlna_iface_none">No interface</string>
     <string name="setting_dlna_http_port">HTTP port</string>
@@ -427,7 +424,6 @@
     <string name="setting_airplay">AirPlay</string>
     <string name="setting_airplay_name">Device name</string>
     <string name="setting_airplay_port">Server port</string>
-    <string name="setting_airplay_iface_mode">Network mode</string>
     <string name="setting_airplay_iface">Network interface</string>
     <string name="setting_airplay_iface_none">No interface</string>
     <string name="setting_airplay_require_pin">Require PIN</string>
@@ -467,9 +463,6 @@
     <string name="setting_airplay_audio_cushion">Audio buffer (ms)</string>
     <string name="setting_airplay_audio_adaptive">Audio buffer profile</string>
     <string name="setting_airplay_oboe_buffer">Hardware buffer (frames)</string>
-    <string name="setting_airplay_auto_fullscreen">Auto fullscreen</string>
-    <string name="setting_airplay_idle_preview">Idle preview</string>
-    <string name="setting_airplay_debug_overlay">Debug overlay</string>
     <string name="setting_airplay_benchmark_log">Debug logging</string>
     <string-array name="setting_airplay_audio_adaptive_names">
         <item>Lowest latency</item>

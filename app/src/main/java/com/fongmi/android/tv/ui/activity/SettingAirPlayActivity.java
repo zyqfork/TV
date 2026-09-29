@@ -40,7 +40,7 @@ public class SettingAirPlayActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_airplay);
-        mBinding.enabled.requestFocus();
+        CastSettingPage.focusFirst(mBinding.enabled);
         refresh();
     }
 

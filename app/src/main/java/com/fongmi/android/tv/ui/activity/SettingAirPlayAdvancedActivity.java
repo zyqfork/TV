@@ -39,7 +39,7 @@ public class SettingAirPlayAdvancedActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         CastSettingPage.showToolbar(this, mBinding.toolbar, R.string.setting_airplay_advanced);
-        mBinding.h265.requestFocus();
+        CastSettingPage.focusFirst(mBinding.h265);
         refresh();
     }
 
@@ -95,17 +95,8 @@ public class SettingAirPlayAdvancedActivity extends BaseActivity {
         mBinding.audioCushionText.setText(String.valueOf(AirPlaySetting.getAudioCushionMs()));
         mBinding.audioAdaptiveText.setText(getAudioAdaptiveText());
         mBinding.oboeBufferText.setText(String.valueOf(AirPlaySetting.getOboeBufferFrames()));
-        mBinding.autoFullscreenText.setText(Setting.getSwitch(AirPlaySetting.isAutoFullscreen()));
-        mBinding.idlePreviewText.setText(Setting.getSwitch(AirPlaySetting.isIdlePreview()));
-        mBinding.debugOverlayText.setText(Setting.getSwitch(AirPlaySetting.isDebugOverlay()));
         mBinding.benchmarkLogText.setText(Setting.getSwitch(AirPlaySetting.isBenchmarkLog()));
 
-        // These are controls for the airplay module's standalone Compose viewer. Both app flavours
-        // use AirPlayCastActivity instead: it is always fullscreen, closes when idle, and has no
-        // Compose debug overlay. Do not present switches that cannot affect either host UI.
-        mBinding.autoFullscreen.setVisibility(View.GONE);
-        mBinding.idlePreview.setVisibility(View.GONE);
-        mBinding.debugOverlay.setVisibility(View.GONE);
         boolean autoBuffer = AirPlaySetting.isAudioAutoBuffer();
         mBinding.audioCushion.setVisibility(autoBuffer ? View.GONE : View.VISIBLE);
         mBinding.audioAdaptive.setVisibility(autoBuffer ? View.VISIBLE : View.GONE);

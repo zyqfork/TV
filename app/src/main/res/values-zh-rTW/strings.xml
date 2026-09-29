@@ -125,9 +125,7 @@
     <string name="setting_player">播放設定</string>
     <string name="setting_danmaku">彈幕設定</string>
     <string name="setting_incognito">無痕模式</string>
-    <string name="setting_theme_color">主題色彩</string>
     <string name="setting_auto">自動</string>
-    <string name="setting_custom">自訂</string>
     <string name="setting_size">圖片尺寸</string>
     <string name="setting_doh">DoH</string>
     <string name="setting_proxy">Proxy</string>
@@ -391,7 +389,6 @@
     <string name="setting_dlna_setting">DLNA 設定</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">裝置名稱</string>
-    <string name="setting_dlna_iface_mode">網卡模式</string>
     <string name="setting_dlna_iface">網卡</string>
     <string name="setting_dlna_iface_none">無可用網卡</string>
     <string name="setting_dlna_http_port">HTTP 連接埠</string>
@@ -399,7 +396,6 @@
     <string name="setting_airplay">AirPlay</string>
     <string name="setting_airplay_name">裝置名稱</string>
     <string name="setting_airplay_port">服務連接埠</string>
-    <string name="setting_airplay_iface_mode">網卡模式</string>
     <string name="setting_airplay_iface">網卡</string>
     <string name="setting_airplay_iface_none">無可用網卡</string>
     <string name="setting_airplay_require_pin">需要 PIN</string>
@@ -439,9 +435,6 @@
     <string name="setting_airplay_audio_cushion">音訊緩衝 (毫秒)</string>
     <string name="setting_airplay_audio_adaptive">音訊緩衝檔位</string>
     <string name="setting_airplay_oboe_buffer">硬體緩衝 (幀)</string>
-    <string name="setting_airplay_auto_fullscreen">自動全螢幕</string>
-    <string name="setting_airplay_idle_preview">閒置預覽</string>
-    <string name="setting_airplay_debug_overlay">除錯資訊</string>
     <string name="setting_airplay_benchmark_log">效能日誌</string>
     <string-array name="setting_airplay_audio_adaptive_names">
         <item>最低延遲</item>

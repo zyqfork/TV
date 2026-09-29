@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.ui.base;
 
+import android.os.Build;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -25,5 +27,31 @@ public final class CastSettingPage {
         toolbar.setVisibility(View.VISIBLE);
         activity.setSupportActionBar(toolbar);
         activity.setTitle(titleRes);
+    }
+
+    /**
+     * Put remote focus on the page's first row. The phone must not do this: the shared layouts
+     * mark rows {@code focusableInTouchMode}, so {@code requestFocus()} would leave the row
+     * focused and Android's default focus highlight would paint it as if it were selected.
+     */
+    public static void focusFirst(View row) {
+        if (row == null) return;
+        suppressDefaultFocusHighlight(row.getRootView());
+        if (!Util.isMobile()) row.requestFocus();
+    }
+
+    /**
+     * The TV flavour draws its own focus state via selector_item; the phone's ripple does not.
+     * Without this, any focused row on the phone (the first row, or a row the user just tapped)
+     * gets the platform highlight and looks permanently "on".
+     */
+    private static void suppressDefaultFocusHighlight(View view) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.setDefaultFocusHighlightEnabled(false);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) suppressDefaultFocusHighlight(group.getChildAt(i));
+        }
     }
 }

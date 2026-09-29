@@ -32,7 +32,6 @@ import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
-import com.fongmi.android.tv.ui.activity.DlnaServerActivity;
 import com.fongmi.android.tv.ui.activity.SettingCastActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
@@ -42,7 +41,6 @@ import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.RestoreDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
-import com.fongmi.android.tv.ui.dialog.ThemeDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -58,19 +56,13 @@ import org.greenrobot.eventbus.ThreadMode;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SettingFragment extends BaseFragment implements ConfigListener, SiteListener, LiveListener, ThemeDialog.Listener {
+public class SettingFragment extends BaseFragment implements ConfigListener, SiteListener, LiveListener {
 
     private FragmentSettingBinding mBinding;
     private String[] size;
 
     public static SettingFragment newInstance() {
         return new SettingFragment();
-    }
-
-    private String getThemeText() {
-        int color = Setting.getThemeColor();
-        if (color == -1) return getString(R.string.setting_off);
-        return getString(color == 0 ? R.string.setting_auto : R.string.setting_custom);
     }
 
     private int getDohIndex() {
@@ -104,10 +96,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void setOtherText() {
-        mBinding.themeColorText.setText(getThemeText());
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
+        mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.castText.setText(getCastText());
         setStorageText();
     }
@@ -148,7 +140,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
-        mBinding.dlna.setOnClickListener(this::onDlna);
+        mBinding.dlnaLibrary.setOnClickListener(this::setDlnaLibrary);
         mBinding.cast.setOnClickListener(this::onCast);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
@@ -166,7 +158,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
-        mBinding.themeColor.setOnClickListener(this::onThemeColor);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
         mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
@@ -228,12 +219,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         LiveConfig.get().setHome(item);
     }
 
-    @Override
-    public void setTheme(int color) {
-        Setting.putThemeColor(color);
-        RefreshEvent.theme();
-    }
-
     private void onVod(View view) {
         ConfigDialog.create().vod().show(this);
     }
@@ -283,10 +268,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     private void onDanmaku(View view) {
         getRoot().change(3);
-    }
-
-    private void onThemeColor(View view) {
-        ThemeDialog.show(this);
     }
 
     private void onVersion(View view) {
@@ -340,9 +321,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         NetworkStorageActivity.start(getActivity());
     }
 
-    /** Browse a DLNA server on the LAN (this device as controller). */
-    private void onDlna(View view) {
-        DlnaServerActivity.start(getActivity());
+    private void setDlnaLibrary(View view) {
+        Setting.putDlnaLibrary(!Setting.isDlnaLibrary());
+        mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
+        ConfigEvent.common();
     }
 
     /** 投屏设置: DLNA / AirPlay receiver settings, same pages the TV flavour opens. */

@@ -256,30 +256,6 @@ public class AirPlaySetting {
         prefs().edit().putInt(Prefs.OBOE_BUFFER_FRAMES, Math.clamp(value, 0, 8192)).apply();
     }
 
-    public static boolean isAutoFullscreen() {
-        return prefs().getBoolean(Prefs.AUTO_FULLSCREEN, Prefs.DEF_AUTO_FULLSCREEN);
-    }
-
-    public static void putAutoFullscreen(boolean value) {
-        prefs().edit().putBoolean(Prefs.AUTO_FULLSCREEN, value).apply();
-    }
-
-    public static boolean isIdlePreview() {
-        return prefs().getBoolean(Prefs.IDLE_PREVIEW, Prefs.DEF_IDLE_PREVIEW);
-    }
-
-    public static void putIdlePreview(boolean value) {
-        prefs().edit().putBoolean(Prefs.IDLE_PREVIEW, value).apply();
-    }
-
-    public static boolean isDebugOverlay() {
-        return prefs().getBoolean(Prefs.DEBUG_ENABLED, Prefs.DEF_DEBUG_ENABLED);
-    }
-
-    public static void putDebugOverlay(boolean value) {
-        prefs().edit().putBoolean(Prefs.DEBUG_ENABLED, value).apply();
-    }
-
     public static boolean isBenchmarkLog() {
         return prefs().getBoolean(Prefs.BENCHMARK_LOG, Prefs.DEF_BENCHMARK_LOG);
     }
