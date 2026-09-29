@@ -433,8 +433,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         }
         // strict decoders black-screen past their limits; advertised size is only upper bound for senders
         val (maxW, maxH) = VideoRenderer.maxSupportedResolution(h265)
-        val w = rawW.coerceAtMost(maxW)
-        val h = rawH.coerceAtMost(maxH)
+        // Tall phone displays can exceed a hardware decoder's actual output height even when its
+        // advertised size range says otherwise. Keep the sender's portrait aspect ratio, but request
+        // a 1920px-long portrait stream; the decoder also handles senders that ignore this hint.
+        val portraitScale = if (rawH > rawW && rawH > 1920) 1920f / rawH else 1f
+        val w = ((rawW * portraitScale).toInt() and -2).coerceIn(2, maxW)
+        val h = ((rawH * portraitScale).toInt() and -2).coerceIn(2, maxH)
         videoRenderer.setResolution(w, h)
         _videoResolution.value = "${w}x${h}"
         _videoAspect.value = w.toFloat() / h

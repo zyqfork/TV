@@ -413,6 +413,9 @@
 
 
     <string name="setting_cast_setting">Cast setting</string>
+    <string name="cast_options">Options</string>
+    <string name="cast_speed">Playback speed</string>
+    <string name="cast_restart">Restart playback</string>
     <string name="setting_dlna_setting">DLNA setting</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">Device name</string>

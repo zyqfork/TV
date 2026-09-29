@@ -9,8 +9,8 @@ import com.fongmi.android.tv.dlna.CastPlatform;
  * Mutual exclusion between the AirPlay UI and the DLNA cast session.
  *
  * The shared half — suspending playback and closing whichever cast page is up — lives here. The
- * flavour-specific half lives behind {@link CastPlatform}: AirPlay only exists on the TV, and the
- * two flavours show a DLNA session differently.
+ * flavour-specific half lives behind {@link CastPlatform}: both flavours receive AirPlay and DLNA,
+ * but the DLNA session uses touch controls on mobile and remote controls on TV.
  */
 public final class CastConflict {
 

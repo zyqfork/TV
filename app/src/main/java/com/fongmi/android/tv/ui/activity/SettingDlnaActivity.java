@@ -76,7 +76,11 @@ public class SettingDlnaActivity extends BaseActivity {
             return;
         }
         if (ifaces.size() == 1) {
-            DlnaSetting.putInterface(ifaces.get(0).name());
+            String name = ifaces.get(0).name();
+            if (!name.equals(DlnaSetting.getInterface())) {
+                DlnaSetting.putInterface(name);
+                DLNARendererService.apply(this);
+            }
             refresh();
             return;
         }

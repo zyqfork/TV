@@ -170,6 +170,11 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:windowSoftInputMode="adjustPan" />
 
+        <activity
+            android:name=".ui.activity.CastActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:launchMode="singleTop" />
+
         <!-- The AirPlay receiver's session page.
              The airplay module launches `${applicationId}.airplay` when a sender connects and
              falls back to its own Compose activity (overview + logs tabs) when nothing handles it.
@@ -180,7 +185,7 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="sensorPortrait">
             <intent-filter>
                 <action android:name="${applicationId}.airplay" />
                 <category android:name="android.intent.category.DEFAULT" />

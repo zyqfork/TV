@@ -50,7 +50,7 @@ public class SettingAirPlayAdvancedActivity extends BaseActivity {
         mBinding.resolution.setOnClickListener(this::setResolution);
         mBinding.maxFps.setOnClickListener(this::setMaxFps);
         mBinding.overscanned.setOnClickListener(v -> toggle(AirPlaySetting.isOverscanned(), AirPlaySetting::putOverscanned, true));
-        mBinding.lowLatency.setOnClickListener(v -> toggle(AirPlaySetting.isLowLatency(), AirPlaySetting::putLowLatency, false));
+        mBinding.lowLatency.setOnClickListener(v -> toggle(AirPlaySetting.isLowLatency(), AirPlaySetting::putLowLatency, true));
         mBinding.allowFrameDrop.setOnClickListener(v -> toggle(AirPlaySetting.isAllowFrameDrop(), AirPlaySetting::putAllowFrameDrop, true));
         mBinding.realtimePriority.setOnClickListener(v -> toggle(AirPlaySetting.isRealtimePriority(), AirPlaySetting::putRealtimePriority, true));
         mBinding.operatingRate.setOnClickListener(v -> toggle(AirPlaySetting.isOperatingRate(), AirPlaySetting::putOperatingRate, true));
@@ -63,9 +63,6 @@ public class SettingAirPlayAdvancedActivity extends BaseActivity {
         mBinding.audioCushion.setOnClickListener(view -> AirPlayInputDialog.show(this, AirPlayInputDialog.TYPE_AUDIO_CUSHION));
         mBinding.audioAdaptive.setOnClickListener(this::setAudioAdaptive);
         mBinding.oboeBuffer.setOnClickListener(view -> AirPlayInputDialog.show(this, AirPlayInputDialog.TYPE_OBOE_BUFFER));
-        mBinding.autoFullscreen.setOnClickListener(v -> toggle(AirPlaySetting.isAutoFullscreen(), AirPlaySetting::putAutoFullscreen, false));
-        mBinding.idlePreview.setOnClickListener(v -> toggle(AirPlaySetting.isIdlePreview(), AirPlaySetting::putIdlePreview, false));
-        mBinding.debugOverlay.setOnClickListener(v -> toggle(AirPlaySetting.isDebugOverlay(), AirPlaySetting::putDebugOverlay, false));
         mBinding.benchmarkLog.setOnClickListener(v -> toggle(AirPlaySetting.isBenchmarkLog(), AirPlaySetting::putBenchmarkLog, true));
     }
 
@@ -103,6 +100,12 @@ public class SettingAirPlayAdvancedActivity extends BaseActivity {
         mBinding.debugOverlayText.setText(Setting.getSwitch(AirPlaySetting.isDebugOverlay()));
         mBinding.benchmarkLogText.setText(Setting.getSwitch(AirPlaySetting.isBenchmarkLog()));
 
+        // These are controls for the airplay module's standalone Compose viewer. Both app flavours
+        // use AirPlayCastActivity instead: it is always fullscreen, closes when idle, and has no
+        // Compose debug overlay. Do not present switches that cannot affect either host UI.
+        mBinding.autoFullscreen.setVisibility(View.GONE);
+        mBinding.idlePreview.setVisibility(View.GONE);
+        mBinding.debugOverlay.setVisibility(View.GONE);
         boolean autoBuffer = AirPlaySetting.isAudioAutoBuffer();
         mBinding.audioCushion.setVisibility(autoBuffer ? View.GONE : View.VISIBLE);
         mBinding.audioAdaptive.setVisibility(autoBuffer ? View.VISIBLE : View.GONE);

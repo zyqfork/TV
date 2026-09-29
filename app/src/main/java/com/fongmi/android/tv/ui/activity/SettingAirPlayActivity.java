@@ -102,7 +102,11 @@ public class SettingAirPlayActivity extends BaseActivity {
             return;
         }
         if (ifaces.size() == 1) {
-            AirPlaySetting.putInterface(ifaces.get(0).name());
+            String name = ifaces.get(0).name();
+            if (!name.equals(AirPlaySetting.getInterface())) {
+                AirPlaySetting.putInterface(name);
+                AirPlayServer.apply(this);
+            }
             refresh();
             return;
         }

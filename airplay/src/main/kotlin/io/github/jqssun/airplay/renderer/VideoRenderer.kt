@@ -182,14 +182,29 @@ class VideoRenderer {
         }
 
         firstFrameQueued = false
-        try {
-            _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
-        } catch (e: Exception) {
-            // strict hw decoders reject configs beyond their real limits
-            val sw = _softwareDecoder(mime)?.takeIf {
+        // Only inspect software decoders when needed; some vendor codec lists throw while querying
+        // capabilities, and a normal hardware stream should never depend on that query succeeding.
+        fun softwareDecoder() = try {
+            _softwareDecoder(mime)?.takeIf {
                 it.getCapabilitiesForType(mime).videoCapabilities
                     ?.isSizeSupported(videoWidth, videoHeight) == true
-            } ?: throw e
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Software decoder capabilities unavailable", e)
+            null
+        }
+        // Some vendor decoders accept configure/start for tall frames but never produce output.
+        // On the affected phone c2.qti.hevc.decoder reports max-height=2160 in its output format,
+        // yet the sender supplies 1080x2340: inputs fill forever and the display remains black.
+        val tallSoftware = if (videoHeight > 2160) softwareDecoder() else null
+        if (tallSoftware != null) {
+            Log.w(TAG, "Tall stream ${videoWidth}x${videoHeight}; using ${tallSoftware.name} instead of hardware decoder")
+            _startDecoder(MediaCodec.createByCodecName(tallSoftware.name), format, s, h265)
+        } else try {
+            _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
+        } catch (e: Exception) {
+            // Strict hardware decoders reject configs beyond their real limits.
+            val sw = softwareDecoder() ?: throw e
             Log.w(TAG, "Hardware decoder failed, trying software fallback", e)
             _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265)
         }

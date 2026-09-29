@@ -385,6 +385,9 @@
 
 
     <string name="setting_cast_setting">投屏设置</string>
+    <string name="cast_options">更多</string>
+    <string name="cast_speed">播放速度</string>
+    <string name="cast_restart">重新播放</string>
     <string name="setting_dlna_setting">DLNA 设置</string>
     <string name="setting_dlna">DLNA</string>
     <string name="setting_dlna_name">设备名称</string>

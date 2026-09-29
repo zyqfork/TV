@@ -2,23 +2,19 @@ package com.fongmi.android.tv.dlna;
 
 import android.app.Activity;
 import android.content.Context;
-import android.text.TextUtils;
-
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.service.AirPlayServer;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.ui.activity.AirPlayCastActivity;
-import com.fongmi.android.tv.ui.activity.VideoActivity;
+import com.fongmi.android.tv.ui.activity.CastActivity;
 
 /**
  * The phone half of the cast-receiver subsystem.
  *
- * DLNA pushes are simply played by the normal player; there is no separate cast page. AirPlay shows
- * its session in {@link AirPlayCastActivity} — the same page the TV flavour uses, registered in the
- * phone manifest for the `${applicationId}.airplay` action the airplay module broadcasts when a
- * sender connects. (Without that registration the module falls back to its own Compose activity,
- * which is the overview/logs screen.)
+ * Both receivers use dedicated session pages. The phone's DLNA page uses the shared renderer,
+ * transport state and playback service (including DIDL metadata, request headers and SOAP seek),
+ * while providing touch controls instead of the TV's remote-control layout. AirPlay shares its
+ * session page with the TV flavour.
  *
  * `main` is written against this class and the TV flavour provides its own copy with the same FQN.
  */
@@ -27,15 +23,13 @@ public final class CastPlatform {
     private CastPlatform() {
     }
 
-    /** A DLNA controller pushed media: play it. */
+    /** A DLNA controller pushed media: show it on the touch cast page. */
     public static void showDlnaSession(Context context, CastAction action) {
-        String url = action.getCurrentURI();
-        if (TextUtils.isEmpty(url)) return;
-        VideoActivity.start(context, SiteApi.PUSH, url, url);
+        CastActivity.start(context, action);
     }
 
-    /** Nothing to close — the phone has no separate cast page. */
     public static void hideDlnaSession() {
+        finishIf(CastActivity.class);
     }
 
     /**
