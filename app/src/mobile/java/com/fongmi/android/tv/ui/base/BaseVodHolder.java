@@ -11,6 +11,7 @@ public abstract class BaseVodHolder extends RecyclerView.ViewHolder {
 
     public BaseVodHolder(@NonNull View itemView) {
         super(itemView);
+        itemView.setFocusable(true);
     }
 
     public abstract void initView(Vod item);

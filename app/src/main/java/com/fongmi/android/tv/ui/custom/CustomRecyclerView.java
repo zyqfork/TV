@@ -3,48 +3,22 @@ package com.fongmi.android.tv.ui.custom;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.util.AttributeSet;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.ViewConfiguration;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.Product;
 
-public class CustomRecyclerView extends RecyclerView {
+/** Size-constrained native list used by dialogs. Scrolling never implicitly changes focus. */
+public class CustomRecyclerView extends PointerRecyclerView {
+    private int minWidth, minHeight, maxWidth, maxHeight;
 
-    private int minWidth;
-    private int minHeight;
-    private int maxWidth;
-    private int maxHeight;
-    private int touchSlop;
-    private float x1;
-    private float y1;
-
-    public CustomRecyclerView(@NonNull Context context) {
-        super(context);
-        init(context, null);
-    }
-
-    public CustomRecyclerView(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-        init(context, attrs);
-    }
-
+    public CustomRecyclerView(@NonNull Context context) { this(context, null); }
+    public CustomRecyclerView(@NonNull Context context, @Nullable AttributeSet attrs) { this(context, attrs, 0); }
     public CustomRecyclerView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init(context, attrs);
-    }
-
-    private void init(Context context, @Nullable AttributeSet attrs) {
-        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        if (attrs != null) setAttrs(context, attrs);
-        setOverScrollMode(View.OVER_SCROLL_NEVER);
-    }
-
-    private void setAttrs(Context context, AttributeSet attrs) {
+        if (attrs == null) return;
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.CustomRecyclerView);
         minWidth = a.getDimensionPixelSize(R.styleable.CustomRecyclerView_android_minWidth, 0);
         minHeight = a.getDimensionPixelSize(R.styleable.CustomRecyclerView_android_minHeight, 0);
@@ -53,68 +27,38 @@ public class CustomRecyclerView extends RecyclerView {
         a.recycle();
     }
 
-    public void setMinWidth(int minWidth) {
-        this.minWidth = minWidth;
+    public void setMinWidth(int value) { minWidth = value; requestLayout(); }
+    public void setMaxWidth(int value) { maxWidth = value; requestLayout(); }
+    public void setMinHeight(int value) { minHeight = value; requestLayout(); }
+    public void setMaxHeight(int value) { maxHeight = value; requestLayout(); }
+
+    /** Explicit initial dialog selection: TV focuses it, phone only scrolls it into view. */
+    public void scrollToSelection(int position) {
+        if (Product.getDeviceType() == 0) scrollToPositionAndFocus(position);
+        else scrollToPosition(position);
     }
 
-    public void setMaxWidth(int maxWidth) {
-        this.maxWidth = maxWidth;
+    private int boundedSpec(int spec, int max) {
+        int mode = MeasureSpec.getMode(spec), size = MeasureSpec.getSize(spec);
+        if (max <= 0 || mode == MeasureSpec.EXACTLY) return spec;
+        return MeasureSpec.makeMeasureSpec(mode == MeasureSpec.UNSPECIFIED ? max : Math.min(size, max), MeasureSpec.AT_MOST);
     }
 
-    public void setMinHeight(int minHeight) {
-        this.minHeight = minHeight;
+    private int minimum(int measured, int min, int spec) {
+        if (MeasureSpec.getMode(spec) == MeasureSpec.EXACTLY) return MeasureSpec.getSize(spec);
+        int value = Math.max(measured, min);
+        return MeasureSpec.getMode(spec) == MeasureSpec.AT_MOST ? Math.min(value, MeasureSpec.getSize(spec)) : value;
     }
 
-    public void setMaxHeight(int maxHeight) {
-        this.maxHeight = maxHeight;
-    }
-
-    private int getConstrainedSize(int measuredSize, int minSize, int maxSize) {
-        int finalSize = measuredSize;
-        if (maxSize > 0) finalSize = Math.min(finalSize, maxSize);
-        if (minSize > 0) finalSize = Math.max(finalSize, minSize);
-        return finalSize;
-    }
-
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        int finalWidth = getConstrainedSize(getMeasuredWidth(), minWidth, maxWidth);
-        int finalHeight = getConstrainedSize(getMeasuredHeight(), minHeight, maxHeight);
-        setMeasuredDimension(finalWidth, finalHeight);
-    }
-
-    private void focus(int position) {
-        ViewHolder holder = findViewHolderForLayoutPosition(position);
-        if (holder != null) holder.itemView.requestFocus();
-    }
-
-    @Override
-    public void scrollToPosition(int position) {
-        super.scrollToPosition(position);
-        postDelayed(() -> focus(position), 50);
-    }
-
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event.getPointerCount() != 1) return false;
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_UP:
-                x1 = y1 = 0;
-                break;
-            case MotionEvent.ACTION_DOWN:
-                x1 = event.getX();
-                y1 = event.getY();
-                getParent().requestDisallowInterceptTouchEvent(true);
-                break;
-            case MotionEvent.ACTION_MOVE:
-                float x2 = event.getX();
-                float y2 = event.getY();
-                float offsetX = Math.abs(x2 - x1);
-                float offsetY = Math.abs(y2 - y1);
-                if (offsetX > offsetY && offsetX > touchSlop) getParent().requestDisallowInterceptTouchEvent(false);
-                break;
+    @Override protected void onMeasure(int widthSpec, int heightSpec) {
+        int width = boundedSpec(widthSpec, maxWidth), height = boundedSpec(heightSpec, maxHeight);
+        super.onMeasure(width, height);
+        int finalWidth = minimum(getMeasuredWidth(), minWidth, width);
+        int finalHeight = minimum(getMeasuredHeight(), minHeight, height);
+        // Re-measure so LayoutManager and children see the same size as the container.
+        if (finalWidth != getMeasuredWidth() || finalHeight != getMeasuredHeight()) {
+            super.onMeasure(MeasureSpec.makeMeasureSpec(finalWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(finalHeight, MeasureSpec.EXACTLY));
         }
-        return super.dispatchTouchEvent(event);
     }
 }

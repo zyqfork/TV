@@ -107,6 +107,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     @Override
     protected void initEvent() {
         mBinding.swipeLayout.setOnRefreshListener(this);
+        // Mouse dragging at the top scrolls the page; it must not start pull-to-refresh.
+        mBinding.swipeLayout.setOnChildScrollUpCallback((parent, child) ->
+                mBinding.recycler.isMouseGesture() || mBinding.recycler.canScrollVertically(-1));
         mBinding.recycler.addOnScrollListener(mScroller);
     }
 
@@ -146,6 +149,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     private void getVideo() {
         mScroller.reset();
+        mScroller.beginLoading();
         mAdapter.clear(() -> {
             if (!mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
             if (isHome()) setAdapter(getParent().getResult());

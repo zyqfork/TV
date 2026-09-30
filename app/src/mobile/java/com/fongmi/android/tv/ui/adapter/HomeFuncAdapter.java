@@ -4,6 +4,8 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.bean.Func;
@@ -13,24 +15,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** The phone home screen's row of app-level destinations (see {@code HomeFuncs}). */
-public class HomeFuncAdapter extends RecyclerView.Adapter<HomeFuncAdapter.ViewHolder> {
+public class HomeFuncAdapter extends ListAdapter<Func, HomeFuncAdapter.ViewHolder> {
 
     private final OnClickListener listener;
-    private final List<Func> items = new ArrayList<>();
 
     public HomeFuncAdapter(OnClickListener listener) {
+        super(new DiffUtil.ItemCallback<>() {
+            @Override public boolean areItemsTheSame(@NonNull Func a, @NonNull Func b) { return a.isSameItem(b); }
+            @Override public boolean areContentsTheSame(@NonNull Func a, @NonNull Func b) { return a.isSameContent(b); }
+        });
         this.listener = listener;
+        setStateRestorationPolicy(StateRestorationPolicy.PREVENT_WHEN_EMPTY);
     }
 
     public void setItems(List<Func> list) {
-        items.clear();
-        if (list != null) items.addAll(list);
-        notifyDataSetChanged();
-    }
-
-    @Override
-    public int getItemCount() {
-        return items.size();
+        submitList(list == null ? List.of() : new ArrayList<>(list));
     }
 
     @NonNull
@@ -41,7 +40,7 @@ public class HomeFuncAdapter extends RecyclerView.Adapter<HomeFuncAdapter.ViewHo
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        Func item = items.get(position);
+        Func item = getItem(position);
         holder.binding.icon.setImageResource(item.getDrawable());
         holder.binding.text.setText(item.getText());
         holder.binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));

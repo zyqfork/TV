@@ -40,7 +40,7 @@ public class ParseDialog extends BaseBottomSheetDialog implements ParseAdapter.O
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setItemAnimator(null);
         binding.recycler.addItemDecoration(new SpaceItemDecoration(8));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(adapter.getPosition()));
+        binding.recycler.post(() -> binding.recycler.scrollToSelection(adapter.getPosition()));
     }
 
     @Override

@@ -105,7 +105,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.recycler.setAdapter(adapter.addAll(getTrack()));
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         binding.title.setText(ResUtil.getStringArray(R.array.select_track)[type - 1]);
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(adapter.getSelected()));
+        binding.recycler.post(() -> binding.recycler.scrollToSelection(adapter.getSelected()));
         binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE);
         boolean bitmapSubtitle = type == C.TRACK_TYPE_TEXT && TrackUtil.hasSelectedBitmapSubtitle(player.getCurrentTracks());
         binding.offset.setVisibility((hasText() && !bitmapSubtitle) || hasAudio() ? View.VISIBLE : View.GONE);

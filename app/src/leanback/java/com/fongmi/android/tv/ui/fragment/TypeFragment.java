@@ -1,22 +1,16 @@
 package com.fongmi.android.tv.ui.fragment;
 
-import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.leanback.widget.ArrayObjectAdapter;
-import androidx.leanback.widget.FocusHighlight;
-import androidx.leanback.widget.HorizontalGridView;
-import androidx.leanback.widget.ItemBridgeAdapter;
-import androidx.leanback.widget.ListRow;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Cache;
@@ -30,287 +24,154 @@ import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
+import com.fongmi.android.tv.ui.adapter.VodGridAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
-import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
-import com.fongmi.android.tv.ui.custom.CustomSelector;
-import com.fongmi.android.tv.ui.presenter.FilterPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.Notify;
-import com.fongmi.android.tv.utils.ResUtil;
-import com.google.common.collect.Lists;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
 public class TypeFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener, SwipeRefreshLayout.OnRefreshListener {
-
     private HashMap<String, String> mExtends;
     private FragmentTypeBinding mBinding;
-    private ArrayObjectAdapter mAdapter;
-    private ArrayObjectAdapter mLast;
+    private VodGridAdapter mAdapter;
     private CustomScroller mScroller;
     private SiteViewModel mViewModel;
     private List<Filter> mFilters;
-    private boolean headerVisible;
     private boolean filterVisible;
+    private boolean awaitingFirst;
     private int actionPosition = -1;
+    private int actionItemPosition = -1;
+    private int folderPosition = -1;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
-        args.putString("key", key);
-        args.putString("typeId", typeId);
-        args.putBoolean("folder", folder);
-        args.putParcelable("style", style);
-        args.putSerializable("extend", extend);
-        TypeFragment fragment = new TypeFragment();
-        fragment.setArguments(args);
-        return fragment;
+        args.putString("key", key); args.putString("typeId", typeId);
+        args.putBoolean("folder", folder); args.putParcelable("style", style); args.putSerializable("extend", extend);
+        TypeFragment fragment = new TypeFragment(); fragment.setArguments(args); return fragment;
     }
+    private String getKey() { return getArguments().getString("key"); }
+    private String getTypeId() { return getArguments().getString("typeId"); }
+    private boolean isFolder() { return getArguments().getBoolean("folder"); }
+    private Site getSite() { return VodConfig.get().getSite(getKey()); }
+    private Style getStyle() { return isFolder() ? Style.list() : getSite().getStyle(getArguments().getParcelable("style")); }
+    private FolderFragment getParent() { return (FolderFragment) getParentFragment(); }
 
-    private String getKey() {
-        return getArguments().getString("key");
-    }
-
-    private String getTypeId() {
-        return getArguments().getString("typeId");
-    }
-
-    private boolean isFolder() {
-        return getArguments().getBoolean("folder");
-    }
-
-    private Style getStyle() {
-        return isFolder() ? Style.list() : getSite().getStyle(getArguments().getParcelable("style"));
-    }
-
-    private HashMap<String, String> getExtend() {
-        return (HashMap<String, String>) getArguments().getSerializable("extend");
-    }
-
-    private List<Filter> getFilter() {
-        return Cache.copy(getTypeId());
-    }
-
-    private Site getSite() {
-        return VodConfig.get().getSite(getKey());
-    }
-
-    private FolderFragment getParent() {
-        return ((FolderFragment) getParentFragment());
-    }
-
-    @Override
-    protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
+    @Override protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         return mBinding = FragmentTypeBinding.inflate(inflater, container, false);
     }
-
-    @Override
-    protected void initView() {
+    @Override @SuppressWarnings("unchecked") protected void initView() {
         mScroller = new CustomScroller(this);
-        mExtends = getExtend();
-        mFilters = getFilter();
-        setRecyclerView();
-        setViewModel();
-        setFilters();
-        getVideo();
-    }
-
-    @Override
-    protected void initEvent() {
-        mBinding.swipeLayout.setOnRefreshListener(this);
-        mBinding.recycler.addOnScrollListener(mScroller);
-    }
-
-    @SuppressLint("RestrictedApi")
-    private void setRecyclerView() {
-        CustomSelector selector = new CustomSelector();
-        selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(8, FocusHighlight.ZOOM_FACTOR_NONE, HorizontalGridView.FOCUS_SCROLL_ALIGNED), FilterPresenter.class);
-        mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
-        mBinding.recycler.setHeader(getActivity(), R.id.recycler);
-        mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
-    }
-
-    private void setViewModel() {
+        mExtends = (HashMap<String, String>) getArguments().getSerializable("extend");
+        mFilters = Cache.copy(getTypeId());
+        for (Filter filter : mFilters) if (mExtends.containsKey(filter.getKey())) filter.setSelected(mExtends.get(filter.getKey()));
+        mAdapter = new VodGridAdapter(this);
+        mAdapter.attach(mBinding.recycler, this::onCommitted);
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(getViewLifecycleOwner(), this::setAdapter);
         mViewModel.getAction().observe(getViewLifecycleOwner(), this::onActionResult);
+        getVideo();
     }
-
+    @Override protected void initEvent() {
+        mBinding.swipeLayout.setOnRefreshListener(this);
+        mBinding.swipeLayout.setOnChildScrollUpCallback((parent, child) ->
+                mBinding.recycler.isMouseGesture() || mBinding.recycler.canScrollVertically(-1));
+        mBinding.recycler.addOnScrollListener(mScroller);
+    }
     private void onActionResult(Result result) {
         if (result == null) return;
-        mViewModel.clearAction();
-        Notify.show(result.getMsg());
-        if (!result.shouldRefreshAction()) return;
-        actionPosition = mBinding.recycler.getSelectedPosition();
+        mViewModel.clearAction(); Notify.show(result.getMsg());
+        if (!result.shouldRefreshAction()) { actionItemPosition = -1; return; }
+        actionPosition = actionItemPosition >= 0 ? actionItemPosition : mBinding.recycler.getFocusedPosition();
+        actionItemPosition = -1;
         getVideo();
     }
-
-    private void setFilters() {
+    private void setClick(String key, Value value) {
         for (Filter filter : mFilters) {
-            if (mExtends.containsKey(filter.getKey())) {
-                filter.setSelected(mExtends.get(filter.getKey()));
-            }
+            if (!filter.getKey().equals(key)) continue;
+            for (Value option : filter.getValue()) option.setSelected(value);
+            if (filter.getValue().stream().anyMatch(Value::isSelected)) mExtends.put(key, value.getV());
+            else mExtends.remove(key);
         }
-    }
-
-    private void setClick(ArrayObjectAdapter adapter, String key, Value item) {
-        for (int i = 0; i < adapter.size(); i++) ((Value) adapter.get(i)).setSelected(item);
-        adapter.notifyArrayItemRangeChanged(0, adapter.size());
-        if (item.isSelected()) mExtends.put(key, item.getV());
-        else mExtends.remove(key);
+        mAdapter.setFilters(filterVisible ? mFilters : List.of(), this::setClick);
         onRefresh();
     }
-
     private void getVideo() {
-        mLast = null;
-        checkFilter();
-        mScroller.reset();
-        getVideo(getTypeId(), "1");
+        awaitingFirst = true;
+        mScroller.reset(); mScroller.beginLoading();
+        boolean empty = mAdapter.getItemCount() == 0;
+        mAdapter.clearVideos();
+        if (empty) mBinding.progressLayout.showProgress();
+        else mBinding.swipeLayout.setRefreshing(true);
+        mViewModel.categoryContent(getKey(), getTypeId(), "1", true, mExtends);
     }
-
-    private void getVideo(String typeId, String page) {
-        mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
-    }
-
     private void setAdapter(Result result) {
+        if (result == null) return;
         boolean first = mScroller.first();
-        boolean flag = mExtends.isEmpty();
-        int size = result.getList().size();
-        mBinding.progressLayout.showContent(first & flag, size);
+        mBinding.progressLayout.showContent(first && mExtends.isEmpty(), result.getList().size());
         mBinding.swipeLayout.setRefreshing(false);
         mScroller.endLoading(result);
-        if (size > 0) addVideo(result);
-        restoreActionPosition(first);
-    }
-
-    private void restoreActionPosition(boolean first) {
-        if (!first || actionPosition < 0) return;
-        int position = Math.min(actionPosition, Math.max(0, mAdapter.size() - 1));
-        mBinding.recycler.post(() -> mBinding.recycler.setSelectedPosition(position));
-        actionPosition = -1;
-    }
-
-    private void addVideo(Result result) {
+        awaitingFirst = false;
         Style style = result.getStyle(getStyle());
-        if (style.isList()) mAdapter.addAll(mAdapter.size(), result.getList());
-        else addGrid(result.getList(), style);
-        checkMore();
+        if (first) mAdapter.setVideos(result.getList(), style);
+        else mAdapter.addVideos(result.getList(), style);
     }
-
-    private void checkMore() {
-        if (mScroller.isDisable() || mAdapter.size() >= 5) return;
-        mScroller.checkMore();
+    private void onCommitted() {
+        if (mBinding == null) return;
+        if (!awaitingFirst && actionPosition >= 0 && mAdapter.getItemCount() > 0) {
+            int target = Math.min(actionPosition, mAdapter.getItemCount() - 1);
+            actionPosition = -1;
+            mBinding.recycler.scrollToPositionAndFocus(target);
+        }
+        mBinding.recycler.post(() -> { if (mBinding != null && !awaitingFirst) mScroller.checkMore(mBinding.recycler); });
     }
-
-    private boolean checkLastSize(List<Vod> items, Style style) {
-        if (mLast == null || items.isEmpty()) return false;
-        int size = Product.getColumn(style) - mLast.size();
-        if (size == 0) return false;
-        size = Math.min(size, items.size());
-        mLast.addAll(mLast.size(), items.subList(0, size));
-        addGrid(items.subList(size, items.size()), style);
+    public void toggleFilter(boolean visible) {
+        if (mFilters.isEmpty() || filterVisible == visible) return;
+        filterVisible = visible;
+        mAdapter.setFilters(visible ? mFilters : List.of(), this::setClick);
+        mBinding.recycler.scrollToTop();
+    }
+    @Override public void onRefresh() { actionPosition = -1; getVideo(); }
+    public boolean moveToTop() {
+        if (mBinding == null || (mBinding.recycler.isAtTop()
+                && mBinding.recycler.getFocusedPosition() < mAdapter.firstRowEnd())) return false;
+        mBinding.recycler.scrollToTop();
+        mBinding.recycler.afterNextLayout(() -> {
+            View header = requireActivity().findViewById(R.id.recycler);
+            if (header != null && header != mBinding.recycler) header.requestFocusFromTouch();
+        });
         return true;
     }
-
-    private void addGrid(List<Vod> items, Style style) {
-        if (checkLastSize(items, style)) return;
-        List<ListRow> rows = new ArrayList<>();
-        VodPresenter presenter = new VodPresenter(this, style);
-        for (List<Vod> part : Lists.partition(items, Product.getColumn(style))) {
-            mLast = new ArrayObjectAdapter(presenter);
-            mLast.addAll(0, part);
-            rows.add(new ListRow(mLast));
-        }
-        mAdapter.addAll(mAdapter.size(), rows);
-    }
-
-    private ListRow getRow(Filter filter) {
-        FilterPresenter presenter = new FilterPresenter(filter.getKey());
-        ArrayObjectAdapter adapter = new ArrayObjectAdapter(presenter);
-        presenter.setOnClickListener((key, item) -> setClick(adapter, key, item));
-        adapter.setItems(filter.getValue(), null);
-        return new ListRow(adapter);
-    }
-
-    private void showFilter() {
-        List<ListRow> rows = new ArrayList<>();
-        for (Filter filter : mFilters) rows.add(getRow(filter));
-        mBinding.recycler.postDelayed(() -> mBinding.recycler.scrollToPosition(0), 48);
-        mAdapter.addAll(0, rows);
-    }
-
-    private void hideFilter() {
-        mAdapter.removeItems(0, mFilters.size());
-    }
-
-    public void toggleFilter(boolean visible) {
-        if (mFilters.isEmpty()) return;
-        this.filterVisible = visible;
-        if (visible) showFilter();
-        else hideFilter();
-    }
-
-    private void checkFilter() {
-        int adapterSize = mAdapter.size();
-        int filterSize = filterVisible ? mFilters.size() : 0;
-        if (adapterSize > filterSize) mAdapter.removeItems(filterSize, mAdapter.size() - filterSize);
-        if (adapterSize == 0) mBinding.progressLayout.showProgress();
-        else mBinding.swipeLayout.setRefreshing(true);
-    }
-
-    public void onRefresh() {
-        getVideo();
-    }
-
-    public boolean moveToTop() {
-        return mBinding != null && mBinding.recycler.moveToTop();
-    }
-
-    @Override
-    public void onItemClick(Vod item) {
+    @Override public void onItemClick(Vod item) {
         if (item.isAction()) {
+            actionItemPosition = mAdapter.positionOf(item);
             mViewModel.action(getKey(), item.getAction());
         } else if (item.isFolder()) {
+            folderPosition = mAdapter.positionOf(item);
             getParent().openFolder(item.getId(), mExtends);
-            headerVisible = mBinding.recycler.isHeaderVisible();
-        } else {
-            if (getSite().isIndex()) CollectActivity.start(requireActivity(), item.getName());
-            else VideoActivity.start(requireActivity(), getKey(), item.getId(), item.getName(), item.getPic(), isFolder() ? item.getName() : null);
-        }
+        } else if (getSite().isIndex()) CollectActivity.start(requireActivity(), item.getName());
+        else VideoActivity.start(this.requireActivity(), getKey(), item.getId(), item.getName(), item.getPic(), isFolder() ? item.getName() : null);
     }
-
-    @Override
-    public boolean onLongClick(Vod item) {
+    @Override public boolean onLongClick(Vod item) {
         if (item.isAction() || item.isFolder()) return false;
-        CollectActivity.start(requireActivity(), item.getName());
-        return true;
+        CollectActivity.start(requireActivity(), item.getName()); return true;
     }
-
-    @Override
-    public boolean onLoadMore(String page) {
-        getVideo(getTypeId(), page);
-        return true;
+    @Override public boolean onLoadMore(String page) {
+        mViewModel.categoryContent(getKey(), getTypeId(), page, true, mExtends); return true;
     }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
+    @Override public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
-        if (hidden) {
-            mBinding.recycler.showHeader();
-        } else {
-            if (headerVisible) mBinding.recycler.showHeader();
-            else mBinding.recycler.hideHeader();
-            mBinding.recycler.requestFocus();
-        }
+        if (hidden || mBinding == null) return;
+        mBinding.recycler.afterNextLayout(() -> {
+            if (folderPosition >= 0 && mBinding.recycler.focusPosition(folderPosition)) return;
+            mBinding.recycler.focusVisibleItem();
+        });
     }
-
-    @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
-        moveToTop();
+    @Override public void setUserVisibleHint(boolean visible) {
+        super.setUserVisibleHint(visible);
+        if (!visible && mBinding != null) mBinding.recycler.scrollToTop();
     }
+    @Override public void onDestroyView() { super.onDestroyView(); mBinding = null; }
 }

@@ -16,6 +16,9 @@ import java.util.stream.Stream;
 public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends RecyclerView.ViewHolder> extends RecyclerView.Adapter<VH> {
 
     protected final AsyncListDiffer<T> differ;
+    // Accepted UI data can lag behind successive search/page callbacks. Mutations build
+    // on the latest submitted snapshot so an in-flight diff cannot discard earlier appends.
+    private List<T> pendingItems = new ArrayList<>();
 
     public BaseDiffAdapter() {
         this.differ = new AsyncListDiffer<>(this, new BaseItemCallback<T>());
@@ -44,15 +47,15 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void setItems(List<T> items, Runnable runnable) {
-        differ.submitList(Objects.requireNonNullElseGet(items, ArrayList::new), runnable);
+        pendingItems = new ArrayList<>(Objects.requireNonNullElseGet(items, ArrayList::new));
+        differ.submitList(pendingItems, runnable);
     }
 
     public void setItems(List<T> items, Callback callback) {
-        List<T> oldItems = getItems();
-        List<T> newItems = Objects.requireNonNullElseGet(items, ArrayList::new);
-        boolean hasChange = !listsAreSame(oldItems, newItems);
-        if (!hasChange) callback.onUpdateFinished(false);
-        else differ.submitList(newItems, () -> callback.onUpdateFinished(true));
+        List<T> newItems = new ArrayList<>(Objects.requireNonNullElseGet(items, ArrayList::new));
+        boolean hasChange = !listsAreSame(getItems(), newItems);
+        // Always submit to supersede an older pending diff, even if accepted data is equal.
+        setItems(newItems, () -> callback.onUpdateFinished(hasChange));
     }
 
     public void add(T item) {
@@ -60,7 +63,7 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void add(T item, Runnable runnable) {
-        List<T> current = new ArrayList<>(getItems());
+        List<T> current = new ArrayList<>(pendingItems);
         current.add(item);
         setItems(current, runnable);
     }
@@ -70,7 +73,7 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void addAll(List<T> items, Runnable runnable) {
-        List<T> current = new ArrayList<>(getItems());
+        List<T> current = new ArrayList<>(pendingItems);
         current.addAll(items);
         setItems(current, runnable);
     }
@@ -80,7 +83,7 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void sort(T item, Runnable runnable) {
-        List<T> current = Stream.concat(getItems().stream(), Stream.of(item)).distinct().sorted().toList();
+        List<T> current = Stream.concat(pendingItems.stream(), Stream.of(item)).distinct().sorted().toList();
         setItems(current, runnable);
     }
 
@@ -89,7 +92,7 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void sort(List<T> items, Runnable runnable) {
-        List<T> current = Stream.concat(getItems().stream(), items.stream()).distinct().sorted().toList();
+        List<T> current = Stream.concat(pendingItems.stream(), items.stream()).distinct().sorted().toList();
         setItems(current, runnable);
     }
 
@@ -98,7 +101,7 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
     }
 
     public void remove(T item, Runnable runnable) {
-        List<T> current = new ArrayList<>(getItems());
+        List<T> current = new ArrayList<>(pendingItems);
         if (current.remove(item)) setItems(current, runnable);
     }
 

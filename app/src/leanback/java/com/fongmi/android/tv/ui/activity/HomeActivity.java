@@ -1,28 +1,17 @@
 package com.fongmi.android.tv.ui.activity;
 
-import android.annotation.SuppressLint;
 import android.app.SearchManager;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.KeyEvent;
-import android.view.View;
+import android.view.ViewTreeObserver;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.core.splashscreen.SplashScreen;
-import androidx.leanback.widget.ArrayObjectAdapter;
-import androidx.leanback.widget.FocusHighlight;
-import androidx.leanback.widget.HorizontalGridView;
-import androidx.leanback.widget.ItemBridgeAdapter;
-import androidx.leanback.widget.ListRow;
-import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.api.config.LiveConfig;
@@ -34,9 +23,9 @@ import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
-import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
+import com.fongmi.android.tv.databinding.ViewHomeToolbarBinding;
 import com.fongmi.android.tv.db.BackupManager;
 import com.fongmi.android.tv.dlna.CastNetworkWatcher;
 import com.fongmi.android.tv.event.CastEvent;
@@ -55,17 +44,14 @@ import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
-import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
+import com.fongmi.android.tv.ui.adapter.HomeAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
-import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
-import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.home.HomeFuncs;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
 import com.fongmi.android.tv.ui.presenter.HeaderPresenter;
 import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
-import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
@@ -73,11 +59,9 @@ import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
-import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
-import com.google.common.collect.Lists;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -90,10 +74,13 @@ import java.util.Optional;
 public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, HeaderPresenter.OnClickListener {
 
     private ActivityHomeBinding mBinding;
-    private ArrayObjectAdapter mHistoryAdapter;
-    private ArrayObjectAdapter mFuncAdapter;
-    private ArrayObjectAdapter mAdapter;
+    private ViewHomeToolbarBinding mToolbar;
+    private HomeAdapter mAdapter;
+    private List<History> mHistory = new ArrayList<>();
+    private ViewTreeObserver.OnGlobalFocusChangeListener mFocusListener;
     private int actionPosition = -1;
+    private int actionItemPosition = -1;
+    private boolean initialFocus = true;
     private HistoryPresenter mPresenter;
     private SiteViewModel mViewModel;
     private Result mResult;
@@ -127,7 +114,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void initView(Bundle savedInstanceState) {
         mResult = Result.empty();
-        mClock = Clock.create(mBinding.clock);
+        mToolbar = ViewHomeToolbarBinding.inflate(getLayoutInflater());
+        mToolbar.title.setFlickerEnabled(false);
+        mClock = Clock.create(mToolbar.clock);
         mBinding.progressLayout.showProgress();
         PermissionUtil.requestNotify(this);
         DlnaSetting.ensureDefaultInterface();
@@ -146,14 +135,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void initEvent() {
-        mBinding.title.setListener(this);
-        mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                mBinding.toolbar.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
-                if (mPresenter.isDelete()) setHistoryDelete(false);
-            }
-        });
+        mToolbar.title.setListener(this);
+        mFocusListener = (oldFocus, newFocus) -> {
+            if (newFocus != null && mBinding.recycler.hasFocus() && mPresenter.isDelete()
+                    && !mAdapter.isHistoryPosition(mBinding.recycler.getFocusedPosition())) setHistoryDelete(false);
+        };
+        mBinding.recycler.getViewTreeObserver().addOnGlobalFocusChangeListener(mFocusListener);
     }
 
     private void checkAction(Intent intent) {
@@ -175,28 +162,30 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         }
     }
 
-    @SuppressLint("RestrictedApi")
     private void setRecyclerView() {
-        CustomSelector selector = new CustomSelector();
-        selector.addPresenter(Integer.class, new HeaderPresenter(this));
-        selector.addPresenter(String.class, new ProgressPresenter());
-        selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_NONE), FuncPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
-        mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
-        mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
-        // Keep Leanback's default window/item alignment. WINDOW_ALIGN_NO_EDGE made
-        // D-pad row scrolling feel loose and janky versus earlier releases.
+        mPresenter = new HistoryPresenter(this);
+        mAdapter = new HomeAdapter(mToolbar.getRoot(), this, this, this);
+        GridLayoutManager layout = new GridLayoutManager(this, mAdapter.getColumns());
+        layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return mAdapter.isFullSpan(position) ? layout.getSpanCount() : 1;
+            }
+        });
+        mBinding.recycler.setLayoutManager(layout);
+        mBinding.recycler.setItemAnimator(null);
+        mBinding.recycler.setAdapter(mAdapter);
+        mBinding.recycler.addItemDecoration(mAdapter.spacing());
+        mAdapter.setOnCommitted(() -> {
+            if (layout.getSpanCount() != mAdapter.getColumns()) layout.setSpanCount(mAdapter.getColumns());
+            restoreActionPosition();
+        });
     }
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(this, result -> {
-            mAdapter.remove("progress");
             addVideo(mResult = result);
             Cache.clear().put(result);
-            restoreActionPosition();
         });
         mViewModel.getAction().observe(this, this::onActionResult);
     }
@@ -205,29 +194,32 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (result == null) return;
         mViewModel.clearAction();
         Notify.show(result.getMsg());
-        if (!result.shouldRefreshAction()) return;
-        actionPosition = mBinding.recycler.getSelectedPosition();
+        if (!result.shouldRefreshAction()) {
+            actionItemPosition = -1;
+            return;
+        }
+        actionPosition = actionItemPosition >= 0 ? actionItemPosition : mBinding.recycler.getFocusedPosition();
+        actionItemPosition = -1;
         getVideo();
     }
 
     private void restoreActionPosition() {
-        if (actionPosition < 0) return;
-        int position = Math.min(actionPosition, Math.max(0, mAdapter.size() - 1));
-        mBinding.recycler.post(() -> mBinding.recycler.setSelectedPosition(position));
+        if (actionPosition < 0 || mAdapter.isLoading()) return;
+        int position = Math.min(actionPosition, Math.max(0, mAdapter.getItemCount() - 1));
+        mBinding.recycler.scrollToPosition(position);
+        mBinding.recycler.afterNextLayout(() -> mBinding.recycler.focusPosition(position));
         actionPosition = -1;
     }
 
     private void setAdapter() {
-        mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
-        mAdapter.add(new ListRow(mFuncAdapter = new ArrayObjectAdapter(new FuncPresenter(this))));
-        mAdapter.add(R.string.home_history);
-        mAdapter.add(R.string.home_recommend);
+        setFunc();
+        getHistory();
     }
 
     private void setTitle() {
         List<String> items = Arrays.asList(getHome().getName(), getConfig().getName(), getString(R.string.app_name));
         Optional<String> optional = items.stream().filter(s -> !TextUtils.isEmpty(s)).findFirst();
-        optional.ifPresent(s -> mBinding.title.setText(s));
+        optional.ifPresent(s -> mToolbar.title.setText(s));
     }
 
     private void initConfig() {
@@ -268,41 +260,32 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setFocus() {
-        mBinding.title.setSelected(true);
-        App.post(() -> mBinding.title.setFocusable(true), 500);
-        if (!mBinding.title.hasFocus()) mBinding.recycler.requestFocus();
+        mToolbar.title.setSelected(true);
+        mBinding.recycler.afterNextLayout(() -> {
+            if (initialFocus || !mBinding.recycler.hasFocus()) {
+                focusFunctions();
+                initialFocus = false;
+            }
+        });
+    }
+
+    private void focusFunctions() {
+        if (!mBinding.recycler.focusPosition(mAdapter.getFunctionsPosition())) mBinding.recycler.focusVisibleItem();
     }
 
     private void getVideo() {
         mResult = Result.empty();
-        int index = getRecommendIndex();
-        boolean gone = mAdapter.indexOf("progress") == -1;
-        boolean hasItem = gone && mAdapter.size() > index;
-        if (hasItem) mAdapter.removeItems(index, mAdapter.size() - index);
-        if (gone) mAdapter.add("progress");
+        mAdapter.setLoading();
         mViewModel.homeContent();
     }
 
     private void addVideo(Result result) {
-        Style style = result.getStyle(getHome().getStyle());
-        if (style.isList()) mAdapter.addAll(mAdapter.size(), result.getList());
-        else addGrid(result.getList(), style);
-    }
-
-    private void addGrid(List<Vod> items, Style style) {
-        List<ListRow> rows = new ArrayList<>();
-        VodPresenter presenter = new VodPresenter(this, style);
-        for (List<Vod> part : Lists.partition(items, Product.getColumn(style))) {
-            ArrayObjectAdapter adapter = new ArrayObjectAdapter(presenter);
-            adapter.addAll(0, part);
-            rows.add(new ListRow(adapter));
-        }
-        mAdapter.addAll(mAdapter.size(), rows);
+        mAdapter.setRecommendations(result.getList(), result.getStyle(getHome().getStyle()));
     }
 
     private void setFunc() {
         // Shared with the phone flavour so the two entry rows cannot drift apart.
-        mFuncAdapter.setItems(HomeFuncs.create(), new BaseDiffCallback<Func>());
+        mAdapter.setFunctions(HomeFuncs.create());
     }
 
     private void getHistory() {
@@ -310,38 +293,25 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void getHistory(boolean renew) {
-        List<History> items = History.get();
-        int historyIndex = getHistoryIndex();
-        int recommendIndex = getRecommendIndex();
-        boolean exist = recommendIndex - historyIndex == 2;
-        if (renew) mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
-        if ((items.isEmpty() && exist) || (renew && exist)) mAdapter.removeItems(historyIndex, 1);
-        if ((!items.isEmpty() && !exist) || (renew && exist)) mAdapter.add(historyIndex, new ListRow(mHistoryAdapter));
-        mHistoryAdapter.setItems(items, new BaseDiffCallback<History>());
+        if (renew) mPresenter = new HistoryPresenter(this);
+        mHistory = new ArrayList<>(History.get());
+        mAdapter.setHistory(mHistory, mPresenter);
     }
 
     private void setHistoryDelete(boolean delete) {
         mPresenter.setDelete(delete);
-        mHistoryAdapter.notifyArrayItemRangeChanged(0, mHistoryAdapter.size());
+        mAdapter.setHistory(mHistory, mPresenter);
     }
 
     private void clearHistory() {
-        mAdapter.removeItems(getHistoryIndex(), 1);
         History.clear(VodConfig.getCid());
         mPresenter.setDelete(false);
-        mHistoryAdapter.clear();
-    }
-
-    private int getHistoryIndex() {
-        return mAdapter.indexOf(R.string.home_history) + 1;
-    }
-
-    private int getRecommendIndex() {
-        return mAdapter.indexOf(R.string.home_recommend) + 1;
+        mHistory.clear();
+        mAdapter.setHistory(mHistory, mPresenter);
     }
 
     private void setLogo() {
-        ImgUtil.logo(mBinding.logo);
+        ImgUtil.logo(mToolbar.logo);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -415,12 +385,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onHeaderClick(int resId) {
+        if (mPresenter.isDelete()) setHistoryDelete(false);
         if (resId == R.string.home_history) HistoryActivity.start(this);
         else if (resId == R.string.home_recommend) RecommendActivity.start(this);
     }
 
     @Override
     public void onItemClick(Func item) {
+        if (mPresenter.isDelete()) setHistoryDelete(false);
         if (item.getResId() == R.string.home_vod) VodActivity.start(this, mResult);
         else if (item.getResId() == R.string.home_live) LiveActivity.start(this);
         else if (item.getResId() == R.string.home_keep) KeepActivity.start(this);
@@ -433,13 +405,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemClick(Vod item) {
-        if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
-        else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
+        if (mPresenter.isDelete()) setHistoryDelete(false);
+        if (item.isAction()) {
+            // Mouse clicks need not move keyboard focus. Restore the actual action card.
+            actionItemPosition = mAdapter.positionOf(item);
+            mViewModel.action(getHome().getKey(), item.getAction());
+        } else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
         else VideoActivity.start(this, getHome().getKey(), item.getId(), item.getName(), item.getPic());
     }
 
     @Override
     public boolean onLongClick(Vod item) {
+        if (mPresenter.isDelete()) setHistoryDelete(false);
         if (item.isAction()) return false;
         CollectActivity.start(this, item.getName());
         return true;
@@ -452,10 +429,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemDelete(History item) {
-        mHistoryAdapter.remove(item.delete());
-        if (mHistoryAdapter.size() > 0) return;
-        mAdapter.removeItems(getHistoryIndex(), 1);
-        mPresenter.setDelete(false);
+        mHistory.remove(item.delete());
+        if (mHistory.isEmpty()) mPresenter.setDelete(false);
+        mAdapter.setHistory(mHistory, mPresenter);
     }
 
     @Override
@@ -483,14 +459,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (KeyUtil.isMenuKey(event)) showDialog();
-        if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && getCurrentFocus() == mBinding.title) {
-            mBinding.recycler.setSelectedPosition(0);
-            mBinding.recycler.scrollToPosition(0);
-            mBinding.recycler.post(() -> {
-                View child = mBinding.recycler.getChildAt(0);
-                if (child != null) child.requestFocus();
-                else mBinding.recycler.requestFocus();
-            });
+        if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && getCurrentFocus() == mToolbar.title) {
+            focusFunctions();
             return true;
         }
         return super.dispatchKeyEvent(event);
@@ -514,8 +484,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             showContent();
         } else if (mPresenter.isDelete()) {
             setHistoryDelete(false);
-        } else if (mBinding.recycler.getSelectedPosition() != 0) {
-            mBinding.recycler.scrollToPosition(0);
+        } else if (!mBinding.recycler.isAtTop() || mBinding.recycler.getFocusedPosition() > mAdapter.getFunctionsPosition()) {
+            mBinding.recycler.scrollToTop();
+            mBinding.recycler.afterNextLayout(this::focusFunctions);
         } else {
             if (PlaybackService.isRunning()) Util.moveToBackground(this);
             else super.onBackInvoked();
@@ -524,6 +495,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void onDestroy() {
+        if (mFocusListener != null && mBinding.recycler.getViewTreeObserver().isAlive()) {
+            mBinding.recycler.getViewTreeObserver().removeOnGlobalFocusChangeListener(mFocusListener);
+        }
         CastNetworkWatcher.unregisterIfUnused(this);
         // Keep DLNARendererService running so the TV stays discoverable after the user
         // leaves HomeActivity. Stopping it here meant: cast once → exit/finish home →

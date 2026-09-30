@@ -154,6 +154,10 @@ public class CollectActivity extends BaseActivity {
 
     @Override
     protected void onBackInvoked() {
+        if (mBinding.pager.getAdapter().getCount() > 0) {
+            CollectFragment current = (CollectFragment) mBinding.pager.getAdapter().instantiateItem(mBinding.pager, mBinding.pager.getCurrentItem());
+            if (current.moveToTop()) return;
+        }
         mViewModel.stopSearch();
         super.onBackInvoked();
     }

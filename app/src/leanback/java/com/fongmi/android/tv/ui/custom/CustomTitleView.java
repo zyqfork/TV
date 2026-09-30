@@ -25,6 +25,7 @@ public class CustomTitleView extends MaterialTextView {
     private Listener listener;
     private Animation flicker;
     private boolean coolDown;
+    private boolean flickerEnabled = true;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -48,10 +49,21 @@ public class CustomTitleView extends MaterialTextView {
         return !getHome().isEmpty() && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event) || (KeyUtil.isUpKey(event) && !coolDown));
     }
 
+    public void setFlickerEnabled(boolean enabled) {
+        flickerEnabled = enabled;
+        if (!enabled) {
+            clearAnimation();
+            setAlpha(hasFocus() ? 1f : 0.7f);
+        }
+    }
+
     @Override
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
-        if (focused) startAnimation(flicker);
+        if (!flickerEnabled) {
+            clearAnimation();
+            setAlpha(focused ? 1f : 0.7f);
+        } else if (focused) startAnimation(flicker);
         else clearAnimation();
     }
 

@@ -151,7 +151,11 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
 
     @Override
     public void onItemClick(Class item) {
-        updateFilter(item);
+        int position = mAdapter.indexOf(item);
+        if (position != mBinding.pager.getCurrentItem()) {
+            mBinding.recycler.setSelectedPosition(position);
+            mBinding.pager.setCurrentItem(position);
+        } else updateFilter(item);
     }
 
     @Override
@@ -161,7 +165,7 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (KeyUtil.isMenuKey(event)) updateFilter();
+        if (KeyUtil.isMenuKey(event) && KeyUtil.isActionDown(event)) updateFilter();
         return super.dispatchKeyEvent(event);
     }
 

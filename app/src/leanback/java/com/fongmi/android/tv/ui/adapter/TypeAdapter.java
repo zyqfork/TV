@@ -78,6 +78,7 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
         ViewHolder(@NonNull AdapterTypeBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            itemView.setFocusableInTouchMode(false);
         }
     }
 }
