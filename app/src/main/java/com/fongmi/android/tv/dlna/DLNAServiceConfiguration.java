@@ -10,6 +10,12 @@ import org.jupnp.android.AndroidUpnpServiceConfiguration;
 import org.jupnp.binding.xml.DescriptorBindingException;
 import org.jupnp.binding.xml.DeviceDescriptorBinder;
 import org.jupnp.model.Namespace;
+import org.jupnp.model.UnsupportedDataException;
+import org.jupnp.model.message.IncomingDatagramMessage;
+import org.jupnp.model.message.UpnpResponse;
+import org.jupnp.model.message.discovery.IncomingSearchResponse;
+import org.jupnp.transport.impl.DatagramProcessorImpl;
+import org.jupnp.transport.spi.DatagramProcessor;
 import org.jupnp.model.ServerClientTokens;
 import org.jupnp.model.meta.Device;
 import org.jupnp.model.profile.RemoteClientInfo;
@@ -21,6 +27,7 @@ import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 
 import java.io.StringReader;
+import java.net.DatagramPacket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -115,6 +122,21 @@ public class DLNAServiceConfiguration extends AndroidUpnpServiceConfiguration {
         } catch (Exception e) {
             throw new DescriptorBindingException("Could not build device descriptor DOM", e);
         }
+    }
+
+    @Override
+    public DatagramProcessor getDatagramProcessor() {
+        return new DatagramProcessorImpl() {
+            @Override public IncomingDatagramMessage read(InetAddress local, DatagramPacket packet) throws UnsupportedDataException {
+                IncomingDatagramMessage message = super.read(local, packet);
+                if (message.getOperation() instanceof UpnpResponse) {
+                    IncomingSearchResponse response = new IncomingSearchResponse(message);
+                    DlnaDiscoveryTrace.log("ssdp-response role=" + (fixedListenPort ? "renderer" : "browser")
+                            + " from=" + packet.getSocketAddress() + " valid=" + response.isSearchResponseMessage());
+                }
+                return message;
+            }
+        };
     }
 
     @Override

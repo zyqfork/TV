@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.dlna;
 
+import android.os.SystemClock;
+
 import org.jupnp.model.message.StreamRequestMessage;
 import org.jupnp.model.message.StreamResponseMessage;
 import org.jupnp.model.message.UpnpHeaders;
@@ -65,6 +67,9 @@ public class OkHttpStreamClient extends AbstractStreamClient<OkHttpStreamClient.
     @Override
     protected Callable<StreamResponseMessage> createCallable(StreamRequestMessage requestMessage, Call call) {
         return () -> {
+            long start = SystemClock.elapsedRealtime();
+            String endpoint = call.request().url().host() + ":" + call.request().url().port();
+            DlnaDiscoveryTrace.log("http-start method=" + call.request().method() + " endpoint=" + endpoint);
             try (Response response = call.execute()) {
                 StreamResponseMessage responseMessage = new StreamResponseMessage(new UpnpResponse(response.code(), response.message()));
                 UpnpHeaders upnpHeaders = new UpnpHeaders();
@@ -74,6 +79,8 @@ public class OkHttpStreamClient extends AbstractStreamClient<OkHttpStreamClient.
                 byte[] bytes = body != null ? body.bytes() : new byte[0];
                 if (bytes.length > 0) responseMessage.setBodyCharacters(bytes);
                 return responseMessage;
+            } finally {
+                DlnaDiscoveryTrace.log("http-end endpoint=" + endpoint + " ms=" + (SystemClock.elapsedRealtime() - start));
             }
         };
     }

@@ -16,7 +16,7 @@ import org.jupnp.android.AndroidUpnpService;
 import org.jupnp.controlpoint.ControlPoint;
 import org.jupnp.model.action.ActionInvocation;
 import org.jupnp.model.message.UpnpResponse;
-import org.jupnp.model.message.header.DeviceTypeHeader;
+import org.jupnp.model.message.header.ServiceTypeHeader;
 import org.jupnp.model.message.header.STAllHeader;
 import org.jupnp.model.meta.RemoteDevice;
 import org.jupnp.model.meta.RemoteService;
@@ -52,8 +52,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     private static final int MAX_URL_LENGTH = 8192;
     private static final int MAX_ATTACH_RETRIES = 10;
     private static final long ATTACH_RETRY_MS = 150L;
-    // IPTV boxes (e.g. IPNP-iptv) often answer M-SEARCH late; retry early and often
-    // instead of making the user stare at an empty list for 3–8s.
+    // Bounded discovery retries; each jUPnP search already sends three datagrams.
     private static final long RESCAN_DELAY_MS = 400L;
     private static final long RESCAN_EXTRA_DELAY_MS = 1_200L;
     private static final long RESCAN_LATE_DELAY_MS = 3_500L;
@@ -76,7 +75,18 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     }
 
     @Override
+    public void remoteDeviceDiscoveryStarted(Registry registry, RemoteDevice device) {
+        DlnaDiscoveryTrace.log("descriptor-start udn=" + device.getIdentity().getUdn());
+    }
+
+    @Override
+    public void remoteDeviceDiscoveryFailed(Registry registry, RemoteDevice device, Exception error) {
+        DlnaDiscoveryTrace.log("descriptor-failed type=" + error.getClass().getSimpleName());
+    }
+
+    @Override
     public void remoteDeviceAdded(Registry registry, RemoteDevice device) {
+        DlnaDiscoveryTrace.log("registry-added type=" + device.getType());
         if (device.getType().implementsVersion(SERVER_TYPE)) notifyAdded(Device.get(device));
     }
 
@@ -111,7 +121,10 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     }
 
     private void notifyAdded(Device bean) {
-        for (DeviceListener listener : deviceListeners) App.post(() -> listener.onDeviceAdded(bean));
+        for (DeviceListener listener : deviceListeners) App.post(() -> {
+            DlnaDiscoveryTrace.log("ui-add name=" + bean.getName());
+            if (deviceListeners.contains(listener)) listener.onDeviceAdded(bean);
+        });
     }
 
     private void notifyRemoved(Device bean) {
@@ -121,6 +134,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
     public synchronized void init(Context context) {
         appContext = context.getApplicationContext();
         bindCount++;
+        DlnaDiscoveryTrace.log("init owners=" + bindCount);
         // Search immediately; attach completion will search again once registry is ready.
         searchWithRescan();
         if (!bound) bind(appContext);
@@ -128,9 +142,13 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
 
     public void search() {
         ControlPoint control = getControlPoint();
-        // Target MediaServer:1 instead of ssdp:all — far fewer description fetches on
-        // a busy LAN, so the IPTV box can show up sooner.
-        if (control != null) control.search(new DeviceTypeHeader(SERVER_TYPE));
+        // Match the browser's exclusive ContentDirectory filter. jUPnP drops device-type
+        // USNs while that filter is set: MediaServer replies arrive immediately but are ignored,
+        // so discovery otherwise waits for a periodic ContentDirectory alive notification.
+        if (control != null) {
+            DlnaDiscoveryTrace.log("search type=ContentDirectory");
+            control.search(new ServiceTypeHeader(CDS_TYPE));
+        }
     }
 
     /**
@@ -375,6 +393,7 @@ public class DlnaMediaManager extends DefaultRegistryListener implements Service
             if (oldRegistry != null) oldRegistry.removeListener(this);
             upnpService = service;
             registry.addListener(this);
+            DlnaDiscoveryTrace.log("service-attached attempt=" + attempt);
         }
         search();
         if (!deviceListeners.isEmpty()) {

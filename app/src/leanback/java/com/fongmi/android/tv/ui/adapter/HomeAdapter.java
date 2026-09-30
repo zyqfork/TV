@@ -60,11 +60,13 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
         final int type;
         final Object value;
         final Presenter presenter;
+        final List<Object> cardContent;
         Item(String key, int type, Object value, Presenter presenter) {
             this.key = key;
             this.type = type;
             this.value = value;
             this.presenter = presenter;
+            cardContent = value instanceof Vod vod ? vod.cardContent() : List.of();
         }
     }
 
@@ -79,9 +81,7 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
                 if (a.type == TOOLBAR || a.type == SECTION) return true;
                 // Cards carry the model they render, so reuse the bean's own content comparison —
                 // returning false here would re-bind every poster on any list update.
-                if (a.type >= CARD && a.value.getClass() == b.value.getClass() && a.value instanceof Diffable item) {
-                    return item.isSameContent(b.value);
-                }
+                if (a.type >= CARD) return a.cardContent.equals(b.cardContent);
                 // Entry/history/progress rows are snapshots of mutable state (or a whole list in one
                 // item) and carry no comparable value; re-binding them is cheap and always correct.
                 return false;
@@ -148,20 +148,17 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
         String spec = style.getType() + ":" + style.getRatio() + ":" + getColumns();
         int type = cardType(spec, style.isList(), () -> new VodPresenter(vodListener, style));
         Map<String, Integer> occurrences = new HashMap<>();
-        List<String> keys = new ArrayList<>(items.size());
-        for (Item item : items) keys.add(item.key);
-        beginIndex();
         for (Vod vod : recommendations) {
             String key = cardKey(vod);
             int index = occurrences.merge(key, 1, Integer::sum);
-            if (index == 1) indexCard(key, items.size());
             String itemKey = key + ":" + index;
-            keys.add(itemKey);
             items.add(new Item(itemKey, type, vod, presenterFor(type)));
         }
-        pruneIds(keys);
-        submitList(items);
+        submitGridList(items);
     }
+
+    @Override protected String itemKey(Item item) { return item.key; }
+    @Override protected String cardLookupKey(Item item) { return item.value instanceof Vod vod ? cardKey(vod) : null; }
 
     @Override public long getItemId(int position) { return stableId(getItem(position).key); }
     @Override public int getItemViewType(int position) { return getItem(position).type; }

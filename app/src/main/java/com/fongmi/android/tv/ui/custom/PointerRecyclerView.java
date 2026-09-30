@@ -11,8 +11,8 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,7 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 public class PointerRecyclerView extends RecyclerView {
 
     private final int touchSlop;
-    private final Map<Runnable, ViewTreeObserver.OnPreDrawListener> pendingAfterLayout = new HashMap<>();
+    private final List<AfterLayout> pendingAfterLayout = new ArrayList<>();
     private float downX;
     private float downY;
     private boolean mouseGesture;
@@ -186,34 +186,35 @@ public class PointerRecyclerView extends RecyclerView {
 
     /** Run after the requested layout, not in postOnAnimation's pre-traversal phase. */
     public void afterNextLayout(Runnable action) {
-        ViewTreeObserver observer = getViewTreeObserver();
-        ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                if (observer.isAlive()) observer.removeOnPreDrawListener(this);
-                else getViewTreeObserver().removeOnPreDrawListener(this);
-                pendingAfterLayout.remove(action);
-                action.run();
-                return true;
-            }
-        };
-        // A view detached before it draws would otherwise leave the listener and the action behind.
-        pendingAfterLayout.put(action, listener);
-        observer.addOnPreDrawListener(listener);
+        AfterLayout task = new AfterLayout(action, getViewTreeObserver());
+        // Track registrations, not Runnable keys: the same action can be scheduled twice.
+        pendingAfterLayout.add(task);
+        task.observer.addOnPreDrawListener(task);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         // Clearing the map is not enough: the listeners sit on the window's ViewTreeObserver and
         // would still fire, running actions whose view is gone.
-        ViewTreeObserver observer = getViewTreeObserver();
-        if (observer.isAlive()) {
-            for (ViewTreeObserver.OnPreDrawListener listener : pendingAfterLayout.values()) {
-                observer.removeOnPreDrawListener(listener);
-            }
-        }
+        for (AfterLayout task : pendingAfterLayout) task.removeListener();
         pendingAfterLayout.clear();
         mouseGesture = false;
         super.onDetachedFromWindow();
+    }
+
+    private final class AfterLayout implements ViewTreeObserver.OnPreDrawListener {
+        final Runnable action;
+        final ViewTreeObserver observer;
+        AfterLayout(Runnable action, ViewTreeObserver observer) { this.action = action; this.observer = observer; }
+        void removeListener() {
+            ViewTreeObserver current = observer.isAlive() ? observer : getViewTreeObserver();
+            if (current.isAlive()) current.removeOnPreDrawListener(this);
+        }
+        @Override public boolean onPreDraw() {
+            removeListener();
+            if (pendingAfterLayout.remove(this)) action.run();
+            return true;
+        }
     }
 
     public void scrollToTop() {

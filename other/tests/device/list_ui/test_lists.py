@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Device smoke checks: TV Douban-style source with 热播电影/电影筛选 tabs;
-phone resource source with 动作片 tab, landscape 2340x1080. Requires home-pointer.jar
+phone resource source with --category tab (default 动作片). Requires home-pointer.jar
 at /data/local/tmp. Does not delete history or change configuration. Not real-mouse acceptance.
 """
 import argparse,subprocess,time,re,xml.etree.ElementTree as E
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('--device',required=True);p.add_argument('--phone',action='store_true');p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--device',required=True);p.add_argument('--phone',action='store_true');p.add_argument('--category',default='动作片');p.add_argument('--out',type=Path,required=True);a=p.parse_args()
 D=a.device; out=a.out;out.mkdir(parents=True,exist_ok=True)
 def adb(*s):return subprocess.check_output(['adb','-s',D,*s],stderr=subprocess.STDOUT).decode('utf-8')
 def snap(name):
@@ -50,7 +50,7 @@ else:
  grids=[n for n in root.iter('node') if n.get('resource-id','').endswith('/recycler')];l,t,r,b=box(grids[-1]);
  adb('shell',f'input swipe {(l+r)//2} {b-30} {(l+r)//2} {t+40} 650');time.sleep(1);snap('touch')
  wheel(40,1);root=snap('touch-top')
- click(root,'动作片');time.sleep(2);root=snap('category')
+ click(root,a.category);time.sleep(2);root=snap('category')
  for attempt in range(10):
   if any(n.get('resource-id','').endswith('/recycler') for n in root.iter('node')): break
   time.sleep(1);root=snap('category-ready-'+str(attempt))

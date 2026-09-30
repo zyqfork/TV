@@ -370,19 +370,19 @@ public class Vod implements Parcelable, Diffable<Vod> {
 
     @Override
     public boolean isSameContent(Vod other) {
-        // Must cover every field the card holders bind in initView — name/pic/remarks plus the year,
-        // the site label and the visibility flags they set. Anything missing here lets a diff keep a
-        // stale card (a card whose year or label visibility changed would never re-bind).
-        return getName().equals(other.getName())
-                && getPic().equals(other.getPic())
-                && getRemarks().equals(other.getRemarks())
-                && Objects.equals(getSite(), other.getSite())
-                && Objects.equals(getSiteName(), other.getSiteName())
-                && getYear().equals(other.getYear())
-                && getNameVisible() == other.getNameVisible()
-                && getRemarkVisible() == other.getRemarkVisible()
-                && getSiteVisible() == other.getSiteVisible()
-                && getYearVisible() == other.getYearVisible();
+        return cardContent().equals(other.cardContent());
+    }
+
+    /** Immutable values: include both rendered fields and the model captured by click listeners.
+     * Home snapshots these at submission, so mutating a reused Vod/Site cannot change old diff data.
+     */
+    public List<Object> cardContent() {
+        Cate folder = getCate();
+        List<Object> folderStyle = folder == null ? List.of()
+                : List.of(folder.getLand(), folder.getCircle(), folder.getRatio());
+        return List.of(getId(), getName(), getPic(), getRemarks(), getYear(), getSiteKey(), getSiteName(),
+                getNameVisible(), getRemarkVisible(), getSiteVisible(), getYearVisible(),
+                getAction(), getTag(), folderStyle);
     }
 
     public static final Creator<Vod> CREATOR = new Creator<>() {

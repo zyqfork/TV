@@ -107,24 +107,20 @@ public final class VodGridAdapter extends PresenterGridAdapter<VodGridAdapter.It
         String spec = style.getType() + ":" + style.getRatio() + ":" + columns(style);
         int type = cardType(spec, false, () -> new VodPresenter(clicks, style));
         Map<String, Integer> duplicates = new HashMap<>();
-        List<String> keys = new ArrayList<>(items.size());
-        for (Item item : items) keys.add(item.key);
-        beginIndex();
         for (Vod vod : videos) {
             String key = cardKey(vod);
             int index = duplicates.merge(key, 1, Integer::sum);
-            if (index == 1) indexCard(key, items.size());
             String itemKey = key + ":" + index;
-            keys.add(itemKey);
             items.add(new Item(itemKey, type, vod, style));
         }
-        pruneIds(keys);
-        submitList(items);
+        submitGridList(items);
     }
     @Override public void onCurrentListChanged(@NonNull List<Item> old, @NonNull List<Item> current) {
         super.onCurrentListChanged(old, current);
         if (onCommitted != null) onCommitted.run();
     }
+    @Override protected String itemKey(Item item) { return item.key; }
+    @Override protected String cardLookupKey(Item item) { return item.value instanceof Vod vod ? cardKey(vod) : null; }
     @Override public long getItemId(int position) { return stableId(getItem(position).key); }
     @Override public int getItemViewType(int position) { return getItem(position).type; }
     @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup parent, int type) {
