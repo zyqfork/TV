@@ -13,6 +13,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+/**
+ * Diffing adapter for lists that several async producers append to (search sources, paged results).
+ *
+ * <p>Threading: every mutating method here, and {@link #getItems()}/{@link #getItem(int)}, must be
+ * called on the main thread. {@code pendingItems} is plain mutable state and is not synchronised.
+ *
+ * <p>Ordering: mutations build on the latest <em>submitted</em> snapshot rather than on the accepted
+ * list, so an in-flight diff cannot discard earlier appends.
+ */
 public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends RecyclerView.ViewHolder> extends RecyclerView.Adapter<VH> {
 
     protected final AsyncListDiffer<T> differ;
@@ -78,6 +87,10 @@ public abstract class BaseDiffAdapter<T extends Diffable<T>, VH extends Recycler
         setItems(current, runnable);
     }
 
+    /**
+     * Merge and de-duplicate. {@code distinct()} follows the bean's own {@code equals}: for {@code Vod}
+     * that is id (falling back to name), so items sharing an id collapse even when other fields differ.
+     */
     public void sort(T item) {
         sort(item, null);
     }

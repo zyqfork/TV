@@ -11,6 +11,9 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -20,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 public class PointerRecyclerView extends RecyclerView {
 
     private final int touchSlop;
+    private final Map<Runnable, ViewTreeObserver.OnPreDrawListener> pendingAfterLayout = new HashMap<>();
     private float downX;
     private float downY;
     private boolean mouseGesture;
@@ -61,9 +65,11 @@ public class PointerRecyclerView extends RecyclerView {
                 float dx = Math.abs(event.getRawX() - downX);
                 float dy = Math.abs(event.getRawY() - downY);
                 if (event.getPointerCount() == 1 && layout != null && dy > touchSlop && dy > dx) {
+                    // Contract: a vertical drag must win over the horizontal row under the finger.
+                    // The row sets the disallow-intercept flag while it tracks a drag, so clear it
+                    // here — before RecyclerView's own intercept pass — and let the native path
+                    // cancel the child. Order matters: doing this after super would be too late.
                     if (layout.canScrollVertically()) {
-                        // Clear a horizontal child's disallow-intercept flag before native
-                        // RecyclerView sees this MOVE. Its normal intercept path cancels the child.
                         requestDisallowInterceptTouchEvent(false);
                     } else if (getParent() != null) {
                         getParent().requestDisallowInterceptTouchEvent(false);
@@ -173,23 +179,41 @@ public class PointerRecyclerView extends RecyclerView {
         return false;
     }
 
+    /** True when there is nothing above: an empty or unfilled list counts as "at the top". */
     public boolean isAtTop() {
-        if (!(getLayoutManager() instanceof LinearLayoutManager layout)) return true;
-        View first = layout.findViewByPosition(0);
-        return first != null && first.getTop() >= getPaddingTop();
+        return !canScrollVertically(-1);
     }
 
     /** Run after the requested layout, not in postOnAnimation's pre-traversal phase. */
     public void afterNextLayout(Runnable action) {
         ViewTreeObserver observer = getViewTreeObserver();
-        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+        ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 if (observer.isAlive()) observer.removeOnPreDrawListener(this);
                 else getViewTreeObserver().removeOnPreDrawListener(this);
+                pendingAfterLayout.remove(action);
                 action.run();
                 return true;
             }
-        });
+        };
+        // A view detached before it draws would otherwise leave the listener and the action behind.
+        pendingAfterLayout.put(action, listener);
+        observer.addOnPreDrawListener(listener);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        // Clearing the map is not enough: the listeners sit on the window's ViewTreeObserver and
+        // would still fire, running actions whose view is gone.
+        ViewTreeObserver observer = getViewTreeObserver();
+        if (observer.isAlive()) {
+            for (ViewTreeObserver.OnPreDrawListener listener : pendingAfterLayout.values()) {
+                observer.removeOnPreDrawListener(listener);
+            }
+        }
+        pendingAfterLayout.clear();
+        mouseGesture = false;
+        super.onDetachedFromWindow();
     }
 
     public void scrollToTop() {

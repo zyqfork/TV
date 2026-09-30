@@ -370,7 +370,19 @@ public class Vod implements Parcelable, Diffable<Vod> {
 
     @Override
     public boolean isSameContent(Vod other) {
-        return getName().equals(other.getName()) && getPic().equals(other.getPic()) && getRemarks().equals(other.getRemarks()) && Objects.equals(getSite(), other.getSite());
+        // Must cover every field the card holders bind in initView — name/pic/remarks plus the year,
+        // the site label and the visibility flags they set. Anything missing here lets a diff keep a
+        // stale card (a card whose year or label visibility changed would never re-bind).
+        return getName().equals(other.getName())
+                && getPic().equals(other.getPic())
+                && getRemarks().equals(other.getRemarks())
+                && Objects.equals(getSite(), other.getSite())
+                && Objects.equals(getSiteName(), other.getSiteName())
+                && getYear().equals(other.getYear())
+                && getNameVisible() == other.getNameVisible()
+                && getRemarkVisible() == other.getRemarkVisible()
+                && getSiteVisible() == other.getSiteVisible()
+                && getYearVisible() == other.getYearVisible();
     }
 
     public static final Creator<Vod> CREATOR = new Creator<>() {

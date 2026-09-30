@@ -28,16 +28,12 @@ import java.util.List;
 import java.util.Map;
 
 /** Native category/search grid. Presenters bind existing card layouts, not selection or scrolling. */
-public final class VodGridAdapter extends ListAdapter<VodGridAdapter.Item, VodGridAdapter.Holder> {
+public final class VodGridAdapter extends PresenterGridAdapter<VodGridAdapter.Item, VodGridAdapter.Holder> {
     private final VodPresenter.OnClickListener clicks;
     private final List<Vod> videos = new ArrayList<>();
     private List<Filter> filters = List.of();
     private FilterPresenter.OnClickListener filterClicks;
     private Style style = Style.rect();
-    private final Map<String, Integer> types = new HashMap<>();
-    private final Map<Integer, Presenter> presenters = new HashMap<>();
-    private final Map<String, Long> ids = new HashMap<>();
-    private long nextId;
     private Runnable onCommitted;
 
     static final class Item {
@@ -53,9 +49,8 @@ public final class VodGridAdapter extends ListAdapter<VodGridAdapter.Item, VodGr
         super(new DiffUtil.ItemCallback<>() {
             @Override public boolean areItemsTheSame(@NonNull Item a, @NonNull Item b) { return a.key.equals(b.key); }
             @Override public boolean areContentsTheSame(@NonNull Item a, @NonNull Item b) { return false; }
-        });
+        }, 1);
         this.clicks = clicks;
-        setHasStableIds(true);
         setStateRestorationPolicy(StateRestorationPolicy.PREVENT_WHEN_EMPTY);
     }
     public void attach(PointerRecyclerView view, Runnable committed) {
@@ -90,10 +85,12 @@ public final class VodGridAdapter extends ListAdapter<VodGridAdapter.Item, VodGr
     }
     public int getFilterCount() { return filters.size(); }
     public int firstRowEnd() { return filters.size() + columns(style); }
+    /** O(1) by key, so a restored Vod instance does not have to be the exact list object. */
     public int positionOf(Vod vod) {
-        for (int i = 0; i < getItemCount(); i++) if (getItem(i).value == vod) return i;
-        return RecyclerView.NO_POSITION;
+        return positionOfKey(cardKey(vod));
     }
+
+    private static String cardKey(Vod vod) { return "vod:" + vod.getSiteKey() + ":" + vod.getId() + ":" + vod.getName(); }
     public void setFilters(List<Filter> filters, FilterPresenter.OnClickListener listener) {
         this.filters = new ArrayList<>(filters);
         filterClicks = listener;
@@ -108,23 +105,27 @@ public final class VodGridAdapter extends ListAdapter<VodGridAdapter.Item, VodGr
         List<Item> items = new ArrayList<>();
         for (Filter filter : filters) items.add(new Item("filter:" + filter.getKey(), 0, filter.copy(), style));
         String spec = style.getType() + ":" + style.getRatio() + ":" + columns(style);
-        int type = types.computeIfAbsent(spec, key -> {
-            int next = types.size() + 1;
-            presenters.put(next, new VodPresenter(clicks, style));
-            return next;
-        });
+        int type = cardType(spec, false, () -> new VodPresenter(clicks, style));
         Map<String, Integer> duplicates = new HashMap<>();
+        List<String> keys = new ArrayList<>(items.size());
+        for (Item item : items) keys.add(item.key);
+        beginIndex();
         for (Vod vod : videos) {
-            String key = "vod:" + vod.getSiteKey() + ":" + vod.getId() + ":" + vod.getName();
-            items.add(new Item(key + ":" + duplicates.merge(key, 1, Integer::sum), type, vod, style));
+            String key = cardKey(vod);
+            int index = duplicates.merge(key, 1, Integer::sum);
+            if (index == 1) indexCard(key, items.size());
+            String itemKey = key + ":" + index;
+            keys.add(itemKey);
+            items.add(new Item(itemKey, type, vod, style));
         }
+        pruneIds(keys);
         submitList(items);
     }
     @Override public void onCurrentListChanged(@NonNull List<Item> old, @NonNull List<Item> current) {
         super.onCurrentListChanged(old, current);
         if (onCommitted != null) onCommitted.run();
     }
-    @Override public long getItemId(int position) { return ids.computeIfAbsent(getItem(position).key, key -> nextId++); }
+    @Override public long getItemId(int position) { return stableId(getItem(position).key); }
     @Override public int getItemViewType(int position) { return getItem(position).type; }
     @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup parent, int type) {
         if (type == 0) {
@@ -140,7 +141,7 @@ public final class VodGridAdapter extends ListAdapter<VodGridAdapter.Item, VodGr
             });
             return new Holder(row, null, null);
         }
-        Presenter presenter = presenters.get(type);
+        Presenter presenter = presenterFor(type);
         Presenter.ViewHolder card = presenter.onCreateViewHolder(parent);
         card.view.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
         card.view.setFocusableInTouchMode(false);

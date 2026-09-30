@@ -35,17 +35,17 @@ import java.util.List;
 import java.util.Map;
 
 /** Native grid: toolbar, functions, history, section headings and individual recommendation cards. */
-public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter.Holder> {
+public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, HomeAdapter.Holder> {
 
     private static final int TOOLBAR = 0, FUNCTIONS = 1, HISTORY = 2, SECTION = 3, PROGRESS = 4;
+    /** Types at or above this are individual recommendation cards, not fixed header rows. */
+    private static final int CARD = 5;
+    /** Where rebuild() puts the entry row; the fixed header order below must keep it at 1. */
+    private static final int FUNCTIONS_POSITION = 1;
     private final View toolbar;
     private final FuncPresenter funcs;
     private final VodPresenter.OnClickListener vodListener;
     private final HeaderPresenter.OnClickListener headerListener;
-    private final Map<Integer, Presenter> cardPresenters = new HashMap<>();
-    private final Map<Integer, Boolean> fullSpanTypes = new HashMap<>();
-    private final Map<String, Integer> cardTypes = new HashMap<>();
-    private final Map<String, Long> ids = new HashMap<>();
     private final ProgressPresenter progress = new ProgressPresenter();
     private List<Func> functions = List.of();
     private List<History> history = List.of();
@@ -53,7 +53,6 @@ public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter
     private HistoryPresenter historyPresenter;
     private Style style = Style.rect();
     private boolean loading;
-    private long nextId;
     private Runnable onCommitted;
 
     static final class Item {
@@ -73,17 +72,25 @@ public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter
                        HeaderPresenter.OnClickListener headers) {
         super(new DiffUtil.ItemCallback<>() {
             @Override public boolean areItemsTheSame(@NonNull Item a, @NonNull Item b) { return a.key.equals(b.key); }
+
             @Override public boolean areContentsTheSame(@NonNull Item a, @NonNull Item b) {
-                // Row snapshots can include mutable model fields / deletion state. Rebind without
-                // change animations; stable IDs and native layout preserve viewport / focus.
-                return a.type == b.type && (a.type == TOOLBAR || a.type == SECTION);
+                if (a.type != b.type) return false;
+                // Toolbar and section headings render a constant; nothing to compare.
+                if (a.type == TOOLBAR || a.type == SECTION) return true;
+                // Cards carry the model they render, so reuse the bean's own content comparison —
+                // returning false here would re-bind every poster on any list update.
+                if (a.type >= CARD && a.value.getClass() == b.value.getClass() && a.value instanceof Diffable item) {
+                    return item.isSameContent(b.value);
+                }
+                // Entry/history/progress rows are snapshots of mutable state (or a whole list in one
+                // item) and carry no comparable value; re-binding them is cheap and always correct.
+                return false;
             }
-        });
+        }, CARD);
         this.toolbar = toolbar;
         this.funcs = new FuncPresenter(funcs);
         vodListener = vods;
         headerListener = headers;
-        setHasStableIds(true);
         setStateRestorationPolicy(StateRestorationPolicy.PREVENT_WHEN_EMPTY);
     }
 
@@ -97,14 +104,17 @@ public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter
 
     public int getColumns() { return Math.max(1, Product.getColumn(style)); }
     public boolean isFullSpan(int position) {
-        return position < 0 || position >= getItemCount() || getItem(position).type < 5
-                || Boolean.TRUE.equals(fullSpanTypes.get(getItem(position).type));
+        return position < 0 || position >= getItemCount() || getItem(position).type < CARD
+                || isFullSpanType(getItem(position).type);
     }
-    public int getFunctionsPosition() { return 1; }
+    public int getFunctionsPosition() { return FUNCTIONS_POSITION; }
+
+    /** O(1) by key, so a restored Vod instance does not have to be the exact list object. */
     public int positionOf(Vod vod) {
-        for (int i = 0; i < getItemCount(); i++) if (getItem(i).value == vod) return i;
-        return RecyclerView.NO_POSITION;
+        return positionOfKey(cardKey(vod));
     }
+
+    private static String cardKey(Vod vod) { return "vod:" + vod.getId() + ":" + vod.getName(); }
     public boolean isLoading() {
         for (Item item : getCurrentList()) if (item.type == PROGRESS) return true;
         return getItemCount() == 0;
@@ -136,22 +146,24 @@ public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter
         items.add(new Item("recommend-title", SECTION, R.string.home_recommend, null));
         if (loading) items.add(new Item("loading", PROGRESS, "progress", progress));
         String spec = style.getType() + ":" + style.getRatio() + ":" + getColumns();
-        int type = cardTypes.computeIfAbsent(spec, key -> {
-            int id = 5 + cardTypes.size();
-            cardPresenters.put(id, new VodPresenter(vodListener, style));
-            fullSpanTypes.put(id, style.isList());
-            return id;
-        });
+        int type = cardType(spec, style.isList(), () -> new VodPresenter(vodListener, style));
         Map<String, Integer> occurrences = new HashMap<>();
+        List<String> keys = new ArrayList<>(items.size());
+        for (Item item : items) keys.add(item.key);
+        beginIndex();
         for (Vod vod : recommendations) {
-            String key = "vod:" + vod.getId() + ":" + vod.getName();
+            String key = cardKey(vod);
             int index = occurrences.merge(key, 1, Integer::sum);
-            items.add(new Item(key + ":" + index, type, vod, cardPresenters.get(type)));
+            if (index == 1) indexCard(key, items.size());
+            String itemKey = key + ":" + index;
+            keys.add(itemKey);
+            items.add(new Item(itemKey, type, vod, presenterFor(type)));
         }
+        pruneIds(keys);
         submitList(items);
     }
 
-    @Override public long getItemId(int position) { return ids.computeIfAbsent(getItem(position).key, key -> nextId++); }
+    @Override public long getItemId(int position) { return stableId(getItem(position).key); }
     @Override public int getItemViewType(int position) { return getItem(position).type; }
 
     @NonNull
@@ -182,7 +194,7 @@ public final class HomeAdapter extends ListAdapter<HomeAdapter.Item, HomeAdapter
             text.setFocusableInTouchMode(false);
             return new Holder(text, null, null);
         }
-        Presenter presenter = type == PROGRESS ? progress : cardPresenters.get(type);
+        Presenter presenter = type == PROGRESS ? progress : presenterFor(type);
         Presenter.ViewHolder view = presenter.onCreateViewHolder(parent);
         view.view.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
         if (type != PROGRESS) {
