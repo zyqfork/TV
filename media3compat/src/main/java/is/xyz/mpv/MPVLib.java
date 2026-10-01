@@ -97,6 +97,43 @@ public final class MPVLib {
 
     public static native Bitmap grabThumbnail(int dimension);
 
+    /** Optional ABI extension: subtitle-only libass/bitmap output, never a video screenshot. */
+    public static boolean hasSubtitleOverlay() {
+        if (!loaded) return false;
+        try {
+            return nativeHasSubtitleOverlay();
+        } catch (UnsatisfiedLinkError e) {
+            return false; // Old native builds retain the tested text/GPU fallback policy.
+        }
+    }
+
+    private static native boolean nativeHasSubtitleOverlay();
+    public static native void nativeConfigureSubtitleOverlay(int width, int height,
+                                                             boolean enabled, long epoch);
+    public static native SubtitleOverlayFrame nativeReadSubtitleOverlay(long revision);
+
+    public static final class SubtitleOverlayFrame {
+        public final Bitmap bitmap;
+        public final int canvasWidth, canvasHeight, left, top, error;
+        public final long epoch, revision;
+        public final double pts;
+
+        // Called by JNI; keep constructor/field names with MPVLib's existing JNI rules.
+        public SubtitleOverlayFrame(Bitmap bitmap, int canvasWidth, int canvasHeight,
+                                    int left, int top, int error, long epoch,
+                                    long revision, double pts) {
+            this.bitmap = bitmap;
+            this.canvasWidth = canvasWidth;
+            this.canvasHeight = canvasHeight;
+            this.left = left;
+            this.top = top;
+            this.error = error;
+            this.epoch = epoch;
+            this.revision = revision;
+            this.pts = pts;
+        }
+    }
+
     public static native Integer getPropertyInt(String property);
 
     public static native void setPropertyInt(String property, int value);
@@ -157,6 +194,10 @@ public final class MPVLib {
     }
 
     @SuppressWarnings("unused")
+    public static void eventSubtitleOverlay() {
+        for (EventObserver observer : observers) observer.eventSubtitleOverlay();
+    }
+
     public static void event(int eventId) {
         for (EventObserver observer : observers) observer.event(eventId);
     }
@@ -183,6 +224,8 @@ public final class MPVLib {
         void eventProperty(String property, double value);
 
         void event(int eventId);
+
+        default void eventSubtitleOverlay() {}
 
         default void eventEndFile(int reason, int error, String fileError) {
             event(MpvEvent.END_FILE);

@@ -34,6 +34,8 @@
 -keep class is.xyz.mpv.MPVLib { *; }
 -keep class is.xyz.mpv.MPVLib$* { *; }
 -keep class androidx.media3.mpvplayer.** { *; }
+# Pinned Media3 canvas has no public cache-release API; SubtitleViewResources clears this list.
+-keepclassmembers class androidx.media3.ui.CanvasSubtitleOutput { java.util.List painters; }
 -keep class androidx.media3.decoder.ffmpeg.** { *; }
 -keepclassmembers class * implements is.xyz.mpv.MPVLib$EventObserver { *; }
 -keepclassmembers class * implements is.xyz.mpv.MPVLib$LogObserver { *; }

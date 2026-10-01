@@ -7,7 +7,10 @@ output_dir=$3
 requested_abis=${4:-arm64-v8a,armeabi-v7a,x86_64}
 ndk_version=29.0.14206865
 source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
-build_revision="${source_revision}-surface-guard-vulkan-experimental-v7"
+native_overlay_dir="$(cd "$(dirname "$0")/../src/main/cpp/mpv" && pwd)"
+overlay_patch_script="$(cd "$(dirname "$0")" && pwd)/apply_subtitle_overlay.py"
+overlay_revision=$(sha256sum "$native_overlay_dir"/* "$overlay_patch_script" | cut -d' ' -f1 | sha256sum | cut -d' ' -f1)
+build_revision="${source_revision}-surface-guard-vulkan-subtitle-v1-${overlay_revision}"
 
 mkdir -p "$cache_dir" "$output_dir"
 all_present=true
@@ -35,9 +38,22 @@ command -v docker >/dev/null || {
     exit 1
 }
 
-source_dir="$cache_dir/mpv-android-$source_revision"
+# Never patch the original/shared dependency worktree. Seed an owned bridge tree from its
+# pinned sources/cache where available; copies (not hardlinks) protect the original files.
+old_source_dir="$cache_dir/mpv-android-$source_revision"
+source_dir="$cache_dir/mpv-android-$source_revision-subtitle-v1"
 if [[ ! -d "$source_dir/.git" ]]; then
-    git clone https://github.com/zyqfork/mpv-android.git "$source_dir"
+    if [[ -d "$old_source_dir/.git" ]]; then
+        git clone --local "$old_source_dir" "$source_dir"
+        git -C "$source_dir" remote set-url origin https://github.com/zyqfork/mpv-android.git
+        for cached in deps prefix; do
+            if [[ -d "$old_source_dir/buildscripts/$cached" ]]; then
+                cp -a --reflink=auto "$old_source_dir/buildscripts/$cached" "$source_dir/buildscripts/"
+            fi
+        done
+    else
+        git clone https://github.com/zyqfork/mpv-android.git "$source_dir"
+    fi
 fi
 git -C "$source_dir" checkout --detach "$source_revision"
 
@@ -46,6 +62,8 @@ gid=$(id -g)
 docker run --rm \
     -v "$source_dir:/src" \
     -v "$sdk_dir:/android-sdk:ro" \
+    -v "$native_overlay_dir:/subtitle-overlay:ro" \
+    -v "$overlay_patch_script:/apply-subtitle-overlay.py:ro" \
     -w /src/buildscripts ubuntu:24.04 bash -euc "
 export DEBIAN_FRONTEND=noninteractive
 apt-get update >/dev/null
@@ -90,6 +108,7 @@ sed -i '/unset CC CXX/a rm -rf \"\$build\"' scripts/mpv.sh
 # instead so mpv reports an error and the Media3 wrapper can retry/fallback.
 sed -i 's/mp_assert(vo->opts->WinID != 0 && vo->opts->WinID != -1);/if (vo->opts->WinID == 0 || vo->opts->WinID == -1) { MP_ERR(vo, \"Android Surface unavailable\\\\n\"); av_buffer_unref(\\&device_ref); return NULL; }/' \
     deps/mpv/video/out/vo_mediacodec_embed.c
+python3 /apply-subtitle-overlay.py --root /src --native /subtitle-overlay
 mkdir -p sdk
 ln -sfn /android-sdk/ndk/$ndk_version sdk/android-ndk-r29
 prefix_env=

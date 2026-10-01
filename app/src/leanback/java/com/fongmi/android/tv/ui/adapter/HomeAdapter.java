@@ -189,6 +189,7 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
             text.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             text.setBackgroundResource(R.drawable.selector_home_header);
             text.setFocusableInTouchMode(false);
+            installHeadingFocus((android.widget.TextView) text);
             return new Holder(text, null, null);
         }
         Presenter presenter = type == PROGRESS ? progress : presenterFor(type);
@@ -252,11 +253,31 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
         };
     }
 
+    private static void installHeadingFocus(android.widget.TextView view) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) view.setDefaultFocusHighlightEnabled(false);
+        view.setPivotX(0f);
+        view.setOnFocusChangeListener((v, focused) -> {
+            view.getPaint().setFakeBoldText(focused);
+            view.setTextColor(focused ? 0xFFFFD54F : 0xFFFFFFFF);
+            view.animate().cancel();
+            view.animate().scaleX(focused ? 1.06f : 1f).scaleY(focused ? 1.06f : 1f)
+                    .alpha(focused ? 1f : 0.85f).setDuration(100).start();
+        });
+    }
+
     private static void installCardFocus(View view) {
+        // Home-only override: shared presenters keep their existing appearance on other pages.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) view.setDefaultFocusHighlightEnabled(false);
         view.setOnFocusChangeListener((v, focused) -> {
             v.animate().cancel();
-            v.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f).setDuration(120).start();
-            v.setTranslationZ(focused ? ResUtil.dp2px(4) : 0f);
+            v.animate().scaleX(focused ? 1.06f : 1f).scaleY(focused ? 1.06f : 1f).setDuration(120).start();
+            v.setTranslationZ(focused ? ResUtil.dp2px(8) : 0f);
+            android.widget.TextView name = v.findViewById(R.id.name);
+            if (name != null) {
+                name.getPaint().setFakeBoldText(focused);
+                name.setTextColor(0xFFFFFFFF);
+                name.setSelected(focused);
+            }
         });
     }
 
@@ -265,6 +286,12 @@ public final class HomeAdapter extends PresenterGridAdapter<HomeAdapter.Item, Ho
         view.setScaleX(1f);
         view.setScaleY(1f);
         view.setTranslationZ(0f);
+        android.widget.TextView name = view.findViewById(R.id.name);
+        if (name != null) {
+            name.getPaint().setFakeBoldText(false);
+            name.setTextColor(0xFFFFFFFF);
+            name.setSelected(false);
+        }
     }
 
     static final class Holder extends RecyclerView.ViewHolder {

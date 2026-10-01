@@ -99,6 +99,8 @@ def prepareLibmpv = tasks.register("prepareLibmpv") {
     outputs.dir(outputDir)
     inputs.file(ffmpegBuildScript)
     inputs.file(libmpvBuildScript)
+    inputs.file(layout.projectDirectory.file("scripts/apply_subtitle_overlay.py"))
+    inputs.dir(layout.projectDirectory.dir("src/main/cpp/mpv"))
     inputs.property("libmpvVersion", libmpvVersion)
     inputs.property("nativeAbis", nativeAbis.join(","))
 

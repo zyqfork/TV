@@ -5,11 +5,13 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.ViewTreeObserver;
 
 import androidx.core.splashscreen.SplashScreen;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
@@ -165,12 +167,17 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setRecyclerView() {
         mPresenter = new HistoryPresenter(this);
         mAdapter = new HomeAdapter(mToolbar.getRoot(), this, this, this);
-        GridLayoutManager layout = new GridLayoutManager(this, mAdapter.getColumns());
+        GridLayoutManager layout = new GridLayoutManager(this, mAdapter.getColumns()) {
+            @Override public boolean onRequestChildFocus(RecyclerView parent, RecyclerView.State state, View child, View focused) {
+                return mBinding.recycler.isRemoteViewport() || super.onRequestChildFocus(parent, state, child, focused);
+            }
+        };
         layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override public int getSpanSize(int position) {
                 return mAdapter.isFullSpan(position) ? layout.getSpanCount() : 1;
             }
         });
+        mBinding.recycler.setRemoteScrollEnabled(true);
         mBinding.recycler.setLayoutManager(layout);
         mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setAdapter(mAdapter);
@@ -458,11 +465,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (KeyUtil.isMenuKey(event)) showDialog();
-        if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && getCurrentFocus() == mToolbar.title) {
-            focusFunctions();
-            return true;
-        }
+        if (KeyUtil.isActionDown(event) && KeyUtil.isMenuKey(event)) showDialog();
         return super.dispatchKeyEvent(event);
     }
 

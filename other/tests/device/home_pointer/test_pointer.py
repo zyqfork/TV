@@ -66,8 +66,20 @@ try:
             continue
         adb('shell', 'am force-stop com.fongmi.android.tv')
         adb('shell', 'am start -n com.fongmi.android.tv/.ui.activity.HomeActivity')
-        time.sleep(4)
-        baseline = snapshot(name + '-top')
+        # Cold startup can outlast 4s; wait for Home rather than treating a splash
+        # hierarchy as a scroll failure. All subsequent snapshots remain immediate.
+        for attempt in range(20):
+            time.sleep(0.6)
+            try:
+                baseline = snapshot(name + '-top')
+                if '__toolbar_offset__' not in baseline:
+                    if attempt == 19:
+                        raise AssertionError('Home toolbar did not become ready')
+                    continue
+                break
+            except StopIteration:
+                if attempt == 19:
+                    raise
         if abs(baseline.get('__toolbar_offset__', 9999)) > 1:
             # Native RecyclerView may restore task view state after a force-stop. Start each
             # test from an explicitly verified top, not an assumed launch position.

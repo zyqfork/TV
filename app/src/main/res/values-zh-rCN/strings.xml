@@ -265,6 +265,7 @@
 
     <string name="decode_soft">软解</string>
     <string name="decode_hard">硬解</string>
+    <string name="decode_gpu_output">兼容硬解（GPU输出）</string>
 
     <string-array name="select_decode">
         <item>软解</item>
@@ -472,4 +473,5 @@
     <string name="home_setting">设置</string>
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
+    <string name="subtitle_close">关闭字幕</string>
 </resources>

@@ -54,6 +54,11 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         return mItems;
     }
 
+    /** Adapter positions exclude hidden sites; the config's unfiltered index does not. */
+    public int getSelectedPosition() {
+        return Math.max(0, mItems.indexOf(VodConfig.get().getHome()));
+    }
+
     @Override
     public int getItemCount() {
         return mItems.size();
@@ -71,6 +76,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         holder.binding.text.setText(item.getName());
         holder.binding.check.setChecked(getChecked(item));
         holder.binding.text.setSelected(item.isSelected());
+        holder.showFocus(holder.itemView.hasFocus(), item.isSelected());
         holder.binding.check.setVisibility(type == 0 ? View.GONE : View.VISIBLE);
         holder.binding.getRoot().setOnLongClickListener(v -> setLongListener(item));
         holder.binding.getRoot().setOnClickListener(v -> setListener(item, position));
@@ -109,6 +115,21 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         ViewHolder(@NonNull AdapterSiteBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.getRoot().setFocusableInTouchMode(false);
+            binding.getRoot().setBackgroundResource(com.fongmi.android.tv.R.drawable.shape_chip_round_normal);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) binding.getRoot().setDefaultFocusHighlightEnabled(false);
+            binding.getRoot().setOnFocusChangeListener((view, focused) -> {
+                int position = getBindingAdapterPosition();
+                showFocus(focused, position >= 0 && position < mItems.size() && mItems.get(position).isSelected());
+            });
+        }
+
+        private void showFocus(boolean focused, boolean selected) {
+            binding.text.getPaint().setFakeBoldText(focused || selected);
+            binding.text.setTextColor(0xFFFFFFFF);
+            binding.getRoot().animate().cancel();
+            binding.getRoot().animate().scaleX(focused ? 1.03f : 1f).scaleY(focused ? 1.03f : 1f)
+                    .alpha(focused || selected ? 1f : 0.8f).setDuration(100).start();
         }
     }
 }

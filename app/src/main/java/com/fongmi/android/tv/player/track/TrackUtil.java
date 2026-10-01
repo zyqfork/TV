@@ -90,6 +90,7 @@ public class TrackUtil {
         mediaGroupMapByType.forEach((type, mediaGroup) -> {
             Integer selectedIndex = selectedIndexMapByType.get(type);
             List<Integer> indices = selectedIndex != null ? List.of(selectedIndex) : List.of();
+            if (selectedIndex != null) builder.setTrackTypeDisabled(type, false);
             builder.setOverrideForType(new TrackSelectionOverride(mediaGroup, indices));
         });
         player.setTrackSelectionParameters(builder.build());

@@ -88,6 +88,20 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/closeSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:minHeight="48dp"
+        android:text="@string/subtitle_close"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
     <com.fongmi.android.tv.ui.custom.CustomRecyclerView
         android:id="@+id/recycler"
         android:layout_width="match_parent"

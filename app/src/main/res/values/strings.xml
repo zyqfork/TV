@@ -266,6 +266,7 @@
 
     <string name="decode_soft">Soft</string>
     <string name="decode_hard">Hardware</string>
+    <string name="decode_gpu_output">Compatible hardware (GPU output)</string>
 
     <string-array name="select_decode">
         <item>Soft</item>
@@ -487,4 +488,5 @@
     <string name="home_setting">Setting</string>
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
+    <string name="subtitle_close">Turn off subtitles</string>
 </resources>

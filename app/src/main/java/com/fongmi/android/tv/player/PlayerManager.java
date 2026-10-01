@@ -81,8 +81,8 @@ public class PlayerManager implements ParseCallback {
     private long pendingStartPositionMs;
     private boolean danmakuEnabled;
     private boolean initTrack;
+    private boolean subtitlesDisabled;
     private boolean mpvFallbackUsed;
-    private boolean subtitleDecodeHintShown;
     private int retry;
     private int sourceRetry;
     private int firstFrameExtendCount;
@@ -283,10 +283,14 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getDecodeText() {
-        // EXO only toggles software vs hardware MediaCodec. "兼容硬解/性能硬解" are MPV
-        // (mediacodec-copy / mediacodec_embed) labels and must not be shown on EXO.
+        // EXO only toggles software vs hardware MediaCodec. GPU/Surface-direct labels are MPV-only.
         if (getEngine() == PlayerSetting.ENGINE_EXO) {
             return ResUtil.getString(decode == PlayerEngine.SOFT ? R.string.decode_soft : R.string.decode_hard);
+        }
+        if (decode == PlayerEngine.HARD_PERFORMANCE
+                && player instanceof androidx.media3.mpvplayer.MpvPlayer mpv
+                && !mpv.isPerformanceDirectOutput()) {
+            return ResUtil.getString(R.string.decode_gpu_output);
         }
         return ResUtil.getStringArray(R.array.select_decode)[decode];
     }
@@ -416,6 +420,7 @@ public class PlayerManager implements ParseCallback {
 
     public void setSub(Sub sub) {
         if (sub == null || sub.isEmpty()) return;
+        enableSubtitles();
         if (spec != null) spec.setSub(sub);
         if (engine.addSubtitle(sub)) play();
         else startCurrent();
@@ -427,6 +432,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setSecondarySub(@Nullable Sub sub) {
+        if (sub != null && !sub.isEmpty()) enableSubtitles();
         secondarySub = sub == null || sub.isEmpty() ? null : sub;
         secondarySubtitleOffsetMs = 0;
         if (secondarySub != null) setEmbeddedSecondarySubtitle(null);
@@ -457,6 +463,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setEmbeddedSecondarySubtitle(@Nullable TrackSelectionOverride selection) {
+        if (selection != null) enableSubtitles();
         embeddedSecondarySelection = selection;
         if (selection != null && secondarySub != null) {
             secondarySub = null;
@@ -574,7 +581,25 @@ public class PlayerManager implements ParseCallback {
         return setSpeed(getSpeed() == 1 ? PlayerSetting.getSpeed() : 1);
     }
 
+    /** Disable both subtitle slots and the renderer, not merely hide its current text. */
+    public void closeSubtitles() {
+        subtitlesDisabled = true;
+        clearSecondarySub();
+        setEmbeddedSecondarySubtitle(null);
+        if (player != null) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+    }
+
+    private void enableSubtitles() {
+        if (!subtitlesDisabled) return;
+        subtitlesDisabled = false;
+        if (player != null) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build());
+    }
+
     public void setTrack(List<Track> tracks) {
+        boolean selectedText = tracks.stream().anyMatch(t -> t.getType() == C.TRACK_TYPE_TEXT && t.isSelected());
+        if (selectedText) subtitlesDisabled = false;
         if (!tracks.isEmpty()) TrackUtil.setTrackSelection(player, tracks);
     }
 
@@ -667,6 +692,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void resetTrack() {
+        subtitlesDisabled = false;
         TrackUtil.reset(player);
     }
 
@@ -763,20 +789,6 @@ public class PlayerManager implements ParseCallback {
         callback.onError(msg);
     }
 
-    /** External/soft subtitles need a gpu path; zero-copy embed cannot render them. */
-    private void ensureDecodeForSubs(PlaySpec playSpec) {
-        if (engine.getType() != PlayerEngine.Type.MPV) return;
-        if (decode != PlayerEngine.HARD_PERFORMANCE) return;
-        if (playSpec == null || playSpec.getSubs() == null || playSpec.getSubs().isEmpty()) return;
-        decode = PlayerEngine.HARD;
-        if (engine.setDecode(decode)) setPlayer(engine.rebuild());
-        if (!subtitleDecodeHintShown) {
-            subtitleDecodeHintShown = true;
-            Notify.show(R.string.player_sub_decode_hint);
-        }
-        callback.onDecodeChanged();
-    }
-
     /** Clear IO/decode retry state for a user- or parse-initiated (re)start. */
     private void beginFreshAttempt() {
         App.removeCallbacks(sourceRetryRunnable);
@@ -848,6 +860,13 @@ public class PlayerManager implements ParseCallback {
 
     private void setPlayer(Player player) {
         this.player = player;
+        if (subtitlesDisabled) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+        if (player instanceof androidx.media3.mpvplayer.MpvPlayer mpv) {
+            mpv.setOutputModeListener(() -> {
+                if (this.player == mpv && !isReleased()) callback.onDecodeChanged();
+            });
+        }
         embeddedSecondarySelection = null;
         applyPersistedVolumeGain();
         effects.refreshVideoSetting();
@@ -869,7 +888,10 @@ public class PlayerManager implements ParseCallback {
         // New URL resets retry/watchdog state. Same-URL restarts must not, or a
         // dead endpoint loops forever through start() -> budgets cleared.
         resetBudgetsIfUrlChanged(this.spec == null ? null : this.spec.getUrl(), spec == null ? null : spec.getUrl());
-        if (this.spec != spec) clearSecondarySubTransient();
+        if (this.spec != spec) {
+            subtitlesDisabled = false;
+            clearSecondarySubTransient();
+        }
         this.spec = spec;
         restoreSecondarySubtitle(spec);
         setMediaItem(timeout, startPositionMs);
@@ -896,6 +918,7 @@ public class PlayerManager implements ParseCallback {
         stopParse();
         clearSecondarySubTransient();
         pendingStartPositionMs = startPositionMs;
+        subtitlesDisabled = false;
         spec = PlaySpec.fromParse(result, key, metadata);
         restoreSecondarySubtitle(spec);
         parseJob = ParseJob.create(this).start(result, useParse);
@@ -912,6 +935,9 @@ public class PlayerManager implements ParseCallback {
         // Drop stale play/first-frame timeouts before engine.start; keep sourceRetry across retries.
         App.removeCallbacks(runnable, firstFrameRunnable);
         ensureEngine(spec.checkUa());
+        if (player.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) != subtitlesDisabled)
+            player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitlesDisabled).build());
         pendingPreload = null;
         openReported = false;
         firstFrameExtendCount = 0;
@@ -919,7 +945,6 @@ public class PlayerManager implements ParseCallback {
             firstFrameDeadlineMs = SystemClock.elapsedRealtime() + firstFrameTimeoutMs();
         }
         playStartRealtimeMs = SystemClock.elapsedRealtime();
-        ensureDecodeForSubs(spec);
         engine.start(spec, startPositionMs);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, timeout);
@@ -1054,7 +1079,9 @@ public class PlayerManager implements ParseCallback {
             effects.refreshAudioSetting();
             effects.refreshVideoSetting();
             if (initTrack) return;
-            setTrack(Track.find(getKey()));
+            List<Track> saved = Track.find(getKey());
+            if (subtitlesDisabled) saved = saved.stream().filter(t -> t.getType() != C.TRACK_TYPE_TEXT).toList();
+            setTrack(saved);
             callback.onTracksChanged();
             initTrack = true;
         }

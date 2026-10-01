@@ -60,6 +60,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private MediaController mController;
     private PlaybackService mService;
     private SecondarySubtitleOverlay secondarySubtitleOverlay;
+    private com.fongmi.android.tv.ui.playback.SubtitleResourceBinding subtitleResourceBinding;
     private boolean initialized;
     private boolean audioOnly;
     private boolean scrubbing;
@@ -422,6 +423,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private void syncPlaybackOverlays() {
         PlayerManager pm = mService == null ? null : player();
         PlaybackOverlayBinder.sync(getPlayerView(), pm);
+        if (subtitleResourceBinding != null) subtitleResourceBinding.bind(pm == null ? null : pm.getPlayer());
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.bind(pm);
         if (pm != null && !pm.isReleased()) {
             pm.setSubtitleStyle();
@@ -430,6 +432,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void detachSurface() {
+        if (subtitleResourceBinding != null) subtitleResourceBinding.bind(null);
         getPlayerView().setPlayer(null);
     }
 
@@ -448,6 +451,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         playerView.getSubtitleView().setStyle(getCaptionStyle());
         playerView.getSubtitleView().setApplyEmbeddedStyles(true);
         playerView.getSubtitleView().setApplyEmbeddedFontSizes(false);
+        subtitleResourceBinding = new com.fongmi.android.tv.ui.playback.SubtitleResourceBinding(playerView.getSubtitleView());
         secondarySubtitleOverlay = new SecondarySubtitleOverlay(playerView);
         PlaybackOverlayBinder.sync(playerView, mService == null ? null : player());
     }
@@ -672,6 +676,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         clearForeverObservers();
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.release();
         secondarySubtitleOverlay = null;
+        if (subtitleResourceBinding != null) subtitleResourceBinding.release();
+        subtitleResourceBinding = null;
         super.onDestroy();
         releasePlaybackService();
     }

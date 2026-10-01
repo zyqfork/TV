@@ -53,7 +53,7 @@ public class CustomTitleView extends MaterialTextView {
         flickerEnabled = enabled;
         if (!enabled) {
             clearAnimation();
-            setAlpha(hasFocus() ? 1f : 0.7f);
+            showFocus(hasFocus());
         }
     }
 
@@ -62,9 +62,19 @@ public class CustomTitleView extends MaterialTextView {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
         if (!flickerEnabled) {
             clearAnimation();
-            setAlpha(focused ? 1f : 0.7f);
+            showFocus(focused);
         } else if (focused) startAnimation(flicker);
         else clearAnimation();
+    }
+
+    private void showFocus(boolean focused) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) setDefaultFocusHighlightEnabled(false);
+        getPaint().setFakeBoldText(focused);
+        setTextColor(0xFFFFFFFF);
+        setPivotX(0f);
+        animate().cancel();
+        animate().alpha(focused ? 1f : 0.8f).scaleX(focused ? 1.03f : 1f)
+                .scaleY(focused ? 1.03f : 1f).setDuration(100).start();
     }
 
     @Override

@@ -132,8 +132,12 @@ public class PointerRecyclerView extends RecyclerView {
             boolean outside = item == null || (layout != null && layout.canScrollHorizontally()
                     ? item.getRight() <= getPaddingLeft() || item.getLeft() >= getWidth() - getPaddingRight()
                     : item.getBottom() <= getPaddingTop() || item.getTop() >= getHeight() - getPaddingBottom());
-            if (outside) {
-                if (focusVisibleItem()) return true;
+            if (outside && focusVisibleItem()) {
+                // Navigation can enter the visible list. Activation must keep going: consuming
+                // its down would strand OK on the container / require an unexplained second click.
+                int code = event.getKeyCode();
+                if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER
+                        && code != KeyEvent.KEYCODE_NUMPAD_ENTER) return true;
             }
         }
         return super.dispatchKeyEvent(event);
@@ -142,7 +146,8 @@ public class PointerRecyclerView extends RecyclerView {
     private boolean isNavigationKey(int code) {
         return code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN
                 || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT
-                || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER;
+                || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
     }
 
     public int getFocusedPosition() {

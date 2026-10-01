@@ -122,10 +122,15 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
             binding.secondary.setContentDescription(getString(R.string.subtitle_secondary_embedded));
         }
         binding.subtitle.setVisibility(hasText() ? View.VISIBLE : View.GONE);
+        binding.closeSubtitle.setVisibility(type == C.TRACK_TYPE_TEXT ? View.VISIBLE : View.GONE);
     }
 
     @Override
     protected void initEvent() {
+        binding.closeSubtitle.setOnClickListener(v -> {
+            player.closeSubtitles();
+            dismiss();
+        });
         binding.offset.setOnClickListener(this::onOffset);
         binding.choose.setOnClickListener(this::onChoose);
         binding.search.setOnClickListener(this::onSearch);

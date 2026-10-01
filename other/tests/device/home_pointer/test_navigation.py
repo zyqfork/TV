@@ -48,8 +48,14 @@ def focused(root):
 
 adb('shell', 'am force-stop com.fongmi.android.tv')
 adb('shell', 'am start -n com.fongmi.android.tv/.ui.activity.HomeActivity')
-time.sleep(4)
-assert '点播' in focused(snapshot('initial-focus'))[1]
+# A cold process can still be showing the splash after 4s. Wait for real Home focus,
+# not an empty startup hierarchy, before applying any navigation assertions.
+for attempt in range(20):
+    time.sleep(0.6)
+    initial = snapshot('initial-focus')
+    if any(n.get('focused') == 'true' for n in initial.iter('node')):
+        break
+assert '点播' in focused(initial)[1]
 key(20)
 assert '最近观看' in focused(snapshot('down-header'))[1]
 key(20)
