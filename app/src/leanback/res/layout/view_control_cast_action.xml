@@ -12,10 +12,18 @@
         android:orientation="horizontal">
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/player"
+            android:id="@+id/play_pause"
             style="@style/Control"
             android:layout_marginEnd="8dp"
             android:nextFocusLeft="@id/video"
+            android:nextFocusRight="@id/player"
+            android:text="@string/play" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/player"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:nextFocusLeft="@id/play_pause"
             android:text="@string/play_exo" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -60,7 +68,7 @@
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/video"
             style="@style/Control"
-            android:nextFocusRight="@id/player"
+            android:nextFocusRight="@id/play_pause"
             android:tag="2"
             android:text="@string/play_track_video" />
 

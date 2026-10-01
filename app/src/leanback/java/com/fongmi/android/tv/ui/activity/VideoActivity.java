@@ -339,6 +339,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         mBinding.control.action.opening.setDownListener(this::onOpeningSub);
         mBinding.control.action.text.setUpListener(this::onSubtitleClick);
         mBinding.control.action.text.setDownListener(this::onSubtitleClick);
+        mBinding.control.action.playPause.setOnClickListener(view -> onKeyCenter());
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
@@ -399,7 +400,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private void setVideoView() {
-        setSeekNextFocusDown(R.id.next);
+        setSeekNextFocusDown(R.id.play_pause);
         setActionFocusBoundary(mBinding.control.action.getRoot());
         PlayerEngineDialog.setText(mBinding.control.action.player);
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
@@ -1189,7 +1190,13 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         mBinding.widget.center.setVisibility(View.GONE);
     }
 
+    private void setPlayPauseText() {
+        mBinding.control.action.playPause.setText(controller() != null && !isEnded()
+                && controller().getPlayWhenReady() ? R.string.pause : R.string.play);
+    }
+
     private void showControl(View view) {
+        setPlayPauseText();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
         view.requestFocus();
         setR1Callback();
@@ -1345,6 +1352,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     protected void onStateChanged(int state) {
+        setPlayPauseText();
         switch (state) {
             case Player.STATE_BUFFERING:
                 showProgress();
@@ -1368,13 +1376,19 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        setPlayPauseText();
         if (isPlaying) {
             hideCenter();
-        } else if (isPaused()) {
+        } else if (isPaused() && !controller().getPlayWhenReady()) {
             if (isFullscreen()) showInfo();
             else hideInfo();
-            showControl(getFocus2());
+            if (isGone(mBinding.control.getRoot())) showControl(mBinding.control.action.playPause);
         }
+    }
+
+    @Override
+    public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+        if (isOwner()) setPlayPauseText();
     }
 
     @Override
@@ -1440,7 +1454,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     private void onPaused() {
         controller().pause();
-        showControl(getFocus2());
+        showControl(mBinding.control.action.playPause);
     }
 
     private void onPlay() {
@@ -1480,7 +1494,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     private View getFocus2() {
-        return mFocus2 == null || mFocus2.getVisibility() != View.VISIBLE || mFocus2 == mBinding.control.action.opening || mFocus2 == mBinding.control.action.ending ? mBinding.control.action.next : mFocus2;
+        return mFocus2 == null || mFocus2.getVisibility() != View.VISIBLE || mFocus2 == mBinding.control.action.opening || mFocus2 == mBinding.control.action.ending ? mBinding.control.action.playPause : mFocus2;
     }
 
     @Override
@@ -1544,7 +1558,8 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     public void onKeyCenter() {
-        if (player().isPlaying()) {
+        if (service() == null || controller() == null) return;
+        if (!isEnded() && controller().getPlayWhenReady()) {
             onPaused();
         } else if (player().isEmpty()) {
             onRefresh();

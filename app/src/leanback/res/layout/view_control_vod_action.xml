@@ -13,10 +13,18 @@
         android:orientation="horizontal">
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/next"
+            android:id="@+id/play_pause"
             style="@style/Control"
             android:layout_marginEnd="8dp"
             android:nextFocusLeft="@id/ending"
+            android:nextFocusRight="@id/next"
+            android:text="@string/play" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/next"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:nextFocusLeft="@id/play_pause"
             android:text="@string/play_next" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -130,7 +138,7 @@
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
             android:id="@+id/ending"
             style="@style/Control"
-            android:nextFocusRight="@id/next"
+            android:nextFocusRight="@id/play_pause"
             android:text="@string/play_ed" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

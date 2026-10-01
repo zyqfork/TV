@@ -126,6 +126,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         mBinding.control.action.video.setOnClickListener(this::onTrack);
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
         mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
+        mBinding.control.action.playPause.setOnClickListener(view -> onKeyCenter());
         mBinding.control.action.reset.setOnClickListener(view -> onReset());
         mBinding.control.action.player.setOnClickListener(view -> onChoose());
         mBinding.control.action.decode.setOnClickListener(view -> onDecode());
@@ -133,7 +134,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void setVideoView() {
-        setSeekNextFocusDown(R.id.reset);
+        setSeekNextFocusDown(R.id.play_pause);
         setScale(scale = PlayerSetting.getScale());
         setActionFocusBoundary(mBinding.control.action.getRoot());
         PlayerEngineDialog.setText(mBinding.control.action.player);
@@ -260,9 +261,15 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         mBinding.widget.center.setVisibility(View.GONE);
     }
 
+    private void setPlayPauseText() {
+        mBinding.control.action.playPause.setText(controller() != null && !isEnded()
+                && controller().getPlayWhenReady() ? R.string.pause : R.string.play);
+    }
+
     private void showControl() {
+        setPlayPauseText();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
-        mBinding.control.action.reset.requestFocus();
+        mBinding.control.action.playPause.requestFocus();
         setR1Callback();
     }
 
@@ -303,6 +310,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     private void onPaused() {
         controller().pause();
+        showControl();
     }
 
     private void onPlay() {
@@ -367,6 +375,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     protected void onStateChanged(int state) {
+        setPlayPauseText();
         switch (state) {
             case Player.STATE_BUFFERING:
                 showProgress();
@@ -404,11 +413,18 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        setPlayPauseText();
         if (isPlaying) {
             hideCenter();
-        } else if (isPaused()) {
+        } else if (isPaused() && !controller().getPlayWhenReady()) {
             showInfo();
+            if (isGone(mBinding.control.getRoot())) showControl();
         }
+    }
+
+    @Override
+    public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+        if (isOwner()) setPlayPauseText();
     }
 
     @Override
@@ -469,9 +485,13 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     public void onKeyCenter() {
-        if (player().isPlaying()) onPaused();
-        else onPlay();
-        hideControl();
+        if (service() == null || controller() == null) return;
+        if (!isEnded() && controller().getPlayWhenReady()) {
+            onPaused();
+        } else {
+            onPlay();
+            hideControl();
+        }
     }
 
     @Override
