@@ -5,6 +5,7 @@ import android.text.TextUtils;
 
 import androidx.media3.common.Player;
 import androidx.media3.common.util.Util;
+import androidx.media3.mpvplayer.MpvAutomaticOutputPolicy;
 import androidx.media3.mpvplayer.MpvPlayer;
 import androidx.media3.mpvplayer.MpvPlayerConfig;
 import androidx.media3.ui.SubtitleView;
@@ -16,6 +17,7 @@ import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.setting.VideoSetting;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
@@ -38,8 +40,6 @@ public final class MpvUtil {
     private static final String VALUE_ANDROID = "android";
     private static final String VALUE_ANDROID_VK = "androidvk";
     private static final String VALUE_GPU = "gpu";
-    private static final String VALUE_MEDIACODEC = "mediacodec";
-    private static final String VALUE_MEDIACODEC_EMBED = "mediacodec_embed";
     private static final String VALUE_OPENGL = "opengl";
     private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
@@ -62,8 +62,30 @@ public final class MpvUtil {
         return buildPlayer(decode, false, listener);
     }
 
+    /** 2 is an internal live zero-copy candidate, never a persisted/user-selected decode mode. */
+    public static int internalDecode(int decode, boolean live) {
+        if (!isAutomaticCandidate(decode, live)) return decode;
+        return MpvAutomaticOutputPolicy.acceptsUserOptions(MpvConfigFiles.readGlobalOptions(),
+                PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+    }
+
+    private static boolean isAutomaticCandidate(int decode, boolean live) {
+        return MpvAutomaticOutputPolicy.direct(live, decode == 1, VideoSetting.isEnabled(),
+                false, false, PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE);
+    }
+
+    private static int internalDecode(int decode, boolean live, Map<String, String> userOptions) {
+        return isAutomaticCandidate(decode, live)
+                && MpvAutomaticOutputPolicy.acceptsUserOptions(userOptions,
+                        PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+    }
+
     public static MpvPlayer buildPlayer(int decode, boolean live, Player.Listener listener) {
-        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(decode).setConfig(buildConfig(decode, live)).build();
+        // The eligibility check and config builder must see the same parsed mpv.conf snapshot.
+        Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
+        int internal = internalDecode(decode, live, userOptions);
+        MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(internal).setLive(live)
+                .setConfig(buildConfig(internal, live, userOptions)).build();
         player.addListener(listener);
         return player;
     }
@@ -72,8 +94,8 @@ public final class MpvUtil {
         player.setSubtitleOptions(buildSubtitleConfig());
     }
 
-    private static MpvPlayerConfig buildConfig(int decode, boolean live) {
-        Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
+    private static MpvPlayerConfig buildConfig(int decode, boolean live,
+                                               Map<String, String> userOptions) {
         MpvPlayerConfig.Builder builder = new MpvPlayerConfig.Builder();
         addAndroidOptions(builder, userOptions, decode);
         addUserOptions(builder, userOptions);
@@ -124,9 +146,9 @@ public final class MpvUtil {
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
-        if (decode == com.fongmi.android.tv.player.engine.PlayerEngine.HARD_PERFORMANCE) {
-            builder.addPreInitStringOption("vo", VALUE_MEDIACODEC_EMBED)
-                    .addPreInitStringOption("hwdec", VALUE_MEDIACODEC);
+        if (decode == 2) {
+            builder.addPreInitStringOption("vo", MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED)
+                    .addPreInitStringOption("hwdec", MpvAutomaticOutputPolicy.HWDEC_MEDIACODEC);
         } else {
             addVideoOutputOptions(builder, userOptions);
         }
@@ -164,8 +186,17 @@ public final class MpvUtil {
             if (!userOptions.containsKey("rtsp-transport")) {
                 builder.addPreInitStringOption("rtsp-transport", "tcp");
             }
-        } else if (!userOptions.containsKey("demuxer-max-back-bytes")) {
-            builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
+        } else {
+            // VOD used mpv's short default read-ahead even when the user selected a larger
+            // playback buffer. On high-bitrate remote MKVs this repeatedly emptied the cache
+            // after a seek (observed on home-rk as 0% -> ~1s -> 0%). Do not override explicit
+            // mpv.conf values or the separate disk-preload policy.
+            if (!userOptions.containsKey("cache-secs") && !PreloadSetting.isPreload()) {
+                builder.addPreInitStringOption("cache-secs", Integer.toString(PlayerSetting.getBuffer()));
+            }
+            if (!userOptions.containsKey("demuxer-max-back-bytes")) {
+                builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
+            }
         }
         if (!userOptions.containsKey("stream-lavf-o")) {
             builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
@@ -173,7 +204,7 @@ public final class MpvUtil {
     }
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
-        if (decode == com.fongmi.android.tv.player.engine.PlayerEngine.HARD_PERFORMANCE) return VALUE_MEDIACODEC_EMBED;
+        if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
         if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
         return userOptions.containsKey("vo") ? null : VALUE_GPU;
     }

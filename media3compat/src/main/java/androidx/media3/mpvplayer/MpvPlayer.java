@@ -15,7 +15,6 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
-import android.view.ViewParent;
 
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
@@ -32,7 +31,6 @@ import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
-import androidx.media3.common.text.Cue;
 import androidx.media3.common.text.CueGroup;
 
 import com.google.common.collect.ImmutableList;
@@ -45,7 +43,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import is.xyz.mpv.MPVLib;
 
@@ -53,25 +50,22 @@ import is.xyz.mpv.MPVLib;
  * Media3 player backed by the real libmpv engine.
  *
  * <p>The class translates Media3's player and video-output contracts to mpv properties and
- * commands. Native subtitle rendering is retained for GPU output; embed can publish plain
- * SRT text as Media3 cues for a separate Android subtitle layer.
+ * commands. Hard decode selects zero-copy only for eligible subtitle-free live sessions;
+ * subtitles and video effects use GPU/libass output without changing the saved decode choice.
  */
 public final class MpvPlayer extends SimpleBasePlayer
         implements MPVLib.EventObserver, MPVLib.LogObserver {
 
     private static final long DEFAULT_SEEK_INCREMENT_MS = 10_000;
     /**
-     * Keep decoded frames in Android graphic buffers.
-     *
-     * <p>Rockchip's 10-bit HEVC decoder advertises a linear YUV420 byte-buffer for copy-back while
-     * returning vendor-aligned/tiled data and inconsistent crop bounds. FFmpeg accepts it as a
-     * successful frame, so mpv renders solid green without raising a decode error. Direct
-     * MediaCodec works with both gpu/android and mediacodec_embed and avoids interpreting that
-     * vendor buffer layout in system RAM. An explicit hwdec in mpv.conf still overrides the
-     * compatible-hard mode.
+     * Use MediaCodec's Surface/AHardwareBuffer path, not CPU copy-back. The pinned mpv GPU
+     * mapper samples an external RGB0 texture (8-bit output even for 10-bit input); embed
+     * bypasses that mapper. Copy-back is a separate, explicit hwdec and has produced green
+     * frames on multiple Android TV SoCs, but no Rockchip-specific root cause is established.
+     * An explicit hwdec in mpv.conf is respected in the GPU hard mode; a conflicting override
+     * disqualifies automatic embed rather than being silently overwritten.
      */
     private static final String HWDEC_HARD = "mediacodec";
-    private static final String HWDEC_PERFORMANCE = "mediacodec";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
@@ -82,6 +76,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private final Context context;
     private final Handler applicationHandler;
     private final MpvPlayerConfig config;
+    private final boolean live;
     private final Commands commands;
     private final AudioManager audioManager;
     private final AudioFocusRequest audioFocusRequest;
@@ -100,24 +95,6 @@ public final class MpvPlayer extends SimpleBasePlayer
     private boolean embedVoDisabled;
     /** Per-file latch: subtitles need GPU composition, not CPU copy-back or a decode-mode change. */
     private boolean subtitleGpuRequired;
-    private boolean plainSubtitleOverlay;
-    private boolean bitmapSubtitleOverlay;
-    private long subtitleEpoch;
-    private long subtitleBitmapRevision = -1;
-    private final AtomicBoolean subtitleUpdatePosted = new AtomicBoolean();
-    @Nullable private View subtitleViewport;
-    @Nullable private View subtitleVideoView;
-    private final View.OnLayoutChangeListener subtitleLayoutListener =
-            (v, l, t, r, b, ol, ot, or, ob) -> {
-                if (!this.released && this.bitmapSubtitleOverlay) {
-                    if (!supportsBitmapViewport()) requireSubtitleGpu();
-                    else configureBitmapOverlay(true);
-                }
-            };
-    private boolean subtitleSeekPending;
-    private String overlayText = "";
-    private CueGroup overlayCues = CueGroup.EMPTY_TIME_ZERO;
-    @Nullable private Runnable outputModeListener;
     /** How many times we already retried embed after a surface race (before gpu fallback). */
     private int embedSurfaceRetries;
     private static final int EMBED_SURFACE_RETRY_LIMIT = 2;
@@ -139,6 +116,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private long positionMs;
     private long firstFrameStartPositionMs;
     private long pendingSeekMs = C.TIME_UNSET;
+    private final MpvSubtitleRequests subtitleRequests;
     private long durationMs = C.TIME_UNSET;
     private long bufferedPositionMs;
     private int videoWidth;
@@ -165,6 +143,8 @@ public final class MpvPlayer extends SimpleBasePlayer
     private List<MediaChapter> chapters = List.of();
     private List<MediaEdition> editions = List.of();
     @Nullable private String lastNativeError;
+    // Observed read-only mpv current-vo, not the requested/pre-init vo option.
+    private volatile String activeVideoOutput = "";
     @Nullable private Runnable pendingEndFileError;
 
     private final SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
@@ -228,11 +208,20 @@ public final class MpvPlayer extends SimpleBasePlayer
                 }
             };
 
-    private MpvPlayer(Context context, int decode, MpvPlayerConfig config) {
+    private MpvPlayer(Context context, int decode, boolean live, MpvPlayerConfig config) {
         super(Looper.getMainLooper());
         this.context = context.getApplicationContext();
         this.applicationHandler = new Handler(getApplicationLooper());
+        this.subtitleRequests = new MpvSubtitleRequests(new MpvSubtitleRequests.Transport() {
+            @Override public int send(long id, String[] args) {
+                return MPVLib.commandAsync(id, args);
+            }
+            @Override public void abort(long id) {
+                MPVLib.abortAsyncCommand(id);
+            }
+        }, this::onSubtitleAdded);
         this.decode = decode;
+        this.live = live;
         this.config = config;
         this.audioManager = (AudioManager) this.context.getSystemService(Context.AUDIO_SERVICE);
         this.audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -324,7 +313,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         for (String property : OBSERVED_INT) MPVLib.observeProperty(property, MPVLib.MpvFormat.INT64);
         MPVLib.observeProperty("sid", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("secondary-sid", MPVLib.MpvFormat.STRING);
-        MPVLib.observeProperty("sub-text", MPVLib.MpvFormat.STRING);
+        MPVLib.observeProperty("current-vo", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("sub-visibility", MPVLib.MpvFormat.FLAG);
         MPVLib.observeProperty("track-list/count", MPVLib.MpvFormat.INT64);
     }
@@ -394,7 +383,6 @@ public final class MpvPlayer extends SimpleBasePlayer
     private String getDecodeOption() {
         // mediacodec_embed requires a live Android Surface; after Surface-unavailable we stay on
         // direct gpu output so audio-only / black-screen sessions can recover without a rebuild.
-        if (decode == 2 && !embedVoDisabled) return HWDEC_PERFORMANCE;
         if (decode == 2) return HWDEC_HARD;
         if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD);
         return HWDEC_SOFT;
@@ -411,13 +399,18 @@ public final class MpvPlayer extends SimpleBasePlayer
             MPVLib.setPropertyString("hwdec", getDecodeOption());
             if (surfaceReady) MPVLib.setPropertyString("vo", getVo());
             checkSelectedSubtitles();
-            notifyOutputModeChanged();
         }
     }
 
     private String getVo() {
-        if (decode == 2 && subtitleGpuRequired) return VO_DEFAULT;
-        if (decode == 2 && !embedVoDisabled) {
+        // Internal auto-direct candidate only: never bind embed to TextureView or an item
+        // carrying external subtitles. Before the first item/SurfaceView is known, retain the
+        // candidate so initial Surface settling still protects Rockchip's MediaCodec window.
+        boolean external = mediaItem != null && mediaItem.localConfiguration != null
+                && !mediaItem.localConfiguration.subtitleConfigurations.isEmpty();
+        boolean surfaceView = videoOutput == null || videoOutput instanceof SurfaceView;
+        if (!embedVoDisabled && MpvAutomaticOutputPolicy.direct(live, decode == 2, false,
+                external, subtitleGpuRequired, surfaceView)) {
             return config.preInitOptions.getOrDefault("vo", "mediacodec_embed");
         }
         String configured = config.preInitOptions.get("vo");
@@ -427,29 +420,16 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private boolean isEmbedVo() { return "mediacodec_embed".equals(getVo()); }
 
-    public boolean isPerformanceDirectOutput() { return decode == 2 && isEmbedVo(); }
-
-    /** Only reports routing changes; it does not alter the user's persisted decode preference. */
-    public void setOutputModeListener(@Nullable Runnable listener) { outputModeListener = listener; }
-
-    private void notifyOutputModeChanged() {
-        if (outputModeListener != null) outputModeListener.run();
-    }
-
     /** Once needed, retain GPU output for this file to avoid repeated decoder teardown on sid changes. */
     private void requireSubtitleGpu() {
         if (released || decode != 2 || subtitleGpuRequired) return;
         boolean wasEmbed = isEmbedVo();
         subtitleGpuRequired = true;
-        plainSubtitleOverlay = false;
-        bitmapSubtitleOverlay = false;
-        configureBitmapOverlay(false);
-        clearOverlayCues();
-        Log.i("MpvPlayer", "Subtitle overlay unavailable; using compatible GPU output");
-        notifyOutputModeChanged();
+        Log.i("MpvPlayer", "Selected subtitle needs GPU/libass; leaving automatic direct output");
         if (wasEmbed && surfaceReady) {
+            activeVideoOutput = "";
             MPVLib.setPropertyString("vo", "null");
-            MPVLib.setPropertyString("hwdec", HWDEC_PERFORMANCE);
+            MPVLib.setPropertyString("hwdec", HWDEC_HARD);
             MPVLib.setPropertyString("vo", getVo());
             if (fileLoaded) {
                 firstFrameReported = false;
@@ -460,200 +440,21 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void checkSelectedSubtitles() {
-        if (released || !fileLoaded) return;
+        if (released || !fileLoaded || decode != 2) return;
         int sid = parseInt(MPVLib.getPropertyString("sid"), -1);
         int secondary = parseInt(MPVLib.getPropertyString("secondary-sid"), -1);
         boolean visible = !trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
                 && !Boolean.FALSE.equals(MPVLib.getPropertyBoolean("sub-visibility"));
-        String codec = subtitleCodec(sid);
-        boolean selected = visible && (sid > 0 || secondary > 0);
-        boolean nativeAvailable = MPVLib.hasSubtitleOverlay();
-        // Use exactly the same native libass font metrics/margins/sub-pos/sub-scale as GPU
-        // output, including ordinary SRT. The old text layer remains an ABI fallback only.
-        boolean nativeRequired = selected && (nativeAvailable || secondary > 0
-                || !MpvSubtitleOverlayPolicy.supports(codec));
-        boolean bitmap = isPerformanceDirectOutput() && selected && nativeAvailable
-                && bindSubtitleViewport() && supportsBitmapViewport();
-        if (decode == 2 && nativeRequired && !bitmap) requireSubtitleGpu();
-        if (bitmap != bitmapSubtitleOverlay) {
-            bitmapSubtitleOverlay = bitmap;
-            clearOverlayCues();
-            configureBitmapOverlay(bitmap);
-            Log.i("MpvPlayer", bitmap ? "Native bitmap overlay active: mediacodec_embed + libass/bitmap Android layer"
-                    : "Native bitmap overlay inactive");
-        }
-        boolean overlay = !bitmapSubtitleOverlay && isPerformanceDirectOutput() && visible && sid > 0 && secondary <= 0
-                && MpvSubtitleOverlayPolicy.supports(codec);
-        if (overlay != plainSubtitleOverlay) {
-            plainSubtitleOverlay = overlay;
-            Log.i("MpvPlayer", overlay ? "SRT overlay active: mediacodec_embed + Android Cue layer"
-                    : "SRT overlay inactive");
-        }
-        refreshOverlayCues();
-        if (!selected) {
-            if (subtitleViewport != null || bitmapSubtitleOverlay) resetBitmapOverlay();
-            clearOverlayCues();
-            unbindSubtitleViewport();
-        }
-    }
-
-    @Nullable private String subtitleCodec(int id) {
-        if (id <= 0) return null;
-        Integer count = MPVLib.getPropertyInt("track-list/count");
-        for (int i = 0; count != null && i < count; i++) {
-            String path = "track-list/" + i + "/";
-            if ("sub".equals(MPVLib.getPropertyString(path + "type"))
-                    && Integer.valueOf(id).equals(MPVLib.getPropertyInt(path + "id"))) {
-                return MPVLib.getPropertyString(path + "codec");
-            }
-        }
-        return null;
-    }
-
-    private boolean supportsBitmapViewport() {
-        if (!(videoOutput instanceof View video)) return false;
-        for (ViewParent parent = video.getParent(); parent instanceof View view; parent = view.getParent()) {
-            if (view instanceof androidx.media3.ui.AspectRatioFrameLayout frame) {
-                // Native bitmap coordinates currently model FIT + letterboxing only.
-                // Never silently misplace PGS/ASS when stretch/crop/zoom is requested.
-                return frame.getResizeMode() == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT;
-            }
-        }
-        return false;
-    }
-
-    private boolean bindSubtitleViewport() {
-        if (!(videoOutput instanceof View video)) return false;
-        if (subtitleVideoView != video) {
-            if (subtitleVideoView != null) subtitleVideoView.removeOnLayoutChangeListener(subtitleLayoutListener);
-            subtitleVideoView = video;
-            video.addOnLayoutChangeListener(subtitleLayoutListener);
-        }
-        View scope = video;
-        View caption = null;
-        while (scope != null) {
-            caption = scope.findViewById(androidx.media3.ui.R.id.exo_subtitles);
-            if (caption != null) break;
-            ViewParent parent = scope.getParent();
-            scope = parent instanceof View v ? v : null;
-        }
-        if (caption != subtitleViewport) {
-            if (subtitleViewport != null) subtitleViewport.removeOnLayoutChangeListener(subtitleLayoutListener);
-            subtitleViewport = caption;
-            if (caption != null) caption.addOnLayoutChangeListener(subtitleLayoutListener);
-        }
-        return caption != null && caption.getWidth() > 0 && caption.getHeight() > 0;
-    }
-
-    private void unbindSubtitleViewport() {
-        if (subtitleViewport instanceof androidx.media3.ui.SubtitleView view)
-            androidx.media3.ui.SubtitleViewResources.release(view);
-        if (subtitleViewport != null) subtitleViewport.removeOnLayoutChangeListener(subtitleLayoutListener);
-        if (subtitleVideoView != null) subtitleVideoView.removeOnLayoutChangeListener(subtitleLayoutListener);
-        subtitleViewport = null;
-        subtitleVideoView = null;
-    }
-
-    private void configureBitmapOverlay(boolean enabled) {
-        if (!MPVLib.hasSubtitleOverlay()) return;
-        int width = subtitleViewport == null ? 0 : subtitleViewport.getWidth();
-        int height = subtitleViewport == null ? 0 : subtitleViewport.getHeight();
-        // A temporarily detached/zero-size view suspends captions, not a permanent GPU latch.
-        MPVLib.nativeConfigureSubtitleOverlay(width, height,
-                enabled && width > 0 && height > 0, subtitleEpoch);
-    }
-
-    private void resetBitmapOverlay() {
-        bitmapSubtitleOverlay = false;
-        subtitleEpoch++;
-        subtitleBitmapRevision = -1;
-        configureBitmapOverlay(false);
-    }
-
-    @Override
-    public void eventSubtitleOverlay() {
-        // VO thread notification contains no Java Bitmap. Pull only the latest native snapshot
-        // on the application thread; animation cannot queue an unbounded list of old bitmaps.
-        if (!subtitleUpdatePosted.compareAndSet(false, true)) return;
-        applicationHandler.post(() -> {
-            subtitleUpdatePosted.set(false);
-            if (!released) refreshBitmapOverlay();
-        });
-    }
-
-    private void refreshBitmapOverlay() {
-        if (released || !fileLoaded || !bitmapSubtitleOverlay || subtitleSeekPending) return;
-        MPVLib.SubtitleOverlayFrame frame;
-        try {
-            frame = MPVLib.nativeReadSubtitleOverlay(subtitleBitmapRevision);
-        } catch (RuntimeException | LinkageError e) {
-            requireSubtitleGpu();
-            return;
-        }
-        if (frame == null || frame.epoch != subtitleEpoch) return;
-        subtitleBitmapRevision = frame.revision;
-        if (frame.error != 0) {
-            requireSubtitleGpu();
-            return;
-        }
-        if (frame.canvasWidth <= 0 || frame.canvasHeight <= 0) {
-            clearOverlayCues();
-            return;
-        }
-        List<Cue> cues = frame.bitmap == null ? List.of() : List.of(new Cue.Builder()
-                .setBitmap(frame.bitmap)
-                .setPosition((float) frame.left / frame.canvasWidth).setPositionAnchor(Cue.ANCHOR_TYPE_START)
-                .setLine((float) frame.top / frame.canvasHeight, Cue.LINE_TYPE_FRACTION)
-                .setLineAnchor(Cue.ANCHOR_TYPE_START)
-                .setSize((float) frame.bitmap.getWidth() / frame.canvasWidth)
-                .setBitmapHeight((float) frame.bitmap.getHeight() / frame.canvasHeight).build());
-        overlayCues = new CueGroup(cues, positionMs * 1000);
-        if (!cues.isEmpty() && subtitleViewport != null) subtitleViewport.setVisibility(View.VISIBLE);
-        if (Log.isLoggable("MpvSubtitle", Log.DEBUG)) {
-            Log.d("MpvSubtitle", "native bitmap cues=" + cues.size() + " pts=" + frame.pts
-                    + " epoch=" + frame.epoch + " direct=" + isPerformanceDirectOutput());
-        }
-        updateState(state.playbackState, state.playWhenReady, state.playerError);
-    }
-
-    private void clearOverlayCues() {
-        if (bitmapSubtitleOverlay) subtitleBitmapRevision = -1;
-        boolean hadCues = !overlayCues.cues.isEmpty();
-        overlayText = "";
-        overlayCues = CueGroup.EMPTY_TIME_ZERO;
-        if (hadCues && Log.isLoggable("MpvSubtitle", Log.DEBUG)) {
-            Log.d("MpvSubtitle", "cues=0 chars=0 positionMs=" + positionMs
-                    + " direct=" + isPerformanceDirectOutput() + " reason=clear");
-        }
-        if (hadCues && state != null && !released) {
-            state = state.buildUpon().setCurrentCues(overlayCues).build();
-            invalidateState();
-        }
-    }
-
-    private void refreshOverlayCues() {
-        if (released) return;
-        if (bitmapSubtitleOverlay) {
-            refreshBitmapOverlay();
-            return;
-        }
-        // Read current native text rather than trusting queued events from an old seek/file/track.
-        String text = fileLoaded && plainSubtitleOverlay && !subtitleSeekPending
-                ? MPVLib.getPropertyString("sub-text") : "";
-        if (text == null) text = "";
-        if (text.equals(overlayText)) return;
-        overlayText = text;
-        overlayCues = new CueGroup(text.isEmpty() ? List.of()
-                : List.of(new Cue.Builder().setText(text).build()), positionMs * 1000);
-        if (Log.isLoggable("MpvSubtitle", Log.DEBUG)) {
-            Log.d("MpvSubtitle", "cues=" + overlayCues.cues.size() + " chars=" + text.length()
-                    + " positionMs=" + positionMs + " direct=" + isPerformanceDirectOutput());
-        }
-        updateState(state.playbackState, state.playWhenReady, state.playerError);
+        if (visible && (sid > 0 || secondary > 0)) requireSubtitleGpu();
     }
 
     public int getDecode() {
         return decode;
+    }
+
+    /** Observed native current-vo for this session (empty means no confirmed output). */
+    public String getActiveVideoOutput() {
+        return activeVideoOutput;
     }
 
     public void setSubtitleOptions(MpvPlayerConfig subtitleConfig) {
@@ -662,9 +463,9 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     public void addSubtitle(MediaItem.SubtitleConfiguration subtitle) {
         if (released) return;
-        // Native track codec is authoritative; decide after sub-add/track-list/sid events.
-        Uri uri = subtitle.uri;
-        MPVLib.command(new String[]{"sub-add", uri.toString(), "select"});
+        // Manual URL imports must not block UI either. Codec remains native-authoritative.
+        subtitleRequests.enqueue(subtitle.uri.toString(), true);
+        if (fileLoaded) subtitleRequests.start();
     }
 
     @Override
@@ -704,8 +505,7 @@ public final class MpvPlayer extends SimpleBasePlayer
                 .setVolume(volume)
                 .setAudioOffsetMs(audioOffsetMs)
                 .setTextOffsetMs(textOffsetMs)
-                .setCurrentCues(playbackState == STATE_IDLE || playbackState == STATE_ENDED
-                        ? CueGroup.EMPTY_TIME_ZERO : overlayCues)
+                .setCurrentCues(CueGroup.EMPTY_TIME_ZERO)
                 .setSeekBackIncrementMs(DEFAULT_SEEK_INCREMENT_MS)
                 .setSeekForwardIncrementMs(DEFAULT_SEEK_INCREMENT_MS)
                 .setVideoSize(videoWidth > 0 && videoHeight > 0
@@ -749,6 +549,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Override
     protected ListenableFuture<?> handleSetMediaItems(
             List<MediaItem> mediaItems, int startIndex, long startPositionMs) {
+        subtitleRequests.reset();
         playlist.clear();
         playlist.addAll(mediaItems);
         int requestedIndex = startIndex == C.INDEX_UNSET ? 0 : Math.max(0, startIndex);
@@ -766,10 +567,8 @@ public final class MpvPlayer extends SimpleBasePlayer
         chapters = List.of();
         editions = List.of();
         lastNativeError = null;
+        activeVideoOutput = "";
         fileLoaded = false;
-        plainSubtitleOverlay = false;
-        subtitleSeekPending = false;
-        clearOverlayCues();
         embedSurfaceRetries = 0;
         embedVoDisabled = false;
         recentSurfaceFailure = false;
@@ -785,18 +584,12 @@ public final class MpvPlayer extends SimpleBasePlayer
         applyHttpHeaders(mediaItem);
         String uri = mediaItem.localConfiguration.uri.toString();
         applyDemuxerOptions(uri);
-        resetBitmapOverlay();
-        // Unknown/external formats are classified by the native selected codec after load/sub-add.
-        // Do not pre-emptively turn an SRT spec into GPU output.
+        // The new item re-evaluates direct eligibility; GPU fallback never persists.
         subtitleGpuRequired = false;
-        plainSubtitleOverlay = false;
-        subtitleSeekPending = false;
-        clearOverlayCues();
-        notifyOutputModeChanged();
-        // mediacodec_embed creates its decoder against the current ANativeWindow. Loading before
-        // a Surface is bound makes device creation fail and silently falls back to software
-        // decoding. Other modes use vo=gpu and can safely begin demuxing immediately.
-        if (!isEmbedVo() || surfaceReady) {
+        // An automatic live hard candidate may select embed after the item and view are known.
+        // Wait for its Surface even when this particular item needs GPU (e.g. external subs),
+        // so the pre-init embed VO cannot race the final routing decision or open audio-only.
+        if (decode != 2 || surfaceReady) {
             loadFile(uri);
         } else {
             pendingLoadUri = uri;
@@ -822,7 +615,9 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void loadFile(String uri) {
+        subtitleRequests.reset();
         cancelPendingEndFileError();
+        activeVideoOutput = "";
         fileLoaded = false;
         firstFrameReported = false;
         firstFrameStartPositionMs = positionMs;
@@ -848,19 +643,48 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private void applyPendingSeekAndSubtitles() {
         if (pendingSeekMs != C.TIME_UNSET && pendingSeekMs > 0) {
-            subtitleSeekPending = true;
-            clearOverlayCues();
             MPVLib.command(new String[]{
                     "seek", Double.toString(pendingSeekMs / 1000.0), "absolute+exact"
             });
             pendingSeekMs = C.TIME_UNSET;
         }
-        if (mediaItem == null || mediaItem.localConfiguration == null
+        enqueueConfiguredSubtitles();
+    }
+
+    private void enqueueConfiguredSubtitles() {
+        if (!fileLoaded || mediaItem == null || mediaItem.localConfiguration == null
                 || trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) return;
+        // A completed import may precede cancellation but its Java reply may follow it.
+        // Consult native inventory when re-enabling TEXT instead of adding it a second time.
+        List<String> imported = new ArrayList<>();
+        int count = valueOr(MPVLib.getPropertyInt("track-list/count"), 0);
+        for (int i = 0; i < count; i++) {
+            String file = MPVLib.getPropertyString("track-list/" + i + "/external-filename");
+            if (file != null) imported.add(file);
+        }
         for (MediaItem.SubtitleConfiguration subtitle :
                 mediaItem.localConfiguration.subtitleConfigurations) {
-            MPVLib.command(new String[]{"sub-add", subtitle.uri.toString(), "auto"});
+            if (!imported.contains(subtitle.uri.toString()))
+                subtitleRequests.enqueue(subtitle.uri.toString(), false);
         }
+        subtitleRequests.start();
+    }
+
+    private void onSubtitleAdded(int error) {
+        if (released || !fileLoaded) return;
+        if (error < 0) {
+            // Do not turn an optional subtitle HTTP error into END_FILE/playback failure.
+            Log.w("MpvSubtitle", "External subtitle import failed: " + error);
+        } else {
+            refreshTracks();
+            checkSelectedSubtitles();
+            updateState(state.playbackState, state.playWhenReady, state.playerError);
+        }
+    }
+
+    @Override
+    public void eventCommandReply(long id, int error) {
+        onApplicationThread(() -> subtitleRequests.complete(id, error));
     }
 
     private void applyHttpHeaders(MediaItem item) {
@@ -928,11 +752,9 @@ public final class MpvPlayer extends SimpleBasePlayer
             return done();
         }
         this.positionMs = Math.max(0, positionMs);
-        subtitleSeekPending = true;
-        clearOverlayCues();
         MPVLib.command(new String[]{"seek", Double.toString(this.positionMs / 1000.0), "absolute+exact"});
         state = state.buildUpon()
-                .setCurrentCues(overlayCues)
+                .setCurrentCues(CueGroup.EMPTY_TIME_ZERO)
                 .setContentPositionMs(() -> this.positionMs)
                 .setPositionDiscontinuity(DISCONTINUITY_REASON_SEEK, this.positionMs)
                 .build();
@@ -1137,6 +959,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     protected ListenableFuture<?> handleStop() {
+        subtitleRequests.reset();
         cancelPendingEndFileError();
         pendingLoadUri = null;
         fileLoaded = false;
@@ -1149,10 +972,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (surfaceReady) MPVLib.setPropertyString("vo", "null");
         MPVLib.setPropertyString("hwdec", "no");
         positionMs = 0;
-        plainSubtitleOverlay = false;
-        resetBitmapOverlay();
-        clearOverlayCues();
-        unbindSubtitleViewport();
+        activeVideoOutput = "";
         updateState(STATE_IDLE, false, null);
         audioManager.abandonAudioFocusRequest(audioFocusRequest);
         return done();
@@ -1161,18 +981,17 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Override
     protected ListenableFuture<?> handleSetTrackSelectionParameters(
             TrackSelectionParameters parameters) {
+        boolean wasTextDisabled = trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT);
         trackSelectionParameters = parameters;
+        if (parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) subtitleRequests.cancel();
         applyTrackSelection(C.TRACK_TYPE_VIDEO, "vid", parameters);
         applyTrackSelection(C.TRACK_TYPE_AUDIO, "aid", parameters);
         applyTrackSelection(C.TRACK_TYPE_TEXT, "sid", parameters);
-        if (parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+        if (parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
             MPVLib.setPropertyString("secondary-sid", "no");
-            plainSubtitleOverlay = false;
-            resetBitmapOverlay();
-            clearOverlayCues();
-            unbindSubtitleViewport();
-        }
         checkSelectedSubtitles();
+        if (wasTextDisabled && !parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+            enqueueConfiguredSubtitles();
         state = state.buildUpon().setTrackSelectionParameters(parameters).build();
         invalidateState();
         return done();
@@ -1399,6 +1218,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private void detachNativeSurface() {
         if (attachedSurface == null) return;
         surfaceReady = false;
+        activeVideoOutput = "";
         // Match the reference player: detach only the Android window. Changing vo to null tears
         // down the GPU pipeline and some live decoders never reconnect it when the Surface returns.
         MPVLib.detachSurface();
@@ -1428,12 +1248,9 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Override
     protected ListenableFuture<?> handleRelease() {
         if (released) return done();
-        resetBitmapOverlay();
-        unbindSubtitleViewport();
+        subtitleRequests.reset();
         released = true;
-        outputModeListener = null;
-        plainSubtitleOverlay = false;
-        clearOverlayCues();
+        activeVideoOutput = "";
         applicationHandler.removeCallbacks(blackScreenWatchdog);
         cancelPendingEndFileError();
         cancelSurfaceSettle();
@@ -1467,8 +1284,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     public void eventProperty(String property) {
-        // FORMAT_NONE means the observed text became unavailable, e.g. disabling/changing track.
-        if ("sub-text".equals(property)) onApplicationThread(this::refreshOverlayCues);
+        if ("current-vo".equals(property)) onApplicationThread(() -> activeVideoOutput = "");
     }
 
     @Override
@@ -1502,15 +1318,19 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     @Override
     public void eventProperty(String property, String value) {
-        if ("sid".equals(property) || "secondary-sid".equals(property)) {
+        if ("current-vo".equals(property)) {
+            onApplicationThread(() -> {
+                activeVideoOutput = value == null || "null".equals(value) ? "" : value;
+                if (!activeVideoOutput.isEmpty())
+                    Log.i("MpvPlayer", "Active video output: " + activeVideoOutput);
+            });
+        } else if ("sid".equals(property) || "secondary-sid".equals(property)) {
             onApplicationThread(() -> {
                 if (!fileLoaded) return;
                 refreshTracks();
                 checkSelectedSubtitles();
                 updateState(state.playbackState, state.playWhenReady, state.playerError);
             });
-        } else if ("sub-text".equals(property)) {
-            onApplicationThread(this::refreshOverlayCues);
         }
     }
 
@@ -1548,10 +1368,8 @@ public final class MpvPlayer extends SimpleBasePlayer
                     // An HLS master can expose several renditions as native playlist entries.
                     // Starting the next one means the preceding END_FILE error was not terminal.
                     cancelPendingEndFileError();
+                    subtitleRequests.reset();
                     fileLoaded = false;
-                    plainSubtitleOverlay = false;
-                    resetBitmapOverlay();
-                    clearOverlayCues();
                     updateState(STATE_BUFFERING, state.playWhenReady, null);
                 }
                 case MPVLib.MpvEvent.FILE_LOADED -> {
@@ -1570,11 +1388,7 @@ public final class MpvPlayer extends SimpleBasePlayer
                 }
                 // VIDEO_RECONFIG is also emitted by force-window before loadfile and therefore
                 // does not prove that a decoded frame reached the Android Surface.
-                case MPVLib.MpvEvent.PLAYBACK_RESTART -> {
-                    subtitleSeekPending = false;
-                    refreshOverlayCues();
-                    reportFirstFrame();
-                }
+                case MPVLib.MpvEvent.PLAYBACK_RESTART -> reportFirstFrame();
                 // Current native builds deliver END_FILE through eventEndFile(), including its
                 // reason and error. Retain this only for compatibility with an older bridge.
                 case MPVLib.MpvEvent.END_FILE -> handleEndFile(
@@ -1596,6 +1410,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void handleEndFile(int reason, int error, @Nullable String fileError) {
+        subtitleRequests.reset();
         if (reason == MPVLib.MpvEndFileReason.STOP
                 || reason == MPVLib.MpvEndFileReason.QUIT
                 || reason == MPVLib.MpvEndFileReason.REDIRECT) {
@@ -1623,8 +1438,6 @@ public final class MpvPlayer extends SimpleBasePlayer
             positionMs = 0;
             handlePrepare();
         } else if (state.playbackState != STATE_ENDED) {
-            plainSubtitleOverlay = false;
-            clearOverlayCues();
             updateState(STATE_ENDED, false, null);
         }
     }
@@ -1680,11 +1493,8 @@ public final class MpvPlayer extends SimpleBasePlayer
         }
         if (embedVoDisabled) return false;
         embedVoDisabled = true;
-        plainSubtitleOverlay = false;
-        resetBitmapOverlay();
-        clearOverlayCues();
-        notifyOutputModeChanged();
         if (surfaceReady) {
+            activeVideoOutput = "";
             MPVLib.setPropertyString("vo", "null");
             MPVLib.setPropertyString("hwdec", getDecodeOption());
             MPVLib.setPropertyString("vo", getVo());
@@ -1774,13 +1584,7 @@ public final class MpvPlayer extends SimpleBasePlayer
             return;
         }
         // Exhausted embed retries — use mediacodec with gpu/android, never copy-back.
-        if (wasEmbed) {
-            embedVoDisabled = true;
-            plainSubtitleOverlay = false;
-            resetBitmapOverlay();
-            clearOverlayCues();
-            notifyOutputModeChanged();
-        }
+        if (wasEmbed) embedVoDisabled = true;
         if (!surfaceReady) {
             surfaceNeedsVideoReload = true;
             if (pendingLoadUri == null && mediaItem != null
@@ -1872,7 +1676,7 @@ public final class MpvPlayer extends SimpleBasePlayer
             if (type == C.TRACK_TYPE_VIDEO) format.setSampleMimeType("video/x-unknown");
             if (type == C.TRACK_TYPE_AUDIO) format.setSampleMimeType("audio/x-unknown");
             if (type == C.TRACK_TYPE_TEXT) format.setSampleMimeType(
-                    MpvSubtitleOverlayPolicy.mimeType(MPVLib.getPropertyString(prefix + "codec")));
+                    MpvSubtitleFormats.mimeType(MPVLib.getPropertyString(prefix + "codec")));
             Integer width = MPVLib.getPropertyInt(prefix + "demux-w");
             Integer height = MPVLib.getPropertyInt(prefix + "demux-h");
             Integer channels = MPVLib.getPropertyInt(prefix + "demux-channel-count");
@@ -1986,13 +1790,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         MPVLib.command(new String[]{"apply-profile", "fast"});
         // A direct MediaCodec presentation error can leave the existing EGL/VO state poisoned.
         // Recreate it before reloading the decoder; changing hwdec alone still produces black.
-        if (decode == 2) {
-            embedVoDisabled = true;
-            plainSubtitleOverlay = false;
-            resetBitmapOverlay();
-            clearOverlayCues();
-            notifyOutputModeChanged();
-        }
+        if (decode == 2) embedVoDisabled = true;
         String activeHwdec = MPVLib.getPropertyString("hwdec");
         MPVLib.setPropertyString("vo", "null");
         if ((decode == 1 || embedVoDisabled) && activeHwdec != null && !"no".equals(activeHwdec)) {
@@ -2008,6 +1806,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
         private final Context context;
         private int decode;
+        private boolean live;
         @Nullable private MpvPlayerConfig config;
 
         public Builder(Context context) {
@@ -2019,6 +1818,11 @@ public final class MpvPlayer extends SimpleBasePlayer
             return this;
         }
 
+        public Builder setLive(boolean live) {
+            this.live = live;
+            return this;
+        }
+
         public Builder setConfig(MpvPlayerConfig config) {
             this.config = config;
             return this;
@@ -2027,7 +1831,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         public MpvPlayer build() {
             MpvPlayerConfig resolved =
                     config == null ? new MpvPlayerConfig.Builder().build() : config;
-            return new MpvPlayer(context, decode, resolved);
+            return new MpvPlayer(context, decode, live, resolved);
         }
     }
 }

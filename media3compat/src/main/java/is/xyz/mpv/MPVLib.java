@@ -93,46 +93,29 @@ public final class MPVLib {
 
     public static native void command(String[] command);
 
+    /** Optional ABI extension. Never fall back to blocking I/O on an old native bridge. */
+    public static int commandAsync(long id, String[] command) {
+        try {
+            return nativeCommandAsync(id, command);
+        } catch (UnsatisfiedLinkError e) {
+            return -18; // MPV_ERROR_UNSUPPORTED; subtitle failure is not a playback failure.
+        }
+    }
+
+    public static void abortAsyncCommand(long id) {
+        try {
+            nativeAbortAsyncCommand(id);
+        } catch (UnsatisfiedLinkError ignored) {
+            // No async request could have been submitted on this old ABI.
+        }
+    }
+
+    private static native int nativeCommandAsync(long id, String[] command);
+    private static native void nativeAbortAsyncCommand(long id);
+
     public static native int setOptionString(String name, String value);
 
     public static native Bitmap grabThumbnail(int dimension);
-
-    /** Optional ABI extension: subtitle-only libass/bitmap output, never a video screenshot. */
-    public static boolean hasSubtitleOverlay() {
-        if (!loaded) return false;
-        try {
-            return nativeHasSubtitleOverlay();
-        } catch (UnsatisfiedLinkError e) {
-            return false; // Old native builds retain the tested text/GPU fallback policy.
-        }
-    }
-
-    private static native boolean nativeHasSubtitleOverlay();
-    public static native void nativeConfigureSubtitleOverlay(int width, int height,
-                                                             boolean enabled, long epoch);
-    public static native SubtitleOverlayFrame nativeReadSubtitleOverlay(long revision);
-
-    public static final class SubtitleOverlayFrame {
-        public final Bitmap bitmap;
-        public final int canvasWidth, canvasHeight, left, top, error;
-        public final long epoch, revision;
-        public final double pts;
-
-        // Called by JNI; keep constructor/field names with MPVLib's existing JNI rules.
-        public SubtitleOverlayFrame(Bitmap bitmap, int canvasWidth, int canvasHeight,
-                                    int left, int top, int error, long epoch,
-                                    long revision, double pts) {
-            this.bitmap = bitmap;
-            this.canvasWidth = canvasWidth;
-            this.canvasHeight = canvasHeight;
-            this.left = left;
-            this.top = top;
-            this.error = error;
-            this.epoch = epoch;
-            this.revision = revision;
-            this.pts = pts;
-        }
-    }
 
     public static native Integer getPropertyInt(String property);
 
@@ -193,13 +176,13 @@ public final class MPVLib {
         for (EventObserver observer : observers) observer.eventProperty(property, value);
     }
 
-    @SuppressWarnings("unused")
-    public static void eventSubtitleOverlay() {
-        for (EventObserver observer : observers) observer.eventSubtitleOverlay();
-    }
-
     public static void event(int eventId) {
         for (EventObserver observer : observers) observer.event(eventId);
+    }
+
+    @SuppressWarnings("unused")
+    public static void eventCommandReply(long id, int error) {
+        for (EventObserver observer : observers) observer.eventCommandReply(id, error);
     }
 
     @SuppressWarnings("unused")
@@ -213,7 +196,7 @@ public final class MPVLib {
     }
 
     public interface EventObserver {
-        void eventProperty(String property);
+        default void eventProperty(String property) {}
 
         void eventProperty(String property, long value);
 
@@ -225,7 +208,7 @@ public final class MPVLib {
 
         void event(int eventId);
 
-        default void eventSubtitleOverlay() {}
+        default void eventCommandReply(long id, int error) {}
 
         default void eventEndFile(int reason, int error, String fileError) {
             event(MpvEvent.END_FILE);

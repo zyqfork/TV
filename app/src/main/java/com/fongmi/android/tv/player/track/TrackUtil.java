@@ -76,6 +76,13 @@ public class TrackUtil {
         return null;
     }
 
+    /** Saved TEXT may arrive after the initial audio/video inventory (e.g. HTTP sub-add). */
+    public static boolean canRestoreSelection(Player player, List<Track> tracks) {
+        boolean hasSelected = tracks.stream().anyMatch(Track::isSelected);
+        return tracks.stream().filter(track -> !hasSelected || track.isSelected())
+                .anyMatch(track -> find(player, track) != null);
+    }
+
     public static void setTrackSelection(Player player, List<Track> tracks) {
         Map<Integer, TrackGroup> mediaGroupMapByType = new HashMap<>();
         Map<Integer, Integer> selectedIndexMapByType = new HashMap<>();

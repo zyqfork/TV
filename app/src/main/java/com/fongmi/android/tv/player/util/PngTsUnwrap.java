@@ -76,7 +76,7 @@ public final class PngTsUnwrap {
         // ArrayIndexOutOfBoundsException, and -1 is never returned. That made every caller's
         // fallback (the `from` offset below, and the -1 pass-through documented on
         // findTsOffset) unreachable, so a segment that should have streamed through raw
-        // instead failed: TsRaw answers "segment unavailable" and MpvHlsPngTs.prepare
+        // instead failed: TsRaw answers "segment unavailable" and HlsPngTsPrepare.prepare
         // swallows the throw and leaves the playlist wrapped.
         int limit = Math.min(data.length - TS_PACKET * 2 - 1, start + PROBE);
         for (int i = Math.max(0, start); i <= limit; i++) {

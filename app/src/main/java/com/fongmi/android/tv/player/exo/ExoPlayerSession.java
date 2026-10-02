@@ -7,12 +7,15 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.ExoPlayer;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.engine.PlaybackRecoveryPolicy;
+import com.fongmi.android.tv.player.util.HlsPngTsPrepare;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.setting.AudioSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.utils.Task;
 
 
 /** Owns one ExoPlayer instance and all resources whose lifecycle must match that instance. */
@@ -26,7 +29,10 @@ final class ExoPlayerSession {
     private final boolean live;
 
     private PlaySpec spec;
+    private String originalUrl;
     private int attempts;
+    private int startGeneration;
+    private boolean pngProbeAttempted;
     private boolean released;
 
     ExoPlayerSession(int decode, Player.Listener listener) {
@@ -62,11 +68,16 @@ final class ExoPlayerSession {
         // Keep the retry budget when the same URL is restarted after a failure;
         // only a new item (or explicit reset) may clear attempts. Otherwise a
         // dead endpoint loops forever through start() -> attempts=0.
-        if (this.spec == null || spec == null
-                || !java.util.Objects.equals(this.spec.getUrl(), spec.getUrl())) {
+        String url = spec == null ? null : spec.getUrl();
+        if (this.spec == null || !java.util.Objects.equals(originalUrl, url)) {
             attempts = 0;
+            pngProbeAttempted = false;
         }
+        originalUrl = url;
         this.spec = spec;
+        startGeneration++;
+        // Normal EXO HLS must not fetch the playlist and first segment twice. The rare
+        // PNG-prefixed TS workaround is tried only after a parsing failure.
         startInternal(startPositionMs);
     }
 
@@ -79,6 +90,7 @@ final class ExoPlayerSession {
     }
 
     void stop() {
+        startGeneration++;
         preCache.stop();
         player.stop();
     }
@@ -111,12 +123,14 @@ final class ExoPlayerSession {
     void release() {
         if (released) return;
         released = true;
+        startGeneration++;
         preCache.release();
         volumeGain.release();
         player.removeListener(effectListener);
         effect.release();
         player.release();
         spec = null;
+        originalUrl = null;
     }
 
     private void startInternal(long positionMs) {
@@ -137,9 +151,29 @@ final class ExoPlayerSession {
 
     private PlayerEngine.ErrorAction retryFormat(int errorCode) {
         if (spec == null) return PlayerEngine.ErrorAction.FATAL;
+        String url = spec.getUrl();
+        boolean parsing = errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                || errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+                || errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
+                || errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED;
+        if (!parsing || pngProbeAttempted || url == null
+                || !url.toLowerCase(java.util.Locale.ROOT).contains(".m3u8")) return requestRetry();
+        pngProbeAttempted = true;
         attempts++;
-        spec.setFormat(ExoUtil.getMimeType(errorCode));
-        startInternal(player.getCurrentPosition());
+        long position = Math.max(0, player.getCurrentPosition());
+        int generation = ++startGeneration;
+        PlaySpec failed = spec;
+        player.stop();
+        // Optional network probe is off the application thread and never publishes into a
+        // newer item. If the playlist is normal, retry unchanged rather than guessing MIME.
+        Task.submit(() -> {
+            PlaySpec prepared = HlsPngTsPrepare.prepare(failed);
+            App.post(() -> {
+                if (released || generation != startGeneration) return;
+                spec = prepared;
+                startInternal(position);
+            });
+        });
         return PlayerEngine.ErrorAction.RECOVERED;
     }
 

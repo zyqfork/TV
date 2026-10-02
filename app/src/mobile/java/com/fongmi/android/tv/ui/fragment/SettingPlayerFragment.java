@@ -226,7 +226,10 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, S
 
     private void setRender(View view) {
         int index = (PlayerSetting.getRender() + 1) % render.length;
-        PlayerSetting.putRender(index);
+        if (!PlayerSetting.putRender(index)) {
+            com.fongmi.android.tv.utils.Notify.show(R.string.error_tunnel_requires_surface);
+            return;
+        }
         setPlaybackModeText();
     }
 

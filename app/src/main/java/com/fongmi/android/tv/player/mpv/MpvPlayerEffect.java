@@ -14,7 +14,7 @@ import com.fongmi.android.tv.player.effect.video.MpvVideoEffectController;
 import com.fongmi.android.tv.setting.AudioSetting;
 import com.fongmi.android.tv.setting.VideoSetting;
 
-/** Public libmpv property/filter implementation; zero-copy mode intentionally disables video EQ. */
+/** Public libmpv property/filter implementation. Video EQ automatically uses GPU output. */
 public final class MpvPlayerEffect implements PlayerEffect {
 
     private static final String TAG = "MpvPlayerEffect";
@@ -29,21 +29,24 @@ public final class MpvPlayerEffect implements PlayerEffect {
 
     @Override
     public boolean supportsVideoEffect() {
-        return player.getDecode() != 2 && !videoFailed;
+        return !videoFailed;
     }
 
     @Override
     public boolean supportsVideoSharpness() {
-        return player.getDecode() != 2;
+        return true;
     }
 
     @Override
     public int getVideoEffectError() {
-        return player.getDecode() == 2 ? R.string.error_video_effect_zero_copy : videoFailed ? R.string.error_video_effect_apply : 0;
+        return videoFailed ? R.string.error_video_effect_apply : 0;
     }
 
     @Override
     public void applyVideoEffect() {
+        // The owner rebuilds into GPU output when a live direct session enables an effect.
+        // Do not write a shader into mediacodec_embed during that transition.
+        if (player.getDecode() == 2 && VideoSetting.isEnabled()) return;
         videoFailed = VideoSetting.isEnabled()
                 ? !videoController.apply(player, VideoSetting.getAppliedProfile())
                 : !videoController.clear(player);

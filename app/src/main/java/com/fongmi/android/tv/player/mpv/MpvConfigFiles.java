@@ -9,7 +9,6 @@ import com.github.catvod.utils.Path;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,9 +59,16 @@ public final class MpvConfigFiles {
     }
 
     public static Map<String, String> readGlobalOptions() {
+        return parseGlobalOptions(read());
+    }
+
+    /** Same parser for playback and the managed-option warning, including imported UTF-8 BOM. */
+    private static Map<String, String> parseGlobalOptions(String content) {
         Map<String, String> options = new LinkedHashMap<>();
+        if (content == null || content.isEmpty()) return options;
+        if (content.charAt(0) == '\uFEFF') content = content.substring(1);
         boolean global = true;
-        for (String sourceLine : read().split("\\R")) {
+        for (String sourceLine : content.split("\\R")) {
             String line = stripComment(sourceLine).trim();
             if (line.isEmpty()) continue;
             if (line.startsWith("[") && line.endsWith("]")) {
@@ -104,23 +110,7 @@ public final class MpvConfigFiles {
     }
 
     private static Set<String> getDefaultOptions(String content) {
-        Set<String> options = new HashSet<>();
-        boolean active = true;
-        if (!content.isEmpty() && content.charAt(0) == '\uFEFF') content = content.substring(1);
-        for (String source : content.split("\\R")) {
-            String line = source.trim();
-            if (line.startsWith("[") && line.contains("]")) {
-                String profile = line.substring(1, line.indexOf(']')).trim();
-                active = profile.isEmpty() || "default".equals(profile);
-                continue;
-            }
-            if (!active || line.isEmpty() || line.startsWith("#")) continue;
-            if (line.startsWith("--")) line = line.substring(2);
-            int end = 0;
-            while (end < line.length() && (Character.isLetterOrDigit(line.charAt(end)) || line.charAt(end) == '-' || line.charAt(end) == '_')) end++;
-            if (end > 0) options.add(line.substring(0, end));
-        }
-        return options;
+        return parseGlobalOptions(content).keySet();
     }
 
     private static boolean isReserved(String key) {

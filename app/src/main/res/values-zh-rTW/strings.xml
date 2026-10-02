@@ -11,6 +11,8 @@
     <!-- Detail -->
     <string name="detail_title"><xliff:g name="name">%s</xliff:g>：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_site">站源：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_source">來源：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_protocol">協定：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_year">年份：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_area">地區：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_type">類型：<xliff:g name="name">%s</xliff:g></string>
@@ -154,10 +156,11 @@
     <string name="player_audio_pass_through">音訊直通</string>
     <string name="player_audio_decode">音訊軟解</string>
     <string name="player_video_decode">視訊軟解</string>
+    <string name="player_exo_soft_decode_limit">EXO 視訊軟解僅依賴 Android 軟體解碼器；不支援的格式可能回退硬解或播放失敗。</string>
     <string name="player_aac_track">AAC優先</string>
-    <string name="player_dv7_fallback">DV7回退</string>
     <string name="player_adblock">智慧去廣</string>
     <string name="player_tunnel">隧道模式</string>
+    <string name="error_tunnel_requires_surface">隧道模式需要 SurfaceView，已保留目前的渲染模式</string>
     <string name="player_speed">長按倍速</string>
     <string name="player_decode_setting">解碼設定</string>
     <string name="player_preload_setting">預載設定</string>
@@ -265,12 +268,10 @@
 
     <string name="decode_soft">軟解</string>
     <string name="decode_hard">硬解</string>
-    <string name="decode_gpu_output">相容硬解（GPU輸出）</string>
 
     <string-array name="select_decode">
         <item>軟解</item>
-        <item>相容硬解</item>
-        <item>效能硬解</item>
+        <item>硬解</item>
     </string-array>
 
     <string-array name="select_size">
@@ -337,7 +338,6 @@
     <string name="error_audio_effect_apply">套用音訊效果失敗</string>
     <string name="error_video_effect_unsupported">目前渲染器不支援視訊效果</string>
     <string name="error_video_effect_apply">套用視訊效果失敗</string>
-    <string name="error_video_effect_zero_copy">視訊效果需要相容硬解或軟解模式</string>
 
     <string-array name="audio_effect_presets">
         <item>關閉</item><item>自然</item><item>人聲</item><item>影院</item><item>低音</item><item>高音</item><item>流行</item><item>搖滾</item><item>舞曲</item><item>電子</item><item>嘻哈</item><item>爵士</item><item>古典</item><item>自訂</item>

@@ -155,10 +155,11 @@
     <string name="player_audio_pass_through">Audio passthrough</string>
     <string name="player_audio_decode">Audio software decode</string>
     <string name="player_video_decode">Video software decode</string>
+    <string name="player_exo_soft_decode_limit">EXO video soft decode uses Android software codecs only; unsupported formats may fall back to hardware or fail.</string>
     <string name="player_aac_track">Prefer aac track</string>
-    <string name="player_dv7_fallback">DV7 fallback</string>
     <string name="player_adblock">Remove ads</string>
     <string name="player_tunnel">Tunnel mode</string>
+    <string name="error_tunnel_requires_surface">Tunnel mode requires SurfaceView; current rendering mode retained</string>
     <string name="player_speed">Press speed</string>
     <string name="player_decode_setting">Decode setting</string>
     <string name="player_preload_setting">Preload setting</string>
@@ -266,12 +267,10 @@
 
     <string name="decode_soft">Soft</string>
     <string name="decode_hard">Hardware</string>
-    <string name="decode_gpu_output">Compatible hardware (GPU output)</string>
 
     <string-array name="select_decode">
         <item>Soft</item>
-        <item>Hard compatible</item>
-        <item>Hard performance</item>
+        <item>Hardware</item>
     </string-array>
 
     <string-array name="select_engine">
@@ -348,7 +347,6 @@
     <string name="error_audio_effect_apply">Failed to apply audio effects</string>
     <string name="error_video_effect_unsupported">Video effects are unavailable for this renderer</string>
     <string name="error_video_effect_apply">Failed to apply video effects</string>
-    <string name="error_video_effect_zero_copy">Video effects require compatible hard decode or software decode</string>
 
     <string-array name="audio_effect_presets">
         <item>Off</item><item>Natural</item><item>Vocal</item><item>Cinema</item><item>Bass</item><item>Treble</item><item>Pop</item><item>Rock</item><item>Dance</item><item>Electronic</item><item>Hip-hop</item><item>Jazz</item><item>Classical</item><item>Custom</item>

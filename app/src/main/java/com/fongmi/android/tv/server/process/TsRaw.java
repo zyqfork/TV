@@ -2,7 +2,7 @@ package com.fongmi.android.tv.server.process;
 
 import android.text.TextUtils;
 
-import com.fongmi.android.tv.player.mpv.MpvHlsPngTs;
+import com.fongmi.android.tv.player.util.HlsPngTsPrepare;
 import com.fongmi.android.tv.player.util.PngTsUnwrap;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.impl.Process;
@@ -34,7 +34,7 @@ public class TsRaw implements Process {
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
         try {
             Map<String, String> params = session.getParms();
-            MpvHlsPngTs.Session play = MpvHlsPngTs.get(params.get("id"));
+            HlsPngTsPrepare.Session play = HlsPngTsPrepare.get(params.get("id"));
             if (play == null) return Nano.error(Response.Status.NOT_FOUND, "session expired");
             if (url.startsWith("/tsraw/m3u8")) {
                 return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, "application/vnd.apple.mpegurl", play.playlist);

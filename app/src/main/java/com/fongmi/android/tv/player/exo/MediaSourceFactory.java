@@ -5,6 +5,7 @@ import static androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_EN
 import android.net.Uri;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.database.StandaloneDatabaseProvider;
@@ -44,6 +45,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
 
     private final DefaultMediaSourceFactory defaultMediaSourceFactory;
     private ExtractorsFactory extractorsFactory;
+    @Nullable private DrmSessionManagerProvider drmProvider;
+    @Nullable private LoadErrorHandlingPolicy loadErrorPolicy;
 
     public MediaSourceFactory() {
         defaultMediaSourceFactory = new DefaultMediaSourceFactory(createUpstreamDataSourceFactory(Map.of()), getExtractorsFactory());
@@ -76,12 +79,16 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource.Factory setDrmSessionManagerProvider(@NonNull DrmSessionManagerProvider drmSessionManagerProvider) {
+        drmProvider = drmSessionManagerProvider;
+        defaultMediaSourceFactory.setDrmSessionManagerProvider(drmSessionManagerProvider);
         return this;
     }
 
     @NonNull
     @Override
     public MediaSource.Factory setLoadErrorHandlingPolicy(@NonNull LoadErrorHandlingPolicy loadErrorHandlingPolicy) {
+        loadErrorPolicy = loadErrorHandlingPolicy;
+        defaultMediaSourceFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
         return this;
     }
 
@@ -96,8 +103,11 @@ public class MediaSourceFactory implements MediaSource.Factory {
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
         Uri uri = mediaItem.localConfiguration != null ? mediaItem.localConfiguration.uri : Uri.EMPTY;
         if ("smb".equalsIgnoreCase(uri.getScheme())) {
-            return new ProgressiveMediaSource.Factory(new SmbDataSource.Factory(), getExtractorsFactory())
-                    .createMediaSource(mediaItem);
+            ProgressiveMediaSource.Factory factory = new ProgressiveMediaSource.Factory(
+                    new SmbDataSource.Factory(), getExtractorsFactory());
+            if (drmProvider != null) factory.setDrmSessionManagerProvider(drmProvider);
+            if (loadErrorPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorPolicy);
+            return factory.createMediaSource(mediaItem);
         }
         // A shared mutable HTTP factory leaks headers between current playback and preload sources.
         // Build a lightweight per-item factory so Authorization/Referer remain bound to this item.
@@ -105,10 +115,15 @@ public class MediaSourceFactory implements MediaSource.Factory {
         DataSource.Factory upstream = createUpstreamDataSourceFactory(headers);
         // Media3's default cache key is only the URL. Never let authenticated responses share
         // spans with a later request that happens to use the same URL and different credentials.
-        DataSource.Factory source = hasSensitiveHeaders(headers)
+        // RTMP is a streaming protocol, not an HTTP file. Never wrap its non-seekable
+        // transport in the URL-keyed disk cache; DefaultDataSource loads the RTMP extension.
+        DataSource.Factory source = "rtmp".equalsIgnoreCase(uri.getScheme()) || hasSensitiveHeaders(headers)
                 ? upstream
                 : () -> getCacheDataSource(upstream).createDataSource();
-        return new DefaultMediaSourceFactory(source, getExtractorsFactory()).createMediaSource(mediaItem);
+        DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(source, getExtractorsFactory());
+        if (drmProvider != null) factory.setDrmSessionManagerProvider(drmProvider);
+        if (loadErrorPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorPolicy);
+        return factory.createMediaSource(mediaItem);
     }
 
     private ExtractorsFactory getExtractorsFactory() {

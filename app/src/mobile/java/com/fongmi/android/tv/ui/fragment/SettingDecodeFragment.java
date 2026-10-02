@@ -37,7 +37,7 @@ public class SettingDecodeFragment extends BaseFragment {
         mBinding.tunnel.setOnClickListener(this::setTunnel);
         mBinding.audioPrefer.setOnClickListener(this::setAudioPrefer);
         mBinding.videoPrefer.setOnClickListener(this::setVideoPrefer);
-        mBinding.dv7Fallback.setOnClickListener(this::setDv7HevcFallback);
+        // No DV7 base-layer extraction exists: don't expose an inert toggle.
         mBinding.audioPassThrough.setOnClickListener(this::setAudioPassThrough);
     }
 
@@ -46,7 +46,6 @@ public class SettingDecodeFragment extends BaseFragment {
         mBinding.tunnelText.setText(Setting.getSwitch(PlayerSetting.isTunnel()));
         mBinding.audioPreferText.setText(Setting.getSwitch(PlayerSetting.isAudioPrefer()));
         mBinding.videoPreferText.setText(Setting.getSwitch(PlayerSetting.isVideoPrefer()));
-        mBinding.dv7FallbackText.setText(Setting.getSwitch(PlayerSetting.isDv7HevcFallback()));
         mBinding.audioPassThroughText.setText(Setting.getSwitch(PlayerSetting.isAudioPassThrough()));
     }
 
@@ -69,11 +68,6 @@ public class SettingDecodeFragment extends BaseFragment {
     private void setVideoPrefer(View view) {
         PlayerSetting.putVideoPrefer(!PlayerSetting.isVideoPrefer());
         mBinding.videoPreferText.setText(Setting.getSwitch(PlayerSetting.isVideoPrefer()));
-    }
-
-    private void setDv7HevcFallback(View view) {
-        PlayerSetting.putDv7HevcFallback(!PlayerSetting.isDv7HevcFallback());
-        mBinding.dv7FallbackText.setText(Setting.getSwitch(PlayerSetting.isDv7HevcFallback()));
     }
 
     private void setAAC(View view) {

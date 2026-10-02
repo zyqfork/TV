@@ -1,10 +1,9 @@
-package com.fongmi.android.tv.player.mpv;
+package com.fongmi.android.tv.player.util;
 
 import android.net.Uri;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.player.media.PlaySpec;
-import com.fongmi.android.tv.player.util.PngTsUnwrap;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
@@ -21,15 +20,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import okhttp3.Response;
 
-/** Rewrites finite MPV HLS playlists whose MPEG-TS segments are hidden behind PNG prefixes. */
-public final class MpvHlsPngTs {
+/** Rewrites finite HLS playlists whose MPEG-TS segments are hidden behind PNG prefixes. */
+public final class HlsPngTsPrepare {
 
     private static final long SESSION_TTL_MS = 30 * 60_000L;
     private static final int MAX_SESSIONS = 32;
     private static final int MAX_PLAYLIST_CHARS = 2 * 1024 * 1024;
     private static final ConcurrentHashMap<String, Session> SESSIONS = new ConcurrentHashMap<>();
 
-    private MpvHlsPngTs() {
+    private HlsPngTsPrepare() {
     }
 
     public static PlaySpec prepare(PlaySpec spec) {

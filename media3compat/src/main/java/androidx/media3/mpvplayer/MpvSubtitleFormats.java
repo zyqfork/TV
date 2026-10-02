@@ -2,9 +2,9 @@ package androidx.media3.mpvplayer;
 
 import java.util.Locale;
 
-/** Deliberately narrow prototype: plain text only, not a replacement for libass/bitmap rendering. */
-public final class MpvSubtitleOverlayPolicy {
-    private MpvSubtitleOverlayPolicy() {}
+/** Native mpv codec names mapped to Media3 track metadata; rendering stays in GPU/libass. */
+public final class MpvSubtitleFormats {
+    private MpvSubtitleFormats() {}
 
     /** Preserve bitmap MIME classification used by track dialogs and subtitle-delay controls. */
     public static String mimeType(String codec) {
@@ -17,14 +17,6 @@ public final class MpvSubtitleOverlayPolicy {
             case "dvd_subtitle", "vobsub" -> "application/vobsub";
             case "dvb_subtitle", "dvbsub" -> "application/dvbsubs";
             default -> "text/x-unknown";
-        };
-    }
-
-    public static boolean supports(String codec) {
-        if (codec == null) return false;
-        return switch (codec.toLowerCase(Locale.ROOT)) {
-            case "subrip", "srt", "text", "utf8" -> true;
-            default -> false;
         };
     }
 }

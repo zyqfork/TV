@@ -14,6 +14,7 @@ import com.fongmi.android.tv.player.effect.PlayerEffect;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
+import com.fongmi.android.tv.player.util.HlsPngTsPrepare;
 import com.fongmi.android.tv.utils.Task;
 
 public class MpvPlayerEngine implements PlayerEngine {
@@ -112,11 +113,10 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean setDecode(int decode) {
-        boolean rebuild = this.decode == HARD_PERFORMANCE || decode == HARD_PERFORMANCE;
         this.decode = decode;
-        if (rebuild) return true;
-        player.setDecode(decode);
-        return false;
+        // The user toggles only soft/hard. A live hard session may have an embedded VO;
+        // always rebuild once rather than mutate its codec and then loadfile it again.
+        return true;
     }
 
     @Override
@@ -130,7 +130,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         long position = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
         int generation = ++startGeneration;
         Task.submit(() -> {
-            PlaySpec prepared = MpvHlsPngTs.prepare(spec);
+            PlaySpec prepared = HlsPngTsPrepare.prepare(spec);
             App.post(() -> {
                 if (generation != startGeneration) return;
                 this.spec = prepared;

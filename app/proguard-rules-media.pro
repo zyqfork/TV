@@ -50,9 +50,9 @@
   public static android.net.Uri buildRawResourceUri(int);
 }
 
--dontnote androidx.media3.datasource.rtmp.RtmpDataSource
--keepclassmembers class androidx.media3.datasource.rtmp.RtmpDataSource {
-  <init>();
+# DefaultDataSource reflectively loads this exact class name for rtmp://.
+-keep class androidx.media3.datasource.rtmp.RtmpDataSource {
+  public <init>();
 }
 
 -dontnote androidx.media3.decoder.vp9.LibvpxVideoRenderer

@@ -103,12 +103,6 @@ public class ExoUtil {
         return 32 * 1024 * 1024;
     }
 
-    public static String getMimeType(int errorCode) {
-        if (errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED || errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED || errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED) return MimeTypes.APPLICATION_M3U8;
-        if (errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED || errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED) return MimeTypes.APPLICATION_OCTET_STREAM;
-        return null;
-    }
-
     public static Map<String, String> extractHeaders(MediaItem item) {
         Bundle extras = item.requestMetadata.extras;
         if (extras == null) return new HashMap<>();

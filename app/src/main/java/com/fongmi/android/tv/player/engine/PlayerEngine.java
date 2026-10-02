@@ -13,7 +13,6 @@ public interface PlayerEngine {
 
     int SOFT = 0;
     int HARD = 1;
-    int HARD_PERFORMANCE = 2;
 
     Type getType();
 

@@ -85,27 +85,19 @@ public class PlayerSetting {
         return getEngine() == ENGINE_MPV;
     }
 
+    /** Legacy MPV preference: old value 2 (direct output) is now ordinary automatic hard decode. */
     public static int getMpvDecode() {
-        return Math.clamp(Prefers.getInt("mpv_decode", HARD_DEFAULT), 0, 2);
-    }
-
-    public static void putMpvDecode(int decode) {
-        Prefers.put("mpv_decode", Math.clamp(decode, 0, 2));
+        return Prefers.getInt("mpv_decode", HARD_DEFAULT) == 0 ? 0 : 1;
     }
 
     public static int getDecode(boolean live, int engine) {
         migrateLegacyExoDecodeDefaults();
         String scene = live ? "live" : "vod";
         String player = engine == ENGINE_MPV ? "mpv" : "exo";
-        int fallback;
-        if (engine == ENGINE_MPV) {
-            // Live benefits from zero-copy (mediacodec_embed); VOD may need gpu-next for subtitles
-            fallback = live ? 2 : getMpvDecode();
-        } else {
-            fallback = 1;
-        }
-        int max = engine == ENGINE_MPV ? 2 : 1;
-        return Math.clamp(Prefers.getInt(scene + "_" + player + "_decode", fallback), 0, max);
+        int fallback = engine == ENGINE_MPV ? getMpvDecode() : HARD_DEFAULT;
+        // Read-time migration preserves intentional soft choices and never rewrites the legacy
+        // EXO video_prefer/defaults keys. Persist only when the user explicitly selects a mode.
+        return Prefers.getInt(scene + "_" + player + "_decode", fallback) == 0 ? 0 : 1;
     }
 
     /**
@@ -133,8 +125,7 @@ public class PlayerSetting {
     public static void putDecode(boolean live, int engine, int decode) {
         String scene = live ? "live" : "vod";
         String player = engine == ENGINE_MPV ? "mpv" : "exo";
-        int max = engine == ENGINE_MPV ? 2 : 1;
-        Prefers.put(scene + "_" + player + "_decode", Math.clamp(decode, 0, max));
+        Prefers.put(scene + "_" + player + "_decode", Math.clamp(decode, 0, 1));
     }
 
     public static boolean isMpvGpuNext() {
@@ -200,9 +191,11 @@ public class PlayerSetting {
         return Math.clamp(Prefers.getInt("render", RENDER_SURFACE), RENDER_SURFACE, RENDER_TEXTURE);
     }
 
-    public static void putRender(int render) {
+    /** False means an EXO tunnel requires SurfaceView; the previous setting is preserved. */
+    public static boolean putRender(int render) {
+        if (render == RENDER_TEXTURE && !isMpv() && isTunnel()) return false;
         Prefers.put("render", Math.clamp(render, RENDER_SURFACE, RENDER_TEXTURE));
-        if (!isMpv() && isTunnel() && getRender() == RENDER_TEXTURE) Prefers.put("tunnel", false);
+        return true;
     }
 
     public static boolean isTunnel() {
@@ -328,13 +321,5 @@ public class PlayerSetting {
 
     public static void putPreferAAC(boolean preferAAC) {
         Prefers.put("prefer_aac", preferAAC);
-    }
-
-    public static boolean isDv7HevcFallback() {
-        return Prefers.getBoolean("dv7_hevc_fallback");
-    }
-
-    public static void putDv7HevcFallback(boolean fallback) {
-        Prefers.put("dv7_hevc_fallback", fallback);
     }
 }

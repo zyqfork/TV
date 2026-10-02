@@ -2,6 +2,7 @@ package com.fongmi.android.tv.player.exo;
 
 import androidx.media3.common.ColorInfo;
 import androidx.media3.common.Format;
+import androidx.media3.common.MediaItem;
 import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.exoplayer.ExoPlayer;
 
@@ -52,12 +53,12 @@ public final class ExoPlayerEffect implements PlayerEffect {
 
     @Override
     public boolean supportsVideoEffect() {
-        return player != null && !isHdr() && !videoFailed;
+        return player != null && !isVideoEffectUnsupported() && !videoFailed;
     }
 
     @Override
     public int getVideoEffectError() {
-        if (isHdr()) return R.string.error_video_effect_unsupported;
+        if (isVideoEffectUnsupported()) return R.string.error_video_effect_unsupported;
         return videoFailed ? R.string.error_video_effect_apply : 0;
     }
 
@@ -66,7 +67,7 @@ public final class ExoPlayerEffect implements PlayerEffect {
         if (player == null) return;
         try {
             if (VideoSetting.isEnabled() && player.getVideoFormat() == null) return;
-            if (isHdr()) {
+            if (isVideoEffectUnsupported()) {
                 videoController.clear(player);
                 return;
             }
@@ -77,6 +78,12 @@ public final class ExoPlayerEffect implements PlayerEffect {
             videoController.clear(player);
             videoFailed = true;
         }
+    }
+
+    private boolean isVideoEffectUnsupported() {
+        MediaItem item = player == null ? null : player.getCurrentMediaItem();
+        return PlayerSetting.isTunnel() || (item != null && item.localConfiguration != null
+                && item.localConfiguration.drmConfiguration != null) || isHdr();
     }
 
     private boolean isHdr() {

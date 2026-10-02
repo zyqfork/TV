@@ -81,6 +81,7 @@ public class PlayerManager implements ParseCallback {
     private long pendingStartPositionMs;
     private boolean danmakuEnabled;
     private boolean initTrack;
+    private boolean initTextTrack;
     private boolean subtitlesDisabled;
     private boolean mpvFallbackUsed;
     private int retry;
@@ -283,15 +284,6 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getDecodeText() {
-        // EXO only toggles software vs hardware MediaCodec. GPU/Surface-direct labels are MPV-only.
-        if (getEngine() == PlayerSetting.ENGINE_EXO) {
-            return ResUtil.getString(decode == PlayerEngine.SOFT ? R.string.decode_soft : R.string.decode_hard);
-        }
-        if (decode == PlayerEngine.HARD_PERFORMANCE
-                && player instanceof androidx.media3.mpvplayer.MpvPlayer mpv
-                && !mpv.isPerformanceDirectOutput()) {
-            return ResUtil.getString(R.string.decode_gpu_output);
-        }
         return ResUtil.getStringArray(R.array.select_decode)[decode];
     }
 
@@ -333,7 +325,23 @@ public class PlayerManager implements ParseCallback {
         effects.refreshAudioSetting();
     }
 
+    /** Read-only native MPV VO diagnostic; empty until this item actually announces a VO. */
+    public String getMpvActiveVideoOutput() {
+        return player instanceof androidx.media3.mpvplayer.MpvPlayer mpv
+                ? mpv.getActiveVideoOutput() : "";
+    }
+
     public void refreshVideoSetting() {
+        // Effects require vo=gpu. A live hard session can switch the *internal* output
+        // candidate without changing the user's soft/hard preference or persisting a mode.
+        if (spec != null && engine != null && engine.getType() == PlayerEngine.Type.MPV
+                && player instanceof androidx.media3.mpvplayer.MpvPlayer mpv
+                && mpv.getDecode() != com.fongmi.android.tv.player.mpv.MpvUtil.internalDecode(decode, liveMode)) {
+            long position = Math.max(0, getPosition());
+            setPlayer(engine.rebuild());
+            startCurrent(position);
+            return;
+        }
         effects.refreshVideoSetting();
     }
 
@@ -583,6 +591,7 @@ public class PlayerManager implements ParseCallback {
 
     /** Disable both subtitle slots and the renderer, not merely hide its current text. */
     public void closeSubtitles() {
+        initTextTrack = true;
         subtitlesDisabled = true;
         clearSecondarySub();
         setEmbeddedSecondarySubtitle(null);
@@ -591,6 +600,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void enableSubtitles() {
+        initTextTrack = true; // Explicit import/secondary selection wins over pending restore.
         if (!subtitlesDisabled) return;
         subtitlesDisabled = false;
         if (player != null) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
@@ -598,6 +608,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setTrack(List<Track> tracks) {
+        if (tracks.stream().anyMatch(t -> t.getType() == C.TRACK_TYPE_TEXT)) initTextTrack = true;
         boolean selectedText = tracks.stream().anyMatch(t -> t.getType() == C.TRACK_TYPE_TEXT && t.isSelected());
         if (selectedText) subtitlesDisabled = false;
         if (!tracks.isEmpty()) TrackUtil.setTrackSelection(player, tracks);
@@ -692,6 +703,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void resetTrack() {
+        initTextTrack = true;
         subtitlesDisabled = false;
         TrackUtil.reset(player);
     }
@@ -712,12 +724,11 @@ public class PlayerManager implements ParseCallback {
 
     private void switchDecode(boolean persist, boolean freshAttempt) {
         long position = Math.max(0, getPosition());
-        boolean mpv = engine.getType() == PlayerEngine.Type.MPV;
         if (persist) {
-            decode = nextDecode(decode, mpv);
+            decode = nextDecode(decode);
         } else {
             decodeTriedMask |= 1 << decode;
-            int next = nextUnusedDecode(decode, mpv);
+            int next = nextUnusedDecode(decode);
             if (next < 0) {
                 handleFatalError(null);
                 return;
@@ -733,29 +744,24 @@ public class PlayerManager implements ParseCallback {
         startCurrent(position);
     }
 
-    /** Hardware-first fallback: performance → compatible → soft (last resort). */
-    private static int nextDecode(int current, boolean mpv) {
-        if (!mpv) return current == PlayerEngine.HARD ? PlayerEngine.SOFT : PlayerEngine.HARD;
-        return switch (current) {
-            case PlayerEngine.HARD_PERFORMANCE -> PlayerEngine.HARD;
-            case PlayerEngine.HARD -> PlayerEngine.SOFT;
-            default -> PlayerEngine.HARD_PERFORMANCE;
-        };
+    /** Only user-visible software and hardware decode modes remain. */
+    private static int nextDecode(int current) {
+        return current == PlayerEngine.HARD ? PlayerEngine.SOFT : PlayerEngine.HARD;
     }
 
-    /** Next decode mode that has not failed for this item; -1 if all candidates exhausted. */
-    private int nextUnusedDecode(int current, boolean mpv) {
-        int candidate = nextDecode(current, mpv);
-        for (int i = 0; i < 3; i++) {
+    /** Next decode mode that has not failed for this item; -1 if both candidates failed. */
+    private int nextUnusedDecode(int current) {
+        int candidate = nextDecode(current);
+        for (int i = 0; i < 2; i++) {
             if ((decodeTriedMask & (1 << candidate)) == 0) return candidate;
-            candidate = nextDecode(candidate, mpv);
+            candidate = nextDecode(candidate);
         }
         return -1;
     }
 
     private void handleDecodeError(PlaybackException e) {
         decodeTriedMask |= 1 << decode;
-        if (++retry > 2 || nextUnusedDecode(decode, engine.getType() == PlayerEngine.Type.MPV) < 0) {
+        if (++retry > 2 || nextUnusedDecode(decode) < 0) {
             handleFatalError(e);
         } else {
             Notify.show(R.string.error_decode_fallback);
@@ -855,6 +861,7 @@ public class PlayerManager implements ParseCallback {
         App.post(runnable, Constant.TIMEOUT_PLAY);
         callback.onPrepare();
         initTrack = false;
+        initTextTrack = false;
         return true;
     }
 
@@ -862,11 +869,6 @@ public class PlayerManager implements ParseCallback {
         this.player = player;
         if (subtitlesDisabled) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
-        if (player instanceof androidx.media3.mpvplayer.MpvPlayer mpv) {
-            mpv.setOutputModeListener(() -> {
-                if (this.player == mpv && !isReleased()) callback.onDecodeChanged();
-            });
-        }
         embeddedSecondarySelection = null;
         applyPersistedVolumeGain();
         effects.refreshVideoSetting();
@@ -951,6 +953,7 @@ public class PlayerManager implements ParseCallback {
         scheduleFirstFrameTimeout();
         callback.onPrepare();
         initTrack = false;
+        initTextTrack = false;
     }
 
     private long firstFrameTimeoutMs() {
@@ -1078,12 +1081,22 @@ public class PlayerManager implements ParseCallback {
             if (tracks.isEmpty()) return;
             effects.refreshAudioSetting();
             effects.refreshVideoSetting();
-            if (initTrack) return;
-            List<Track> saved = Track.find(getKey());
-            if (subtitlesDisabled) saved = saved.stream().filter(t -> t.getType() != C.TRACK_TYPE_TEXT).toList();
-            setTrack(saved);
+            // Network subtitles arrive incrementally. Restore A/V once, but defer saved TEXT
+            // until its selected format exists; never overwrite an explicit user selection.
+            List<Track> saved = !initTrack || !initTextTrack ? Track.find(getKey()) : List.of();
+            if (!initTrack) {
+                initTrack = true; // Selection changes can re-enter this listener.
+                TrackUtil.setTrackSelection(player, saved.stream()
+                        .filter(t -> t.getType() != C.TRACK_TYPE_TEXT).toList());
+            }
+            if (!initTextTrack && !subtitlesDisabled) {
+                List<Track> text = saved.stream().filter(t -> t.getType() == C.TRACK_TYPE_TEXT).toList();
+                if (text.isEmpty() || TrackUtil.canRestoreSelection(player, text)) {
+                    initTextTrack = true;
+                    if (!text.isEmpty()) TrackUtil.setTrackSelection(player, text);
+                }
+            }
             callback.onTracksChanged();
-            initTrack = true;
         }
 
         @Override

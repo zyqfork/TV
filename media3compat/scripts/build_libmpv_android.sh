@@ -10,7 +10,7 @@ source_revision=46ef59a1f093b30e774f463d5c5942a3ac8d22be
 native_overlay_dir="$(cd "$(dirname "$0")/../src/main/cpp/mpv" && pwd)"
 overlay_patch_script="$(cd "$(dirname "$0")" && pwd)/apply_subtitle_overlay.py"
 overlay_revision=$(sha256sum "$native_overlay_dir"/* "$overlay_patch_script" | cut -d' ' -f1 | sha256sum | cut -d' ' -f1)
-build_revision="${source_revision}-surface-guard-vulkan-subtitle-v1-${overlay_revision}"
+build_revision="${source_revision}-surface-guard-vulkan-auto-output-v1-${overlay_revision}"
 
 mkdir -p "$cache_dir" "$output_dir"
 all_present=true
@@ -56,6 +56,13 @@ if [[ ! -d "$source_dir/.git" ]]; then
     fi
 fi
 git -C "$source_dir" checkout --detach "$source_revision"
+# This dedicated bridge tree carried the retired subtitle VO/JNI patches. Reset only
+# its tracked sources before applying the new minimal overlay; never touch the shared seed.
+git -C "$source_dir" reset --hard "$source_revision"
+# Retired bridge files were untracked in this dedicated tree, so reset alone does not
+# remove them. Delete only these known owned files; never clean the shared seed/cache.
+rm -f "$source_dir/app/src/main/jni/android_subtitle_jni.cpp" \
+      "$source_dir/app/src/main/jni/android_subtitle_overlay.h"
 
 uid=$(id -u)
 gid=$(id -g)
@@ -91,6 +98,9 @@ git -C deps/freetype2 checkout --detach 0a0221a1347e2f1e07c395263540026e9a0aa7c7
 git -C deps/libass checkout --detach f9fd3d20dff1cd84b7c74c8ae7f79711ad7736fa
 git -C deps/libplacebo checkout --detach 4c426e466814536def653cb23f1d1c287ea7a7f5
 git -C deps/mpv checkout --detach 8c67647b50059406c5c0444903597281b81516cf
+git -C deps/mpv reset --hard 8c67647b50059406c5c0444903597281b81516cf
+rm -f deps/mpv/video/out/android_subtitle_overlay.c \
+      deps/mpv/video/out/android_subtitle_overlay.h
 # Build libplacebo's Vulkan backend. FFmpeg Vulkan filters remain disabled because MPV's
 # gpu-next renderer only needs libplacebo/Vulkan; this keeps the experimental APK smaller.
 sed -i 's/-Dvulkan=disabled/-Dvulkan=enabled/' scripts/libplacebo.sh
