@@ -136,8 +136,7 @@ def main():
         ("vod", "点播"), ("live", "直播"), ("wall", "壁纸"),
         ("player", "播放设置"), ("danmaku", "弹幕设置"),
         ("incognito", "无痕模式"), ("size", "图片尺寸"),
-        ("themeColor", "主题色彩"), ("doh", "DoH"),
-        ("cache", "缓存"), ("backup", "备份"), ("restore", "恢复"),
+        ("doh", "DoH"), ("cache", "缓存"), ("backup", "备份"), ("restore", "恢复"),
         ("version", "版本"),
     ], results)
 
@@ -156,7 +155,7 @@ def main():
     test("decode", [
         ("tunnel", "隧道"), ("audioPassThrough", "直通"),
         ("audioPrefer", "音频"), ("videoPrefer", "视频"),
-        ("aac", "AAC"), ("dv7Fallback", "DV"),
+        ("aac", "AAC"),
     ], results)
 
     go_settings_root(); tap_id("danmaku"); time.sleep(0.7)

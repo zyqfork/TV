@@ -133,7 +133,7 @@ def open_preload():
 PAGES = {
     "main": (open_app_settings, [
         "vod", "live", "wall", "player", "danmaku", "incognito",
-        "size", "themeColor", "doh", "cache", "backup", "restore", "version",
+        "size", "doh", "cache", "backup", "restore", "version",
     ]),
     "player": (open_player, [
         "engine", "decode", "adblock", "buffer", "http", "liveLatency",
@@ -142,7 +142,7 @@ PAGES = {
         "subtitleAssrt", "subtitleFont",
     ]),
     "decode": (open_decode, [
-        "tunnel", "audioPassThrough", "audioPrefer", "videoPrefer", "aac", "dv7Fallback",
+        "tunnel", "audioPassThrough", "audioPrefer", "videoPrefer", "aac",
     ]),
     "danmaku": (open_danmaku, [
         "danmakuLoad", "danmakuApi", "danmakuAuto", "danmakuSpider",

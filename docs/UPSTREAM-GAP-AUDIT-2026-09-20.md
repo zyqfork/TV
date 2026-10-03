@@ -1,5 +1,7 @@
 ﻿# 上游功能缺口审计（2026-09-20）
 
+> 历史审计记录：下文各节描述对应日期的状态，不代表当前 HEAD；后续修订见文末。
+
 ## 结论
 
 当前 fork 并不是简单落后于上游：上游运行时依赖一个未提交到 Git 的 `app/libs/lib-*.aar`（由 `app/libs/.gitignore` 明确忽略），其中包含定制的 Media3、MPV 和磁盘预载 API。本 fork 的 `media3compat` 是公开源码兼容层。因此，直接复制上游 Java 代码会遇到私有 API 缺失，必须逐项用公开 API 重写。
@@ -213,3 +215,38 @@ PowerShell 下的 Windows OpenSSH。最终验证在独立 worktree
 - 电视 release：MPV 日志确认 `Using hardware decoding (mediacodec)` 与 `playback restart complete`；预载诊断弹窗焦点可达。
 - 字体导入的复制、校验和元数据解析已移到 `Task` 后台线程，避免最大 32 MiB 文件在 UI 线程造成 ANR；完成后仅在仍存活的 Fragment/Activity 上刷新标签或字幕样式。
 - 双端最终日志均无 `FATAL EXCEPTION`、`VerifyError`、`NoSuchMethodError`。
+
+---
+
+## 2026-09-28 会话：手机端投屏接收端 + 首页入口行 + GSON 注解修复
+
+**当次代码已推送到 `origin/release`（历史 HEAD `9d77e3696`，13 个提交）。**
+本地操作手册 `docs/AI-HANDOFF-2026-09-28.md` 不随此公开审计记录发布。
+
+- **手机首页功能入口行**：两端入口定义合并到 `main/ui/home/HomeFuncs`（TV 的 `HomeActivity` 改为调它），
+  `bean/Func` 与 8 个 `ic_home_*` 图标从 leanback 移入 main；手机端新增 chip 行
+  （`adapter_home_func.xml` + `HomeFuncAdapter`，插在 `fragment_vod.xml` 的 app bar 里）。
+  真机验证：6 个 chip 渲染 + 搜索/收藏/推送跳转正常。
+- **DLNA 接收端做成 flavor 无关**：新契约 `dlna/CastPlatform`（同名同包、按 flavor 各一份、5 个方法），
+  `DLNARendererService`/`DLNAAvTransportImpl`/`DLNARenderingControlImpl`/`CastAction`/
+  `CastConflict`/`CastNetworkWatcher`/`RenderState` 移入 `main`，manifest 的 service 条目同步迁移。
+  leanback 那份是原行为纯转发。
+- **AirPlay 接收端**：`AirPlayServer`/`AirPlaySetting` 移入 `main`；`:airplay` 由
+  `leanbackImplementation` 改为 `implementation`（手机包 +8.2MB：78.2 → 86.4MB）；
+  手机 `HomeActivity` 随 app 启动两个接收端，设置页新增 `DLNA 设置` 与 `AirPlay` 开关（默认均开）。
+- **DLNA 接收端端到端验证（本会话最有价值的一条）**：新增 PC 侧最小控制端
+  `Release/device-test/dlna_controller.py`（M-SEARCH → 解析设备描述 → SOAP `SetAVTransportURI`+`Play`）
+  与带 Range 的 `media_server.py`，媒体经 `adb reverse` 从手机 localhost 取（PC 不需任何入站端口）。
+  实测：发现手机（`jUPnP/3.0`/`Xiaomi Redmi Note 8`）→ SOAP 200 → 服务器日志 `206` →
+  手机 `state=PLAYING(3), position=5880` → logcat `START … VideoActivity`。**全链路打通**。
+- **R8/GSON 注解修复**：`NetworkStorage`/`DlnaPin`/`NetworkEntry`/`NetworkCredentialStore.Credentials`/
+  `SecondarySubtitleStore.Entry` 补 `@SerializedName`（此前 release 包字段名被混淆 → 升级后老数据静默丢失，
+  且明文凭据迁移逻辑在 release 里是死代码）。真机前后对比验证。
+- **当次未验证**：TV（leanback）侧全部行为（盒子离线）、AirPlay 端到端（无 Apple 设备）。
+
+## 2026-10 后续修订
+
+- 播放器改动已由 `12bea6f6c` 发布：网络字幕异步导入与迟到回执隔离、MPV 两档用户解码及保守直播输出路由、mpv.conf BOM 解析、EXO RTMP 依赖和 PNG-TS 错误后探测。旧直投字幕位图桥与无效 DV7 控件已移除；上文历史清单中的“DV7 已有”不再是当前状态。
+- `cf2faff2f` 移除 AirPlay 高度超过 2160 时预先选择软解的规则，保留默认解码器启动失败后的软件回退；TV 详情页使用主题表面色。实验性的型号／AV1 解码器特判已撤销，从未随这两次提交发布。
+- 软件解码选择、显式 mpv.conf 配置与通用错误回退仍保留。硬解不保证所有片源都不花屏；程序未加入按设备名称自动改为软件解码的规则。
+- 解码链路与位深证据边界见 [MPV-ANDROID-DECODE-TRADEOFF.md](MPV-ANDROID-DECODE-TRADEOFF.md)。ARM64 TV／手机 release 构建和生产 AirPlay 模拟启动测试通过，但真实高画面 AirPlay、原网络花屏片源、真实直播输出切换及 10-bit 显示链路仍需分别验收，不能从点播或启动测试推断通过。
