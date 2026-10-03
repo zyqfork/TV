@@ -193,14 +193,10 @@ class VideoRenderer {
             Log.w(TAG, "Software decoder capabilities unavailable", e)
             null
         }
-        // Some vendor decoders accept configure/start for tall frames but never produce output.
-        // On the affected phone c2.qti.hevc.decoder reports max-height=2160 in its output format,
-        // yet the sender supplies 1080x2340: inputs fill forever and the display remains black.
-        val tallSoftware = if (videoHeight > 2160) softwareDecoder() else null
-        if (tallSoftware != null) {
-            Log.w(TAG, "Tall stream ${videoWidth}x${videoHeight}; using ${tallSoftware.name} instead of hardware decoder")
-            _startDecoder(MediaCodec.createByCodecName(tallSoftware.name), format, s, h265)
-        } else try {
+        // Let Android try its default decoder (normally hardware) at the requested dimensions.
+        // Height alone does not establish a hardware limit; query software only after an actual
+        // configure/start failure, not preemptively for portrait or >2160-high streams.
+        try {
             _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
         } catch (e: Exception) {
             // Strict hardware decoders reject configs beyond their real limits.
