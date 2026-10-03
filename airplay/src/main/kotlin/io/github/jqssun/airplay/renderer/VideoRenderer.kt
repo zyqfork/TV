@@ -22,8 +22,15 @@ class VideoRenderer {
     private var decoderStartNs = 0L
     /** One software retry per resolution/session; a second stall must not restart forever. */
     private var softwareFallbackTried = false
-    /** Set by the stalled-start watchdog so the next codec start goes straight to software. */
+    /** Latched until dimensions/codec type/session change, including later codec resets. */
     private var forceSoftwareStart = false
+    private var usingSoftwareCodec = false
+    private data class StartupFrame(val data: ByteArray, val ntpTimeNs: Long)
+    private val startupFrames = ArrayList<StartupFrame>()
+    private var startupBytes = 0
+    private var startupNalFlags = 0
+    private var startupCaptureStarted = false
+    private var startupCaptureOverflow = false
 
     // stats
     @Volatile var fps = 0; private set
@@ -52,9 +59,14 @@ class VideoRenderer {
     private var _ptsBaseUs = Long.MIN_VALUE
     private var _wallBaseNs = 0L
 
-    fun setResolution(w: Int, h: Int) {
-        // New dimensions re-open the decoder decision, including the stalled-start fallback.
-        if (w != videoWidth || h != videoHeight) _resetStartWatchdog()
+    fun setResolution(w: Int, h: Int) = synchronized(lock) {
+        if (w != videoWidth || h != videoHeight) {
+            _resetStartWatchdog()
+            // An adaptive codec may remain alive across a size report. Re-arm its watchdog,
+            // rather than leaving a running codec with a zero (disabled) start timestamp.
+            if (codec != null) decoderStartNs = System.nanoTime()
+            firstFrameQueued = false
+        }
         videoWidth = w
         videoHeight = h
         pipeline.setVideoSize(w, h)
@@ -98,22 +110,24 @@ class VideoRenderer {
     }
 
     fun feedFrame(data: ByteArray, ntpTimeNs: Long, isH265: Boolean) {
-        _updateStats(data.size)
-
         synchronized(lock) {
+            _updateStats(data.size)
             if (videoWidth == 0 || videoHeight == 0) return
+            if (isH265 != currentH265) {
+                stopCodec()
+                _resetStartWatchdog()
+                currentH265 = isH265
+            }
 
-            if (codec == null || isH265 != currentH265) {
+            if (codec == null) {
                 // a stale reference frame decodes to corruption, so wait for a keyframe to (re)start
-                if (!_isKeyframe(data, isH265)) {
-                    if (codec != null) stopCodec()
-                    return
-                }
+                if (!_isKeyframe(data, isH265)) return
                 stopCodec()
             }
 
             try {
                 if (codec == null) startCodec(isH265)
+                _cacheStartupFrame(data, ntpTimeNs, isH265)
                 _feedToCodec(data, ntpTimeNs)
                 drainOutput()
                 _checkStalledStart()
@@ -124,45 +138,97 @@ class VideoRenderer {
         }
     }
 
-    private fun _feedToCodec(data: ByteArray, ntpTimeNs: Long) {
-        val c = codec ?: return
+    private fun _feedToCodec(data: ByteArray, ntpTimeNs: Long): Boolean {
+        val c = codec ?: return false
         // dropping a frame desyncs decoder until the next keyframe, but source would only send one on (re)connect
         val retries = if (firstFrameQueued) FEED_RETRIES else FIRST_FEED_RETRIES
         repeat(retries) {
             val idx = c.dequeueInputBuffer(FEED_WAIT_US)
             if (idx >= 0) {
-                val buf = c.getInputBuffer(idx) ?: return
+                val buf = c.getInputBuffer(idx) ?: return false
                 buf.clear()
                 buf.put(data)
                 c.queueInputBuffer(idx, 0, data.size, ntpTimeNs / 1000, 0)
+                // Measure actual fed startup, not time spent waiting for the sender's first input.
+                if (!firstFrameQueued) decoderStartNs = System.nanoTime()
                 firstFrameQueued = true
-                return
+                return true
             }
             drainOutput()
         }
         droppedFrames++
         Log.w(TAG, "Decoder input queue full; dropping frame. drops=$droppedFrames")
+        return false
     }
 
-    private fun _isKeyframe(data: ByteArray, isH265: Boolean): Boolean {
-        if (data.size < 5) return false
+    private fun _cacheStartupFrame(data: ByteArray, ntpTimeNs: Long, h265: Boolean) {
+        if (firstOutputSeen || softwareFallbackTried || usingSoftwareCodec || startupCaptureOverflow) return
+        if (!startupCaptureStarted) {
+            if (!_isKeyframe(data, h265)) return
+            startupCaptureStarted = true
+        }
+        // Preserve parameter sets and every following frame, including inputs the stalled codec
+        // could not accept. Replaying only an IDR would lose subsequent reference frames.
+        if (startupFrames.size >= MAX_STARTUP_FRAMES || data.size > MAX_STARTUP_BYTES - startupBytes) {
+            _clearStartupFrames()
+            startupCaptureOverflow = true
+            return
+        }
+        startupFrames.add(StartupFrame(data.copyOf(), ntpTimeNs))
+        startupBytes += data.size
+        startupNalFlags = startupNalFlags or _nalFlags(data, h265)
+    }
+
+    private fun _clearStartupFrames() {
+        startupFrames.clear()
+        startupBytes = 0
+        startupNalFlags = 0
+        startupCaptureStarted = false
+        startupCaptureOverflow = false
+    }
+
+    private fun _softwareDecoderForSize(mime: String) = try {
+        _softwareDecoder(mime)?.takeIf {
+            it.getCapabilitiesForType(mime).videoCapabilities
+                ?.isSizeSupported(videoWidth, videoHeight) == true
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Software decoder capabilities unavailable", e)
+        null
+    }
+
+    // SPS=1, PPS=2, VPS=4, random-access picture=8. Parameter sets can arrive separately
+    // before the first picture; retain all of them before rebuilding a decoder without CSD.
+    private fun _nalFlags(data: ByteArray, isH265: Boolean): Int {
+        var flags = 0
         var i = 0
         while (i <= data.size - 5) {
             if (data[i] == 0.toByte() && data[i + 1] == 0.toByte() &&
                 data[i + 2] == 0.toByte() && data[i + 3] == 1.toByte()) {
-                val key = if (isH265) {
-                    val type = (data[i + 4].toInt() shr 1) and 0x3F
-                    type == 19 || type == 20 || type == 21 || type == 32 || type == 33
+                val flag = if (isH265) {
+                    when ((data[i + 4].toInt() shr 1) and 0x3F) {
+                        32 -> 4
+                        33 -> 1
+                        34 -> 2
+                        19, 20, 21 -> 8
+                        else -> 0
+                    }
                 } else {
-                    val type = data[i + 4].toInt() and 0x1F
-                    type == 5 || type == 7
+                    when (data[i + 4].toInt() and 0x1F) {
+                        7 -> 1
+                        8 -> 2
+                        5 -> 8
+                        else -> 0
+                    }
                 }
-                if (key) return true
+                flags = flags or flag
             }
             i++
         }
-        return false
+        return flags
     }
+
+    private fun _isKeyframe(data: ByteArray, isH265: Boolean) = _nalFlags(data, isH265) and 13 != 0
 
     private fun startCodec(h265: Boolean) {
         pipeline.start()
@@ -195,37 +261,27 @@ class VideoRenderer {
         firstFrameQueued = false
         // Only inspect software decoders when needed; some vendor codec lists throw while querying
         // capabilities, and a normal hardware stream should never depend on that query succeeding.
-        fun softwareDecoder() = try {
-            _softwareDecoder(mime)?.takeIf {
-                it.getCapabilitiesForType(mime).videoCapabilities
-                    ?.isSizeSupported(videoWidth, videoHeight) == true
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Software decoder capabilities unavailable", e)
-            null
-        }
         // Let Android try its default decoder (normally hardware) at the requested dimensions.
         // Height alone does not establish a hardware limit; query software only after an actual
         // configure/start failure, not preemptively for portrait or >2160-high streams.
-        val forcedSoftware = forceSoftwareStart
-        forceSoftwareStart = false
-        if (forcedSoftware) {
-            // The previous codec accepted configure/start but never emitted a buffer.
-            val sw = softwareDecoder() ?: throw IllegalStateException("no software decoder for $mime")
-            Log.w(TAG, "Starting software decoder ${sw.name} after a stalled hardware start")
-            _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265)
+        if (forceSoftwareStart) {
+            val sw = _softwareDecoderForSize(mime) ?: throw IllegalStateException("no software decoder for $mime")
+            _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265, software = true)
         } else try {
             _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
         } catch (e: Exception) {
             // Strict hardware decoders reject configs beyond their real limits.
-            val sw = softwareDecoder() ?: throw e
+            val sw = _softwareDecoderForSize(mime) ?: throw e
+            forceSoftwareStart = true
+            softwareFallbackTried = true
             Log.w(TAG, "Hardware decoder failed, trying software fallback", e)
-            _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265)
+            _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265, software = true)
         }
         Log.i(TAG, "Video codec started: $mime ${videoWidth}x${videoHeight} ($codecName)")
     }
 
-    private fun _startDecoder(c: MediaCodec, format: MediaFormat, surface: Surface, h265: Boolean) {
+    private fun _startDecoder(c: MediaCodec, format: MediaFormat, surface: Surface, h265: Boolean,
+                              software: Boolean = false) {
         try {
             c.configure(format, surface, null, 0)
             c.start()
@@ -234,6 +290,7 @@ class VideoRenderer {
             throw e
         }
         codec = c
+        usingSoftwareCodec = software
         codecName = (if (h265) "H.265" else "H.264") + " (${c.name})"
         firstOutputSeen = false
         decoderStartNs = System.nanoTime()
@@ -248,10 +305,15 @@ class VideoRenderer {
         codec?.let {
             try {
                 it.stop()
-                it.release()
             } catch (_: Exception) {}
+            try { it.release() } catch (_: Exception) {}
         }
         codec = null
+        firstFrameQueued = false
+        firstOutputSeen = false
+        decoderStartNs = 0L
+        usingSoftwareCodec = false
+        _clearStartupFrames()
     }
 
     private fun drainOutput() {
@@ -261,6 +323,7 @@ class VideoRenderer {
             val idx = c.dequeueOutputBuffer(info, 0)
             if (idx < 0) break
             firstOutputSeen = true
+            _clearStartupFrames()
             _recordOutputFrameTime()
             if (scheduledOutputBufferRelease) {
                 // schedule frame at VSYNC matching its NTP presentation time
@@ -315,17 +378,34 @@ class VideoRenderer {
      * its first frame and retry once with a software decoder when it does not.
      */
     private fun _checkStalledStart() {
-        if (firstOutputSeen || decoderStartNs == 0L || softwareFallbackTried) return
+        if (codec == null || !firstFrameQueued || firstOutputSeen || decoderStartNs == 0L
+            || softwareFallbackTried || usingSoftwareCodec) return
         if (System.nanoTime() - decoderStartNs < OUTPUT_STALL_TIMEOUT_NS) return
         softwareFallbackTried = true
-        Log.w(
-            TAG,
-            "Decoder $codecName produced no output within ${OUTPUT_STALL_TIMEOUT_NS / 1_000_000}ms; " +
-                "retrying with a software decoder"
-        )
+        val mime = if (currentH265) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
+        // Never destroy the live decoder unless software startup can be fed a complete cached
+        // sequence. Some senders will not send another keyframe until they reconnect.
+        val requiredFlags = if (currentH265) 15 else 11
+        if (startupFrames.isEmpty() || startupCaptureOverflow
+            || startupNalFlags and requiredFlags != requiredFlags || _softwareDecoderForSize(mime) == null) {
+            _clearStartupFrames()
+            Log.w(TAG, "Decoder $codecName stalled; no bounded startup replay/software decoder available. Reconnect required")
+            return
+        }
+        val replay = startupFrames.toList()
+        Log.w(TAG, "Decoder $codecName stalled; retrying software with ${replay.size} cached startup packets")
         forceSoftwareStart = true
-        // The next start waits for a keyframe, exactly like any other codec reset.
+        val h265 = currentH265
         stopCodec()
+        // Rebuild now, rather than waiting at feedFrame's keyframe gate. Retain the software
+        // decision even if startup or a subsequent codec reset fails.
+        startCodec(h265)
+        for (frame in replay) {
+            if (!_feedToCodec(frame.data, frame.ntpTimeNs)) {
+                throw IllegalStateException("Software startup replay input queue full")
+            }
+            drainOutput()
+        }
     }
 
     private fun _resetStartWatchdog() {
@@ -333,6 +413,7 @@ class VideoRenderer {
         decoderStartNs = 0L
         softwareFallbackTried = false
         forceSoftwareStart = false
+        _clearStartupFrames()
     }
 
     private fun _recordOutputFrameTime() {
@@ -367,6 +448,8 @@ class VideoRenderer {
         private const val FEED_WAIT_US = 20_000L
         /** How long a started decoder may produce no output before the software retry. */
         private const val OUTPUT_STALL_TIMEOUT_NS = 3_000_000_000L
+        private const val MAX_STARTUP_BYTES = 8 * 1024 * 1024
+        private const val MAX_STARTUP_FRAMES = 256
         private const val FEED_RETRIES = 10
         private const val FIRST_FEED_RETRIES = 50
 
