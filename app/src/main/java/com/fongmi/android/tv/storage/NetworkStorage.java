@@ -181,7 +181,9 @@ public class NetworkStorage {
             String share = getShare();
             // Never render a bare "smb://" for incomplete rows (empty host/share).
             if (TextUtils.isEmpty(getHost()) && TextUtils.isEmpty(share)) return "";
-            return "smb://" + getHost() + (TextUtils.isEmpty(share) ? "" : "/" + share);
+            // A non-default port is part of the endpoint: without it the row cannot be verified.
+            String authority = getHost() + (port > 0 && port != 445 ? ":" + port : "");
+            return "smb://" + authority + (TextUtils.isEmpty(share) ? "" : "/" + share);
         }
         return webDavBaseUrl();
     }

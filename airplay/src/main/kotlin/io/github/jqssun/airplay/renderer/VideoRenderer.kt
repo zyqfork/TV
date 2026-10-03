@@ -16,6 +16,14 @@ class VideoRenderer {
     private var videoWidth = 0
     private var videoHeight = 0
     private var firstFrameQueued = false
+    /** Set once the current codec instance produced an output buffer. */
+    private var firstOutputSeen = false
+    /** When the current codec instance started, for the stalled-start watchdog. */
+    private var decoderStartNs = 0L
+    /** One software retry per resolution/session; a second stall must not restart forever. */
+    private var softwareFallbackTried = false
+    /** Set by the stalled-start watchdog so the next codec start goes straight to software. */
+    private var forceSoftwareStart = false
 
     // stats
     @Volatile var fps = 0; private set
@@ -45,6 +53,8 @@ class VideoRenderer {
     private var _wallBaseNs = 0L
 
     fun setResolution(w: Int, h: Int) {
+        // New dimensions re-open the decoder decision, including the stalled-start fallback.
+        if (w != videoWidth || h != videoHeight) _resetStartWatchdog()
         videoWidth = w
         videoHeight = h
         pipeline.setVideoSize(w, h)
@@ -106,6 +116,7 @@ class VideoRenderer {
                 if (codec == null) startCodec(isH265)
                 _feedToCodec(data, ntpTimeNs)
                 drainOutput()
+                _checkStalledStart()
             } catch (e: Exception) {
                 Log.w(TAG, "Codec error, resetting", e)
                 stopCodec()
@@ -196,7 +207,14 @@ class VideoRenderer {
         // Let Android try its default decoder (normally hardware) at the requested dimensions.
         // Height alone does not establish a hardware limit; query software only after an actual
         // configure/start failure, not preemptively for portrait or >2160-high streams.
-        try {
+        val forcedSoftware = forceSoftwareStart
+        forceSoftwareStart = false
+        if (forcedSoftware) {
+            // The previous codec accepted configure/start but never emitted a buffer.
+            val sw = softwareDecoder() ?: throw IllegalStateException("no software decoder for $mime")
+            Log.w(TAG, "Starting software decoder ${sw.name} after a stalled hardware start")
+            _startDecoder(MediaCodec.createByCodecName(sw.name), format, s, h265)
+        } else try {
             _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
         } catch (e: Exception) {
             // Strict hardware decoders reject configs beyond their real limits.
@@ -217,6 +235,8 @@ class VideoRenderer {
         }
         codec = c
         codecName = (if (h265) "H.265" else "H.264") + " (${c.name})"
+        firstOutputSeen = false
+        decoderStartNs = System.nanoTime()
     }
 
     private fun stopCodec() {
@@ -240,6 +260,7 @@ class VideoRenderer {
         while (true) {
             val idx = c.dequeueOutputBuffer(info, 0)
             if (idx < 0) break
+            firstOutputSeen = true
             _recordOutputFrameTime()
             if (scheduledOutputBufferRelease) {
                 // schedule frame at VSYNC matching its NTP presentation time
@@ -261,6 +282,7 @@ class VideoRenderer {
         displaySurface = null
         pipeline.setDisplaySurface(null)
         firstFrameQueued = false
+        _resetStartWatchdog()
         currentH265 = false
         videoWidth = 0
         videoHeight = 0
@@ -275,6 +297,7 @@ class VideoRenderer {
         pipeline.release()
         displaySurface = null
         firstFrameQueued = false
+        _resetStartWatchdog()
         currentH265 = false
         videoWidth = 0
         videoHeight = 0
@@ -283,6 +306,33 @@ class VideoRenderer {
         _framesThisSec = 0; _bytesThisSec = 0
         _frameIntervalIdx = 0; _frameIntervalCount = 0; _lastOutputFrameNs = 0L
         _ptsBaseUs = Long.MIN_VALUE; _wallBaseNs = 0L
+    }
+
+    /**
+     * Some vendor decoders accept configure/start for frames beyond their real limits and then
+     * never emit a buffer: the input queue fills forever and the mirror stays black. A
+     * configure/start exception cannot catch that, so give the codec a bounded window to produce
+     * its first frame and retry once with a software decoder when it does not.
+     */
+    private fun _checkStalledStart() {
+        if (firstOutputSeen || decoderStartNs == 0L || softwareFallbackTried) return
+        if (System.nanoTime() - decoderStartNs < OUTPUT_STALL_TIMEOUT_NS) return
+        softwareFallbackTried = true
+        Log.w(
+            TAG,
+            "Decoder $codecName produced no output within ${OUTPUT_STALL_TIMEOUT_NS / 1_000_000}ms; " +
+                "retrying with a software decoder"
+        )
+        forceSoftwareStart = true
+        // The next start waits for a keyframe, exactly like any other codec reset.
+        stopCodec()
+    }
+
+    private fun _resetStartWatchdog() {
+        firstOutputSeen = false
+        decoderStartNs = 0L
+        softwareFallbackTried = false
+        forceSoftwareStart = false
     }
 
     private fun _recordOutputFrameTime() {
@@ -315,6 +365,8 @@ class VideoRenderer {
         private const val TAG = "VideoRenderer"
         private const val BENCH_TAG = "BENCHMARK"
         private const val FEED_WAIT_US = 20_000L
+        /** How long a started decoder may produce no output before the software retry. */
+        private const val OUTPUT_STALL_TIMEOUT_NS = 3_000_000_000L
         private const val FEED_RETRIES = 10
         private const val FIRST_FEED_RETRIES = 50
 

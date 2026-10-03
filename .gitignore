@@ -13,3 +13,9 @@ __pycache__
 .workbuddy
 .pi
 *.apk
+# Local transport bundles / reference copies (never source)
+verify-*.bundle
+other/upstream-subtitle/
+other/tools/webdav_root/
+other/tools/tvboxosc-*
+NUL

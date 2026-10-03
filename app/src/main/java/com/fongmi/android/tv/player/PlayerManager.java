@@ -84,6 +84,8 @@ public class PlayerManager implements ParseCallback {
     private boolean initTextTrack;
     private boolean subtitlesDisabled;
     private boolean mpvFallbackUsed;
+    /** One MPV container/manifest retry per URL before the EXO fallback is considered. */
+    private boolean parseRetryUsed;
     private int retry;
     private int sourceRetry;
     private int firstFrameExtendCount;
@@ -769,6 +771,18 @@ public class PlayerManager implements ParseCallback {
         }
     }
 
+    /** MPV reports an unopenable container/manifest as a parse error; retry it once before switching. */
+    private boolean isMpvParseError(PlaybackException e) {
+        if (engine == null || engine.getType() != PlayerEngine.Type.MPV) return false;
+        return switch (e.errorCode) {
+            case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+                 PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+                 PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+                 PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> true;
+            default -> false;
+        };
+    }
+
     private void handleSourceRetry(PlaybackException e) {
         if (++sourceRetry > MAX_SOURCE_RETRY) {
             App.removeCallbacks(sourceRetryRunnable);
@@ -908,6 +922,7 @@ public class PlayerManager implements ParseCallback {
         if (java.util.Objects.equals(prevUrl, nextUrl)) return;
         sourceRetry = 0;
         retry = 0;
+        parseRetryUsed = false;
         firstFrameDeadlineMs = 0;
         firstFrameExtendCount = 0;
     }
@@ -1120,7 +1135,18 @@ public class PlayerManager implements ParseCallback {
                 case RECOVERED -> setDanmakus(spec.getDanmakus());
                 case FATAL -> {
                     if (liveMode && e.errorCode >= 2000 && e.errorCode < 3000) LineQualityStore.recordFailure(spec.getUrl());
-                    if (!fallbackMpvToExo()) handleFatalError(e);
+                    // libmpv reports a stream it cannot open as a container/manifest parse error, which
+                    // also covers transient stubs and not-yet-ready live origins. Retry the item once on
+                    // the same engine; the EXO fallback below still runs when that retry fails, so a
+                    // source that genuinely needs Media3 is not stranded on MPV.
+                    if (isMpvParseError(e) && !parseRetryUsed) {
+                        parseRetryUsed = true;
+                        Notify.show(R.string.error_play_retry);
+                        App.removeCallbacks(sourceRetryRunnable);
+                        App.post(sourceRetryRunnable, PlaybackRecoveryPolicy.retryDelayMs(0));
+                    } else if (!fallbackMpvToExo()) {
+                        handleFatalError(e);
+                    }
                 }
             }
         }

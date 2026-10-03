@@ -133,6 +133,31 @@ fun runCase(height: Int, fail: String = "", queryFails: Boolean = false,
  if (expectFailure) check(failure?.message == "$fail failed") { "original failure lost" }
  renderer.release()
 }
+fun invoke(renderer: VideoRenderer, name: String, vararg args: Any?) {
+ val types = args.map { if (it is Boolean) Boolean::class.javaPrimitiveType!! else it!!::class.java }.toTypedArray()
+ val method = VideoRenderer::class.java.getDeclaredMethod(name, *types)
+ method.isAccessible = true
+ method.invoke(renderer, *args)
+}
+
+/** A codec that accepts configure/start and never emits a buffer must fall back once, then stop. */
+fun runStallCase() {
+ Fake.reset()
+ val renderer = VideoRenderer(); renderer.setResolution(1080, 2340)
+ invoke(renderer, "startCodec", true)
+ check(Fake.attempts == listOf("hardware")) { "stall: first start ${Fake.attempts}" }
+ Thread.sleep(3_100)
+ invoke(renderer, "_checkStalledStart")
+ check(Fake.releases.contains("hardware")) { "stall: stalled codec not released" }
+ invoke(renderer, "startCodec", true)
+ check(Fake.attempts == listOf("hardware", "c2.android.test")) { "stall: software retry ${Fake.attempts}" }
+ Thread.sleep(3_100)
+ invoke(renderer, "_checkStalledStart")
+ val codec = VideoRenderer::class.java.getDeclaredField("codec").apply { isAccessible = true }.get(renderer)
+ check(codec != null) { "stall: second stall must not restart the codec again" }
+ renderer.release()
+}
+
 fun main() {
  // Tall input and even a broken software codec list must not preempt hardware.
  for (h in listOf(1080, 2160, 2340, 3840)) runCase(h, queryFails = true)
@@ -144,7 +169,8 @@ fun main() {
  runCase(2340, fail = "configure", sizeSupported = false, expectFailure = true)
  android.os.Build.VERSION.SDK_INT = 28
  runCase(2340, fail = "configure", expectFallback = true)
- println("PASS production AirPlay startup: hardware first at all heights, lazy software fallback, failed codec released")
+ runStallCase()
+ println("PASS production AirPlay startup: hardware first at all heights, lazy software fallback, failed codec released, stalled start retried once")
 }
 """,
 }

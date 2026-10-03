@@ -273,7 +273,7 @@
         <item>Hardware</item>
     </string-array>
 
-    <string-array name="select_engine">
+    <string-array name="select_engine" translatable="false">
         <item>EXO</item>
         <item>MPV</item>
     </string-array>
@@ -288,7 +288,7 @@
         <item>Low latency</item>
     </string-array>
 
-    <string-array name="select_render">
+    <string-array name="select_render" translatable="false">
         <item>Surface</item>
         <item>Texture</item>
     </string-array>
@@ -385,6 +385,10 @@
     <string name="network_storage_invalid">Please fill in required fields</string>
     <string name="network_storage_list_fail">Failed to list directory</string>
     <string name="network_storage_share_missing">Share not found. Showing available shares.</string>
+    <string name="network_storage_smb_share_missing">Share not found. Check the share name — leaving it empty only probes common names.</string>
+    <string name="network_storage_smb_auth_failed">Wrong username or password</string>
+    <string name="network_storage_smb_access_denied">Access denied</string>
+    <string name="network_storage_smb_unreachable">Cannot reach the SMB server. Check the address and port.</string>
     <string name="network_storage_share_optional">Share (optional, leave empty to list)</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>

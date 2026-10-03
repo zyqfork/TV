@@ -115,7 +115,13 @@ public class PlaySpec {
 
     public PlaySpec checkUa() {
         if (headers == null) headers = new HashMap<>();
-        if (headers.keySet().stream().noneMatch(HttpHeaders.USER_AGENT::equalsIgnoreCase)) headers.put(HttpHeaders.USER_AGENT, Setting.getUa().isEmpty() ? PlayerHelper.getDefaultUa() : Setting.getUa());
+        if (headers.keySet().stream().noneMatch(HttpHeaders.USER_AGENT::equalsIgnoreCase)) {
+            // Copy before writing: the map may be a caller-owned or read-only view. The WebDAV
+            // resolver hands out Collections.unmodifiableMap, and writing into it crashed playback
+            // with UnsupportedOperationException for every network-storage item.
+            headers = new HashMap<>(headers);
+            headers.put(HttpHeaders.USER_AGENT, Setting.getUa().isEmpty() ? PlayerHelper.getDefaultUa() : Setting.getUa());
+        }
         return this;
     }
 

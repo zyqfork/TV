@@ -11,6 +11,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -18,6 +20,8 @@ import okhttp3.OkHttpClient;
 public class WebDavClientHelper {
 
     private static final int MAX_ENTRIES = 2000;
+    /** One client per endpoint: a fresh OkHttpClient per listing leaked a connection pool each time. */
+    private static final Map<String, OkHttpClient> CLIENTS = new ConcurrentHashMap<>();
 
     private final NetworkStorage storage;
 
@@ -76,7 +80,16 @@ public class WebDavClientHelper {
             throw new IOException("HTTP Basic authentication requires explicit insecure-auth permission");
         }
         URI origin = URI.create(storage.webDavBaseUrl());
-        OkHttpClient http = new OkHttpClient.Builder()
+        OkHttpSardine sardine = new OkHttpSardine(clientFor(origin));
+        if (storage.hasCredentials()) {
+            sardine.setCredentials(storage.getUsername(), storage.getPassword());
+        }
+        return sardine;
+    }
+
+    private static OkHttpClient clientFor(URI origin) {
+        String key = origin.getScheme() + "://" + origin.getHost() + ":" + effectivePort(origin);
+        return CLIENTS.computeIfAbsent(key, ignored -> new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
                 .callTimeout(30, TimeUnit.SECONDS)
@@ -85,12 +98,7 @@ public class WebDavClientHelper {
                     if (!sameOrigin(origin, target)) throw new IOException("Cross-origin WebDAV redirect blocked");
                     return chain.proceed(chain.request());
                 })
-                .build();
-        OkHttpSardine sardine = new OkHttpSardine(http);
-        if (storage.hasCredentials()) {
-            sardine.setCredentials(storage.getUsername(), storage.getPassword());
-        }
-        return sardine;
+                .build());
     }
 
     private static boolean sameOrigin(URI expected, URI actual) {

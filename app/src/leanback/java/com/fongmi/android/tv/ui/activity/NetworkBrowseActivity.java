@@ -33,6 +33,7 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
     private NetworkEntryAdapter mAdapter;
     private NetworkStorage mStorage;
     private String mPath = "";
+    private int loadGeneration;
 
     public static void start(Activity activity, String storageId) {
         Intent intent = new Intent(activity, NetworkBrowseActivity.class);
@@ -65,6 +66,9 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
         mBinding.progressLayout.showProgress();
         NetworkStorage storage = mStorage;
         String requestPath = mPath;
+        // Navigating into another folder while a listing is still in flight must not let the
+        // slower response overwrite the newer directory.
+        int generation = ++loadGeneration;
         Task.execute(() -> {
             try {
                 List<NetworkEntry> entries;
@@ -75,14 +79,14 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
                 }
                 List<NetworkEntry> result = entries;
                 App.post(() -> {
-                    if (isFinishing()) return;
+                    if (isFinishing() || generation != loadGeneration) return;
                     mAdapter.setItems(result);
                     mBinding.recycler.setSelectedPosition(0);
                     mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
                 });
             } catch (Exception e) {
                 App.post(() -> {
-                    if (isFinishing()) return;
+                    if (isFinishing() || generation != loadGeneration) return;
                     mAdapter.setItems(null);
                     mBinding.progressLayout.showContent(true, 0);
                     Notify.show(Notify.getError(R.string.network_storage_list_fail, e));

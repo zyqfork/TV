@@ -16,6 +16,8 @@ import com.hierynomus.smbj.session.Session;
 import com.hierynomus.smbj.share.DiskShare;
 import com.hierynomus.smbj.share.File;
 import com.hierynomus.smbj.share.Share;
+import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.utils.ResUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -77,10 +79,12 @@ public class SmbClientHelper implements AutoCloseable {
                 ? new boolean[]{true, false} : new boolean[]{true};
         for (boolean encrypt : modes) {
             client = newClient(encrypt);
+            boolean connected = false;
             try {
                 Log.i(TAG, "opening SMB session encrypt=" + encrypt);
                 if (storage.getPort() > 0) connection = client.connect(storage.getHost(), storage.getPort());
                 else connection = client.connect(storage.getHost());
+                connected = true;
                 session = connection.authenticate(buildAuth());
                 Log.i(TAG, "session ok encrypt=" + encrypt);
                 return;
@@ -88,6 +92,10 @@ public class SmbClientHelper implements AutoCloseable {
                 last = e;
                 Log.w(TAG, "SMB session failed encrypt=" + encrypt + " type=" + e.getClass().getSimpleName());
                 close();
+                // An unreachable host fails identically with and without encryption, so the
+                // downgrade retry only doubles the wait. Encryption negotiation problems, by
+                // contrast, happen after the TCP connection is up.
+                if (!connected) break;
             }
         }
         throw new IOException(rootMessage(last), last);
@@ -289,13 +297,22 @@ public class SmbClientHelper implements AutoCloseable {
         }
         String text = msg == null ? "" : msg;
         if (text.toUpperCase(Locale.US).contains("STATUS_BAD_NETWORK_NAME") || text.contains("0xc00000cc")) {
-            return "共享不存在，请检查共享名或留空后自动列出";
+            return ResUtil.getString(R.string.network_storage_smb_share_missing);
         }
         if (text.toUpperCase(Locale.US).contains("STATUS_LOGON_FAILURE") || text.contains("0xc000006d")) {
-            return "账号或密码错误";
+            return ResUtil.getString(R.string.network_storage_smb_auth_failed);
         }
         if (text.toUpperCase(Locale.US).contains("STATUS_ACCESS_DENIED") || text.contains("0xc0000022")) {
-            return "没有访问权限";
+            return ResUtil.getString(R.string.network_storage_smb_access_denied);
+        }
+        // A dead host surfaces as a raw transport exception (usually EOFException). Printing the
+        // class name tells the user nothing, so map it to something actionable.
+        if (cur instanceof java.io.IOException
+                || text.toUpperCase(Locale.US).contains("TRANSPORT")
+                || text.toUpperCase(Locale.US).contains("CONNECTION")
+                || text.toUpperCase(Locale.US).contains("TIMEOUT")
+                || text.toUpperCase(Locale.US).contains("REFUSED")) {
+            return ResUtil.getString(R.string.network_storage_smb_unreachable);
         }
         return cur.getClass().getSimpleName();
     }

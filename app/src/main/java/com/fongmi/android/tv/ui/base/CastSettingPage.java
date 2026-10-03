@@ -27,6 +27,23 @@ public final class CastSettingPage {
         toolbar.setVisibility(View.VISIBLE);
         activity.setSupportActionBar(toolbar);
         activity.setTitle(titleRes);
+        allowSingleTapRows(toolbar.getRootView());
+    }
+
+    /**
+     * The shared layouts mark every row {@code focusableInTouchMode} for the remote. On a touch
+     * screen that makes {@code View.onTouchEvent} spend the first tap on {@code requestFocusFromTouch()}
+     * and swallow the click, so the phone needed two taps per row — and because the highlight is
+     * suppressed the first tap looked like it did nothing at all. Clearing it for the phone only
+     * keeps the rows clickable on the first tap and leaves the TV behaviour untouched.
+     */
+    private static void allowSingleTapRows(View view) {
+        if (view == null) return;
+        view.setFocusableInTouchMode(false);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) allowSingleTapRows(group.getChildAt(i));
+        }
     }
 
     /**
