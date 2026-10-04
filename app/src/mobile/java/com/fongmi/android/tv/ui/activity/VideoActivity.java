@@ -428,6 +428,20 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         }
     }
 
+    /**
+     * In picture-in-picture the window is collapsed to the video's own size and the container fills
+     * it, so the container's black would be the entire window — the PiP panel would read as a black
+     * cut-out with nothing in common with the app around it. Drop the black there and let the page
+     * backdrop show through the letterbox instead. Fullscreen keeps the black, which is what
+     * separates the picture from the page behind it.
+     *
+     * Kept separate from the layout swap, which is skipped while fullscreen: the colour has to
+     * track the PiP state on every transition or the wrong one stays latched.
+     */
+    private void setVideoBackground(boolean isInPictureInPictureMode) {
+        mBinding.video.setBackgroundColor(isInPictureInPictureMode ? Color.TRANSPARENT : Color.BLACK);
+    }
+
     private void setAnimator() {
         mAnimator = new ValueAnimator();
         mAnimator.setInterpolator(new DecelerateInterpolator());
@@ -1636,6 +1650,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         if (!isFullscreen()) setVideoView(isInPictureInPictureMode);
+        setVideoBackground(isInPictureInPictureMode);
         if (isInPictureInPictureMode) {
             hideControl();
             hideDanmaku();
