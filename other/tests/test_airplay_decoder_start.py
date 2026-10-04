@@ -1,6 +1,6 @@
 """Compile the production AirPlay VideoRenderer with minimal Android/pipeline test doubles.
 
-Tests startup decisions and feedFrame recovery/replay, not hardware pixels or a real AirPlay session.
+Tests startup, feedFrame recovery, cancellation and UI control responsiveness with doubles, not real pixels/sessions.
 Usage: python other/tests/test_airplay_decoder_start.py [--kotlin-lib-dir GRADLE_HOME/lib]
 Without that flag a kotlinc/java installation is required. No Android SDK required.
 """
@@ -25,10 +25,11 @@ object Log {
 import android.view.Surface
 class VideoPipeline {
  val inputSurface: Surface? = Surface()
+ var display: Surface? = null
  fun start() {}
  fun setVideoSize(w: Int, h: Int) {}
- fun setDisplaySurface(surface: Surface?) {}
- fun release() {}
+ fun setDisplaySurface(surface: Surface?) { display = surface }
+ fun release() { display = null }
 }
 """,
     "Media.kt": """package android.media
@@ -44,6 +45,11 @@ object Fake {
  var softwareSupportsSize = true
  var softwareFail = ""
  var inputError = ""
+ var slowSoftware = false
+ var inputWaits = 0
+ var inputEntered: java.util.concurrent.CountDownLatch? = null
+ var holdInput: java.util.concurrent.CountDownLatch? = null
+ val codecThreads = mutableSetOf<String>()
  val blockedInputs = mutableSetOf<String>()
  val outputCodecs = mutableSetOf<String>()
  data class Packet(val codec: String, val data: ByteArray, val pts: Long)
@@ -52,6 +58,7 @@ object Fake {
   attempts.clear(); releases.clear(); fail = ""; queries = 0
   queryFails = false; hasSoftware = true; softwareSupportsSize = true
   softwareFail = ""; inputError = ""; blockedInputs.clear(); outputCodecs.clear(); packets.clear()
+  slowSoftware = false; inputWaits = 0; inputEntered = null; holdInput = null; codecThreads.clear()
  }
 }
 class MediaFormat {
@@ -79,6 +86,7 @@ class MediaCodec(val name: String) {
  private var lastPts = 0L
  class BufferInfo { var presentationTimeUs = 0L }
  fun configure(format: MediaFormat, surface: Surface, crypto: Any?, flags: Int) {
+  Fake.codecThreads.add(Thread.currentThread().name)
   if ((name == "hardware" && Fake.fail == "configure") ||
       (name != "hardware" && Fake.softwareFail == "configure")) error("configure failed")
  }
@@ -86,9 +94,19 @@ class MediaCodec(val name: String) {
   if ((name == "hardware" && Fake.fail == "start") ||
       (name != "hardware" && Fake.softwareFail == "start")) error("start failed")
  }
- fun stop() {}
- fun release() { Fake.releases.add(name) }
+ fun stop() { Fake.codecThreads.add(Thread.currentThread().name) }
+ fun release() { Fake.codecThreads.add(Thread.currentThread().name); Fake.releases.add(name) }
  fun dequeueInputBuffer(timeout: Long): Int {
+  Fake.codecThreads.add(Thread.currentThread().name)
+  if (name != "hardware") {
+   Fake.inputEntered?.countDown()
+   Fake.holdInput?.await(10, java.util.concurrent.TimeUnit.SECONDS)
+   if (Fake.slowSoftware) {
+    Thread.sleep(timeout / 1000)
+    Fake.inputWaits++
+    if (Fake.inputWaits % 5 != 0) return -1
+   }
+  }
   if (Fake.inputError == name) error("input failed")
   return if (name in Fake.blockedInputs) -1 else 0
  }
@@ -138,6 +156,19 @@ class MediaCodecList(kind: Int) {
     "Probe.kt": """import android.media.Fake
 import io.github.jqssun.airplay.renderer.VideoRenderer
 import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import android.view.Surface
+fun <T> worker(r: VideoRenderer, block: () -> T): T {
+ val executor = VideoRenderer::class.java.getDeclaredField("decoderExecutor")
+  .apply { isAccessible = true }.get(r) as ExecutorService
+ try { return executor.submit(Callable { block() }).get(10, TimeUnit.SECONDS) }
+ catch (e: ExecutionException) { throw e.cause ?: e }
+}
+fun close(r: VideoRenderer) { r.release(); worker(r) {} }
 fun runCase(height: Int, fail: String = "", queryFails: Boolean = false,
             hasSoftware: Boolean = true, sizeSupported: Boolean = true,
             expectFallback: Boolean = false, expectFailure: Boolean = false,
@@ -148,25 +179,27 @@ fun runCase(height: Int, fail: String = "", queryFails: Boolean = false,
  val method = VideoRenderer::class.java.getDeclaredMethod("startCodec", Boolean::class.javaPrimitiveType)
  method.isAccessible = true
  var failure: Throwable? = null
- try { method.invoke(renderer, hevc) } catch (e: InvocationTargetException) { failure = e.targetException }
+ try { worker(renderer) { method.invoke(renderer, hevc) } }
+ catch (e: InvocationTargetException) { failure = e.targetException }
  check((failure != null) == expectFailure) { "unexpected failure $height $fail: $failure" }
  val expected = if (expectFallback) listOf("hardware", "c2.android.test") else listOf("hardware")
  check(Fake.attempts == expected) { "decoder order ${Fake.attempts}, expected $expected" }
  check(if (fail.isEmpty()) Fake.queries == 0 else Fake.queries == 1) { "software query not lazy" }
  if (fail.isNotEmpty()) check(Fake.releases.contains("hardware")) { "failed hardware leaked" }
  if (expectFailure) check(failure?.message == "$fail failed") { "original failure lost" }
- renderer.release()
+ close(renderer)
 }
 fun invoke(renderer: VideoRenderer, name: String, vararg args: Any?) {
  val types = args.map { if (it is Boolean) Boolean::class.javaPrimitiveType!! else it!!::class.java }.toTypedArray()
  val method = VideoRenderer::class.java.getDeclaredMethod(name, *types)
  method.isAccessible = true
- method.invoke(renderer, *args)
+ worker(renderer) { method.invoke(renderer, *args) }
 }
 
-fun field(r: VideoRenderer, name: String): Any? =
+fun field(r: VideoRenderer, name: String): Any? = worker(r) {
  VideoRenderer::class.java.getDeclaredField(name).apply { isAccessible = true }.get(r)
-fun expire(r: VideoRenderer) {
+}
+fun expire(r: VideoRenderer) = worker(r) {
  VideoRenderer::class.java.getDeclaredField("decoderStartNs").apply { isAccessible = true }
   .setLong(r, System.nanoTime() - 4_000_000_000L)
 }
@@ -208,7 +241,8 @@ fun runStallCase(h265: Boolean) {
  r.resetSession(); check(field(r, "startupBytes") == 0)
  r.setResolution(1080, 2340); r.feedFrame(key(h265), 9_000, h265)
  check(Fake.attempts.last() == "hardware")
- r.release()
+ check(Fake.codecThreads == setOf("AirPlayVideoDecoder"))
+ close(r)
 }
 
 fun runOutputCase() {
@@ -217,12 +251,12 @@ fun runOutputCase() {
  check(field(r, "firstOutputSeen") == true && field(r, "startupBytes") == 0)
  expire(r); r.feedFrame(inter(true), 5_000, true)
  check(Fake.attempts == listOf("hardware") && Fake.queries == 0)
- r.release()
+ close(r)
  Fake.reset(); Fake.outputCodecs.add("c2.android.test")
  val sw = VideoRenderer(); sw.setResolution(1080, 2340); bootstrap(sw, true)
  expire(sw); sw.feedFrame(inter(true), 5_000, true)
  check(field(sw, "firstOutputSeen") == true && field(sw, "startupBytes") == 0)
- sw.release()
+ close(sw)
 }
 
 fun runResolutionCase() {
@@ -230,18 +264,19 @@ fun runResolutionCase() {
  val r = VideoRenderer(); r.setResolution(1080, 2340); bootstrap(r, true)
  val old = field(r, "codec")
  r.setResolution(1080, 2400)
- check(field(r, "codec") === old && (field(r, "decoderStartNs") as Long) > 0L)
+ check(old != null && field(r, "codec") == null)
+ check(field(r, "decoderStartNs") == 0L)
  check(field(r, "startupBytes") == 0)
  val expected = bootstrap(r, true).toMutableList(); expected.add(inter(true))
  expire(r); r.feedFrame(inter(true), 5_000, true)
- check(Fake.attempts == listOf("hardware", "c2.android.test"))
+ check(Fake.attempts == listOf("hardware", "hardware", "c2.android.test"))
  val replay = Fake.packets.filter { it.codec == "c2.android.test" }
  check(replay.size == expected.size) { "old-resolution startup leaked into replay" }
  r.setResolution(1080, 2500)
  Fake.inputError = "c2.android.test"; r.feedFrame(inter(true), 6_000, true)
  Fake.inputError = ""; r.feedFrame(key(true), 7_000, true)
  check(Fake.attempts.last() == "hardware") { "dimensions did not re-open hardware choice" }
- r.release()
+ close(r)
 }
 
 fun runUnavailableCase(queryFails: Boolean = false, hasSoftware: Boolean = true,
@@ -258,7 +293,7 @@ fun runUnavailableCase(queryFails: Boolean = false, hasSoftware: Boolean = true,
  val queries = Fake.queries
  repeat(10) { r.feedFrame(inter(true), 7_000, true) }
  check(Fake.queries == queries) { "unavailable recovery retried forever" }
- r.release()
+ close(r)
 }
 
 fun runIncompleteReplayCase() {
@@ -269,7 +304,7 @@ fun runIncompleteReplayCase() {
  expire(r); r.feedFrame(inter(true), 2_000, true)
  check(Fake.attempts == listOf("hardware") && Fake.releases.isEmpty())
  check(Fake.queries == 0 && field(r, "startupBytes") == 0)
- r.release()
+ close(r)
 }
 
 fun runConfigureFallbackResetCase() {
@@ -279,7 +314,7 @@ fun runConfigureFallbackResetCase() {
  Fake.inputError = "c2.android.test"; r.feedFrame(inter(true), 5_000, true)
  Fake.inputError = ""; r.feedFrame(key(true), 6_000, true)
  check(Fake.attempts == listOf("hardware", "c2.android.test", "c2.android.test"))
- r.release()
+ close(r)
 }
 
 fun runSoftwareFailureCase(fail: String = "", blocked: Boolean = false) {
@@ -295,19 +330,89 @@ fun runSoftwareFailureCase(fail: String = "", blocked: Boolean = false) {
  // A codec-type change opens a new default-decoder decision.
  r.feedFrame(key(false), 7_000, false)
  check(Fake.attempts.last() == "hardware")
- r.release()
+ close(r)
 }
 
-fun runInputWaitCase() {
- Fake.reset(); Fake.blockedInputs.add("hardware")
+fun runInputWaitCase(h265: Boolean) {
+ Fake.reset(); Fake.blockedInputs.add("hardware"); Fake.outputCodecs.add("c2.android.test")
+ val r = VideoRenderer(); r.setResolution(1080, 2340)
+ invoke(r, "startCodec", h265)
+ // No source input: neither elapsed wall time nor a codec start alone triggers fallback.
+ check(field(r, "decoderStartNs") == 0L)
+ invoke(r, "_checkStalledStart")
+ check(Fake.attempts == listOf("hardware") && Fake.queries == 0)
+ // Complete source input exists, but hardware never offers an input slot.
+ val expected = bootstrap(r, h265).toMutableList(); expected.add(inter(h265))
+ check(field(r, "firstFrameQueued") == false)
+ expire(r); r.feedFrame(inter(h265), 5_000, h265)
+ check(Fake.attempts == listOf("hardware", "c2.android.test")) { "no recovery for unavailable input" }
+ val replay = Fake.packets.filter { it.codec == "c2.android.test" }
+ check(replay.size == expected.size)
+ replay.zip(expected).forEach { (packet, bytes) -> check(packet.data.contentEquals(bytes)) }
+ check(field(r, "firstOutputSeen") == true)
+ close(r)
+}
+
+fun runAsyncControlsCase(release: Boolean) {
+ Fake.reset()
  val r = VideoRenderer(); r.setResolution(1080, 2340); bootstrap(r, true)
- expire(r); r.feedFrame(inter(true), 5_000, true)
- check(Fake.attempts == listOf("hardware")) { "watchdog classified an unfed decoder as stalled" }
- Fake.blockedInputs.clear(); r.feedFrame(inter(true), 6_000, true)
- check((field(r, "decoderStartNs") as Long) > System.nanoTime() - 1_000_000_000)
- expire(r); r.feedFrame(inter(true), 7_000, true)
- check(Fake.attempts == listOf("hardware", "c2.android.test"))
- r.release()
+ repeat(50) { r.feedFrame(inter(true), (it + 5) * 1000L, true) }
+ expire(r)
+ val entered = CountDownLatch(1); val unblock = CountDownLatch(1)
+ Fake.inputEntered = entered; Fake.holdInput = unblock
+ val producer = Thread { r.feedFrame(inter(true), 60_000, true) }
+ producer.start(); check(entered.await(2, TimeUnit.SECONDS))
+ val waitingProducer = Thread { r.feedFrame(inter(true), 60_500, true) }
+ waitingProducer.start()
+ val gate = VideoRenderer::class.java.getDeclaredField("frameGate")
+  .apply { isAccessible = true }.get(r) as java.util.concurrent.Semaphore
+ val gateDeadline = System.nanoTime() + 1_000_000_000L
+ while (gate.queueLength == 0 && System.nanoTime() < gateDeadline) Thread.sleep(1)
+ check(gate.queueLength > 0) { "second receive callback bypassed one-frame backpressure" }
+ try {
+  val surface = Surface(); val stale = Surface()
+  val begin = System.nanoTime()
+  r.setResolution(1080, 2340) // repeated size reports also must not wait for decode
+  r.setSurface(surface); r.clearSurface(stale)
+  val desired = VideoRenderer::class.java.getDeclaredField("displaySurface")
+   .apply { isAccessible = true }.get(r)
+  check(desired === surface) { "stale surface clear detached replacement" }
+  r.clearSurface(surface)
+  if (release) r.release() else r.resetSession()
+  val controlMs = (System.nanoTime() - begin) / 1_000_000
+  check(controlMs < 200) { "UI controls waited for codec: ${controlMs}ms" }
+  // The receive callback also leaves promptly on cancellation, even before the codec returns.
+  producer.join(500); waitingProducer.join(500)
+  check(!producer.isAlive && !waitingProducer.isAlive) { "native receive callback held through cancellation" }
+  r.feedFrame(key(true), 61_000, true) // late input must not revive the ended session
+  println("PASS blocked replay controls: release=$release UI=${controlMs}ms")
+ } finally { unblock.countDown() }
+ worker(r) {}
+ check(field(r, "codec") == null && field(r, "startupBytes") == 0)
+ check(field(r, "frameCount") == 0L)
+ check(Fake.packets.none { it.codec == "c2.android.test" }) { "cancelled replay published input" }
+ // release is reusable: cleanup must not erase a replacement surface or a fresh session.
+ Fake.holdInput = null; Fake.inputEntered = null
+ val replacement = Surface(); r.setSurface(replacement)
+ r.setResolution(1080, 2340); bootstrap(r, true)
+ check(Fake.attempts.last() == "hardware")
+ val pipeline = field(r, "pipeline") as io.github.jqssun.airplay.renderer.VideoPipeline
+ check(pipeline.display === replacement) { "old cleanup erased new display" }
+ close(r)
+}
+
+fun runReplayBudgetCase() {
+ Fake.reset(); Fake.outputCodecs.add("c2.android.test")
+ val r = VideoRenderer(); r.setResolution(1080, 2340); bootstrap(r, true)
+ repeat(40) { r.feedFrame(inter(true), (it + 5) * 1000L, true) }
+ Fake.slowSoftware = true; expire(r)
+ val begin = System.nanoTime(); r.feedFrame(inter(true), 50_000, true)
+ val elapsedMs = (System.nanoTime() - begin) / 1_000_000
+ check(elapsedMs in 2700..4000) { "replay time not bounded: ${elapsedMs}ms" }
+ check(field(r, "codec") == null && field(r, "forceSoftwareStart") == true)
+ check(Fake.releases.contains("c2.android.test") && field(r, "startupBytes") == 0)
+ println("PASS replay time budget: ${elapsedMs}ms")
+ close(r)
 }
 
 fun main() {
@@ -321,8 +426,9 @@ fun main() {
  runCase(2340, fail = "configure", sizeSupported = false, expectFailure = true)
  android.os.Build.VERSION.SDK_INT = 28
  runCase(2340, fail = "configure", expectFallback = true)
+ android.os.Build.VERSION.SDK_INT = 32
  runStallCase(true); runStallCase(false)
- runOutputCase(); runResolutionCase(); runInputWaitCase()
+ runOutputCase(); runResolutionCase(); runInputWaitCase(true); runInputWaitCase(false)
  runIncompleteReplayCase(); runConfigureFallbackResetCase()
  runUnavailableCase(queryFails = true)
  runUnavailableCase(hasSoftware = false)
@@ -332,10 +438,20 @@ fun main() {
  runSoftwareFailureCase(fail = "configure")
  runSoftwareFailureCase(fail = "start")
  runSoftwareFailureCase(blocked = true)
- println("PASS production AirPlay: hardware first, bounded feedFrame startup replay, persistent software choice, resolution/session reset, output and failure guards")
+ runAsyncControlsCase(release = false); runAsyncControlsCase(release = true)
+ runReplayBudgetCase()
+ println("PASS production AirPlay: decoder worker, nonblocking UI controls, cancellation/late-frame isolation, first-input stall recovery, bounded replay and hardware-first policy")
 }
 """,
 }
+
+# Service callbacks run on native threads; late callbacks must not revive a released worker.
+service = (ROOT / "airplay/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt").read_text(encoding="utf-8")
+for flag in ("teardownRunning", "outputsReleased", "destroying"):
+    assert f"@Volatile private var {flag}" in service, flag
+for callback in ("onVideoData", "onVideoSize"):
+    body = service.split(f"override fun {callback}(", 1)[1].split("{", 1)[1]
+    assert body.lstrip().startswith("if (teardownRunning || outputsReleased || destroying) return"), callback
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--kotlin-lib-dir", type=Path)

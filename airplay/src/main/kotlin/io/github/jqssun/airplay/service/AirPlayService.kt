@@ -78,10 +78,10 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     private var wakeLock: PowerManager.WakeLock? = null
     private var foregroundStarted = false
     private val teardownScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var teardownRunning = false
-    private var outputsReleased = false
+    @Volatile private var teardownRunning = false
+    @Volatile private var outputsReleased = false
     private var pendingStart: Pair<String, Boolean>? = null
-    private var destroying = false
+    @Volatile private var destroying = false
 
     val videoRenderer = VideoRenderer()
     val audioRenderer = AudioRenderer()
@@ -661,6 +661,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     // RaopCallbackHandler (called from native threads)
 
     override fun onVideoData(data: ByteArray, ntpTimeNs: Long, isH265: Boolean) {
+        if (teardownRunning || outputsReleased || destroying) return
         videoRenderer.feedFrame(data, ntpTimeNs, isH265)
     }
 
@@ -707,6 +708,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     }
 
     override fun onVideoSize(srcW: Float, srcH: Float, w: Float, h: Float) {
+        if (teardownRunning || outputsReleased || destroying) return
         clearPin()
         if (w > 0 && h > 0) {
             _videoAspect.value = w / h
