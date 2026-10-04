@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.MotionEvent;
@@ -49,10 +50,12 @@ import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.InfoDialog;
@@ -167,6 +170,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
         mKeyDown = CustomKeyDown.create(this, mBinding.player);
+        // Playback pages skip the wallpaper layer (see PlaybackActivity.customWall()), so without
+        // this the page sits on the theme's window background instead of the user's colour — most
+        // visible in picture-in-picture, where the window is small enough that the backdrop is a
+        // large share of it. Matches the VOD detail page and the phone home.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         setPadding(mBinding.control.getRoot());
         setPadding(mBinding.recycler, true);
         mObserveUrl = this::onUrlObserved;
@@ -1090,6 +1098,10 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        // The container is match_parent and hard-coded black, so in the collapsed window it is the
+        // whole window — the panel would read as a black cut-out. Drop the black there and let the
+        // page backdrop through; keep it otherwise, where it backs the letterbox.
+        mBinding.video.setBackgroundColor(isInPictureInPictureMode ? Color.TRANSPARENT : Color.BLACK);
         if (isInPictureInPictureMode) {
             hideControl();
             hideInfo();
