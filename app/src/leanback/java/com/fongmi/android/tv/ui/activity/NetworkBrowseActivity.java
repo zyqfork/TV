@@ -121,18 +121,9 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
     }
 
     private static boolean isBadShareName(Throwable e) {
-        Throwable cur = e;
-        while (cur != null) {
-            String msg = cur.getMessage();
-            if (msg != null) {
-                String upper = msg.toUpperCase();
-                if (upper.contains("STATUS_BAD_NETWORK_NAME") || upper.contains("0xC00000CC") || msg.contains("共享不存在")) {
-                    return true;
-                }
-            }
-            cur = cur.getCause();
-        }
-        return false;
+        // Delegate to the one status-aware implementation so the browse path and the play path
+        // can never disagree about what "share does not exist" looks like.
+        return SmbClientHelper.isMissingShare(e);
     }
 
     @Override

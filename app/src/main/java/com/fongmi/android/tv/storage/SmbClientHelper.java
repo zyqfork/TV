@@ -4,9 +4,11 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.hierynomus.msdtyp.AccessMask;
+import com.hierynomus.mserref.NtStatus;
 import com.hierynomus.msfscc.FileAttributes;
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation;
 import com.hierynomus.mssmb2.SMB2CreateDisposition;
+import com.hierynomus.mssmb2.SMBApiException;
 import com.hierynomus.mssmb2.SMB2ShareAccess;
 import com.hierynomus.smbj.SMBClient;
 import com.hierynomus.smbj.SmbConfig;
@@ -295,26 +297,91 @@ public class SmbClientHelper implements AutoCloseable {
             cur = cur.getCause();
             if (!TextUtils.isEmpty(cur.getMessage())) msg = cur.getMessage();
         }
+
+        // Prefer the typed SMB status over the exception text. Servers do not agree on which
+        // code means "that share is not there": impacket answers STATUS_OBJECT_PATH_NOT_FOUND
+        // (0xC000003A) and some appliances answer STATUS_BAD_NETWORK_PATH (0xC00000B3), neither
+        // of which contains the string "STATUS_BAD_NETWORK_NAME" the old check looked for -- so
+        // the friendly message never appeared and the raw exception name leaked into the toast.
+        NtStatus status = smbStatus(e);
+        if (status != null) {
+            switch (status) {
+                case STATUS_BAD_NETWORK_NAME:
+                case STATUS_BAD_NETWORK_PATH:
+                case STATUS_OBJECT_PATH_NOT_FOUND:
+                case STATUS_OBJECT_NAME_NOT_FOUND:
+                case STATUS_NO_SUCH_FILE:
+                    return ResUtil.getString(R.string.network_storage_smb_share_missing);
+                case STATUS_LOGON_FAILURE:
+                    return ResUtil.getString(R.string.network_storage_smb_auth_failed);
+                case STATUS_ACCESS_DENIED:
+                    return ResUtil.getString(R.string.network_storage_smb_access_denied);
+                default:
+                    break;
+            }
+        }
+
         String text = msg == null ? "" : msg;
-        if (text.toUpperCase(Locale.US).contains("STATUS_BAD_NETWORK_NAME") || text.contains("0xc00000cc")) {
+        String upper = text.toUpperCase(Locale.US);
+        if (upper.contains("STATUS_BAD_NETWORK_NAME") || text.contains("0xc00000cc")) {
             return ResUtil.getString(R.string.network_storage_smb_share_missing);
         }
-        if (text.toUpperCase(Locale.US).contains("STATUS_LOGON_FAILURE") || text.contains("0xc000006d")) {
+        if (upper.contains("STATUS_LOGON_FAILURE") || text.contains("0xc000006d")) {
             return ResUtil.getString(R.string.network_storage_smb_auth_failed);
         }
-        if (text.toUpperCase(Locale.US).contains("STATUS_ACCESS_DENIED") || text.contains("0xc0000022")) {
+        if (upper.contains("STATUS_ACCESS_DENIED") || text.contains("0xc0000022")) {
             return ResUtil.getString(R.string.network_storage_smb_access_denied);
         }
         // A dead host surfaces as a raw transport exception (usually EOFException). Printing the
         // class name tells the user nothing, so map it to something actionable.
         if (cur instanceof java.io.IOException
-                || text.toUpperCase(Locale.US).contains("TRANSPORT")
-                || text.toUpperCase(Locale.US).contains("CONNECTION")
-                || text.toUpperCase(Locale.US).contains("TIMEOUT")
-                || text.toUpperCase(Locale.US).contains("REFUSED")) {
+                || upper.contains("TRANSPORT")
+                || upper.contains("CONNECTION")
+                || upper.contains("TIMEOUT")
+                || upper.contains("REFUSED")) {
             return ResUtil.getString(R.string.network_storage_smb_unreachable);
         }
         return cur.getClass().getSimpleName();
+    }
+
+    /**
+     * The typed NtStatus of the first {@link SMBApiException} in the cause chain, or null when
+     * the failure never reached the SMB layer (transport error, auth handshake, ...).
+     */
+    static NtStatus smbStatus(Throwable e) {
+        for (Throwable cur = e; cur != null; cur = cur.getCause()) {
+            if (cur instanceof SMBApiException) return ((SMBApiException) cur).getStatus();
+        }
+        return null;
+    }
+
+    /** Whether the chain says the requested share does not exist on the server. */
+    public static boolean isMissingShare(Throwable e) {
+        NtStatus status = smbStatus(e);
+        if (status != null) {
+            switch (status) {
+                case STATUS_BAD_NETWORK_NAME:
+                case STATUS_BAD_NETWORK_PATH:
+                case STATUS_OBJECT_PATH_NOT_FOUND:
+                case STATUS_OBJECT_NAME_NOT_FOUND:
+                case STATUS_NO_SUCH_FILE:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        for (Throwable cur = e; cur != null; cur = cur.getCause()) {
+            String msg = cur.getMessage();
+            if (msg == null) continue;
+            String upper = msg.toUpperCase(Locale.US);
+            if (upper.contains("STATUS_BAD_NETWORK_NAME") || upper.contains("0XC00000CC")
+                    || upper.contains("STATUS_BAD_NETWORK_PATH") || upper.contains("0XC00000B3")
+                    || upper.contains("STATUS_OBJECT_PATH_NOT_FOUND") || upper.contains("0XC000003A")
+                    || msg.contains("共享不存在")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String normalizeDir(String relativePath) {
