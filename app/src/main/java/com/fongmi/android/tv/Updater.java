@@ -69,9 +69,20 @@ public class Updater implements Download.Callback, UpdateListener {
     }
 
     private void show(FragmentActivity activity, Github.Release release) {
+        // The check runs on a worker thread; by the time the reply lands the host may already be
+        // finishing, destroyed, or have had its state saved (e.g. the user pushed a URL, which
+        // starts VideoActivity on top of HomeActivity). Showing a DialogFragment then throws
+        // IllegalStateException("Can not perform this action after onSaveInstanceState") and the
+        // whole process dies in CrashActivity. Drop the prompt instead - it is only a suggestion,
+        // and the next launch will offer it again.
+        if (!isActive(activity)) return;
         dismiss();
         download = Download.create(getApk(release.tag()), getFile());
         dialog = UpdateDialog.create().title(ResUtil.getString(R.string.update_version, release.tag())).desc(release.desc()).listener(this).show(activity);
+    }
+
+    private static boolean isActive(FragmentActivity activity) {
+        return activity != null && !activity.isFinishing() && !activity.isDestroyed() && !activity.getSupportFragmentManager().isStateSaved();
     }
 
     @Override
