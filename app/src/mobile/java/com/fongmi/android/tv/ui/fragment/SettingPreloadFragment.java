@@ -8,8 +8,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPreloadBinding;
+import com.fongmi.android.tv.player.exo.PreloadPolicy;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -52,6 +54,7 @@ public class SettingPreloadFragment extends BaseFragment {
         setPreloadThreadsText();
         setPreloadSizeText();
         setPreloadTimeText();
+        setDiagnosticsText();
         setVisible();
     }
 
@@ -98,6 +101,16 @@ public class SettingPreloadFragment extends BaseFragment {
 
     private void setPreloadThreadsText() {
         mBinding.preloadThreadText.setText(getString(R.string.player_preload_threads_value, PreloadSetting.getPreloadThreads()));
+    }
+
+    /**
+     * The diagnostics row used to be an empty placeholder: tapping it opened a dialog, but the row
+     * itself showed no value, which made it look broken next to every other row here. Surface the
+     * same verdict the dialog computes; the reason detail stays in the dialog.
+     */
+    private void setDiagnosticsText() {
+        boolean allowed = PreloadPolicy.evaluate(App.get()).allowed();
+        mBinding.preloadDiagnosticsText.setText(allowed ? R.string.player_preload_diagnostics_allowed : R.string.player_preload_diagnostics_blocked);
     }
 
     @Override

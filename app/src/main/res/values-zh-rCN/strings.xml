@@ -176,6 +176,9 @@
     <string name="player_live_latency">直播延迟</string>
     <string name="player_preload_metered">按流量计费网络也预载</string>
     <string name="player_preload_diagnostics">预载诊断</string>
+    <!-- 显示在诊断行右侧，不用打开对话框就能看到当前是否可预载。 -->
+    <string name="player_preload_diagnostics_allowed">可用</string>
+    <string name="player_preload_diagnostics_blocked">已阻止</string>
     <string name="player_preload_diagnostics_reset">重置</string>
     <string name="player_mpv_conf">mpv.conf</string>
     <string name="player_mpv_gpu_next">gpu-next</string>

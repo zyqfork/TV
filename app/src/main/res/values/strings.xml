@@ -175,6 +175,9 @@
     <string name="player_live_latency">Live latency</string>
     <string name="player_preload_metered">Preload on metered network</string>
     <string name="player_preload_diagnostics">Preload diagnostics</string>
+    <!-- Verdict shown on the diagnostics row, so the state is visible without opening the dialog. -->
+    <string name="player_preload_diagnostics_allowed">Ready</string>
+    <string name="player_preload_diagnostics_blocked">Blocked</string>
     <string name="player_preload_diagnostics_reset">Reset</string>
     <string name="player_mpv_conf">mpv.conf</string>
     <string name="player_mpv_gpu_next">gpu-next</string>
