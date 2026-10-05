@@ -3,7 +3,9 @@ package com.fongmi.android.tv.ui.custom;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.util.AttributeSet;
@@ -13,6 +15,7 @@ import android.widget.FrameLayout;
 import androidx.activity.ComponentActivity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.media3.common.MediaItem;
@@ -242,9 +245,44 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private int getWallColor() {
         int wall = Setting.getWall();
         int type = Setting.getWallType();
-        if (isBuiltIn(wall, type)) return WALL_COLORS[wall];
+        if (isBuiltIn(wall, type)) return resourceColor(wall);
         File file = Path.wallCache();
         return file.exists() ? paletteColor(file) : WALL_COLORS[1];
+    }
+
+    /**
+     * Colour of a built-in wallpaper, sampled from the art itself.
+     *
+     * This used to be a hard-coded table. It drifted: the mobile and leanback source sets ship
+     * different images under the same {@code wallpaper_N} name, so one table cannot describe both,
+     * and an entry that disagreed with its art made every page that derives from this colour (the
+     * playback pages' backdrop, the wallpaper scrim) read as an unrelated hue — a green wallpaper
+     * producing a teal page, for instance. Sampling the drawable keeps the colour and the picture
+     * in step, in both flavours, without a second table to maintain.
+     *
+     * Falls back to the old table if the drawable cannot be decoded.
+     */
+    private int resourceColor(int wall) {
+        try {
+            Drawable drawable = ContextCompat.getDrawable(getContext(), WALL_PAPERS[wall]);
+            Bitmap bitmap = drawable instanceof BitmapDrawable ? ((BitmapDrawable) drawable).getBitmap() : toBitmap(drawable);
+            if (bitmap == null) return WALL_COLORS[wall];
+            return swatchColor(Palette.from(bitmap).maximumColorCount(8).generate());
+        } catch (Exception e) {
+            return WALL_COLORS[wall];
+        }
+    }
+
+    private Bitmap toBitmap(Drawable drawable) {
+        if (drawable == null) return null;
+        int width = drawable.getIntrinsicWidth();
+        int height = drawable.getIntrinsicHeight();
+        if (width <= 0 || height <= 0) return null;
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 
     private int paletteColor(File file) {
