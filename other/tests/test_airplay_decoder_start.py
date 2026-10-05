@@ -3,6 +3,17 @@
 Tests startup, feedFrame recovery, cancellation and UI control responsiveness with doubles, not real pixels/sessions.
 Usage: python other/tests/test_airplay_decoder_start.py [--kotlin-lib-dir GRADLE_HOME/lib]
 Without that flag a kotlinc/java installation is required. No Android SDK required.
+
+--kotlin-lib-dir needs these jars, and must be run on a JDK the compiler can parse (21 works;
+26 does not -- JavaVersion.parse throws "IllegalArgumentException: 26.0.1"):
+  kotlin-compiler-embeddable-<v>.jar   compiler
+  kotlin-stdlib-<v>.jar                keep the same version line as the compiler, or the
+                                       backend dies with NoClassDefFoundError in AnnotationCodegen
+  kotlin-daemon-embeddable-<v>.jar     compiler dependency
+  kotlin-annotations-jvm-<v>.jar       compiler dependency
+  kotlinx-coroutines-core-jvm-<v>.jar  used by VideoRenderer itself
+  trove4j-<v>.jar                      IntelliJ VFS inside the compiler
+  annotations-<v>.jar                  org.jetbrains:annotations, needed for nullability codegen
 """
 import argparse
 import os
@@ -466,7 +477,14 @@ with TemporaryDirectory() as temp:
     classes = path / "classes"
     if args.kotlin_lib_dir:
         lib = args.kotlin_lib_dir.resolve()
-        jars = sorted(lib.glob("kotlin-*.jar")) + sorted(lib.glob("kotlinx-coroutines-core-jvm*.jar")) + sorted(lib.glob("annotations-*.jar"))
+        # kotlin-compiler-embeddable is not self-contained: its internal IntelliJ VFS needs
+        # trove4j on the *compiler* classpath, and it fails at runtime with
+        # NoClassDefFoundError gnu/trove/TObjectHashingStrategy without it. Annotations and
+        # the daemon jar come along for the same reason.
+        jars = (sorted(lib.glob("kotlin-*.jar"))
+                + sorted(lib.glob("kotlinx-coroutines-core-jvm*.jar"))
+                + sorted(lib.glob("annotations-*.jar"))
+                + sorted(lib.glob("trove4j*.jar")))
         compiler_cp = os.pathsep.join(map(str, jars))
         runtime_cp = os.pathsep.join(map(str, sorted(lib.glob("kotlin-stdlib-*.jar"))))
         subprocess.run(["java", "-cp", compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
