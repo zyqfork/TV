@@ -12,6 +12,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPreloadBinding;
 import com.fongmi.android.tv.player.exo.PreloadPolicy;
+import com.fongmi.android.tv.player.exo.PreloadDiagnosticsMonitor;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -23,6 +24,7 @@ import com.fongmi.android.tv.utils.FileUtil;
 public class SettingPreloadFragment extends BaseFragment {
 
     private FragmentSettingPreloadBinding mBinding;
+    private final PreloadDiagnosticsMonitor diagnostics = new PreloadDiagnosticsMonitor(this::applyDiagnostics);
 
     public static SettingPreloadFragment newInstance() {
         return new SettingPreloadFragment();
@@ -70,11 +72,15 @@ public class SettingPreloadFragment extends BaseFragment {
     private void setMetered(View view) {
         PreloadSetting.putPreloadOnMetered(!PreloadSetting.isPreloadOnMetered());
         mBinding.preloadMeteredText.setText(Setting.getSwitch(PreloadSetting.isPreloadOnMetered()));
+        setDiagnosticsText();
+        diagnostics.refresh();
     }
 
     private void setPreload(View view) {
         PreloadSetting.putPreload(!PreloadSetting.isPreload());
         mBinding.preloadText.setText(Setting.getSwitch(PreloadSetting.isPreload()));
+        setDiagnosticsText();
+        diagnostics.refresh();
         setVisible();
     }
 
@@ -109,12 +115,46 @@ public class SettingPreloadFragment extends BaseFragment {
      * same verdict the dialog computes; the reason detail stays in the dialog.
      */
     private void setDiagnosticsText() {
-        boolean allowed = PreloadPolicy.evaluate(App.get()).allowed();
-        mBinding.preloadDiagnosticsText.setText(allowed ? R.string.player_preload_diagnostics_allowed : R.string.player_preload_diagnostics_blocked);
+        applyDiagnostics(PreloadPolicy.evaluate(App.get()).allowed());
+    }
+
+    private void applyDiagnostics(boolean allowed) {
+        if (mBinding != null) mBinding.preloadDiagnosticsText.setText(allowed ? R.string.player_preload_diagnostics_allowed : R.string.player_preload_diagnostics_blocked);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (mBinding != null && !isHidden() && getUserVisibleHint()) diagnostics.start();
+    }
+
+    @Override
+    public void onPause() {
+        diagnostics.stop();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        diagnostics.stop();
+        super.onDestroyView();
+        mBinding = null;
     }
 
     @Override
     public void onHiddenChanged(boolean hidden) {
-        if (!hidden) refresh();
+        super.onHiddenChanged(hidden);
+        if (hidden) diagnostics.stop();
+        else if (mBinding != null) {
+            refresh();
+            if (isResumed() && getUserVisibleHint()) diagnostics.start();
+        }
+    }
+
+    @Override
+    public void setUserVisibleHint(boolean visible) {
+        super.setUserVisibleHint(visible);
+        if (!visible) diagnostics.stop();
+        else if (mBinding != null && isResumed() && !isHidden()) diagnostics.start();
     }
 }

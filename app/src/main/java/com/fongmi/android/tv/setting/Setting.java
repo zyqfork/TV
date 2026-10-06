@@ -67,14 +67,6 @@ public class Setting {
         Prefers.put("wall_type", Math.clamp(type, MIN_WALL_TYPE, MAX_WALL_TYPE));
     }
 
-    public static int getWallColor() {
-        return Prefers.getInt("wall_color", 0);
-    }
-
-    public static void putWallColor(int color) {
-        Prefers.put("wall_color", color);
-    }
-
     public static int getSiteMode() {
         return Math.clamp(Prefers.getInt("site_mode"), MIN_SITE_MODE, MAX_SITE_MODE);
     }

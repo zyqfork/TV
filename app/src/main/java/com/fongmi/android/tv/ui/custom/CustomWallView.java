@@ -1,11 +1,6 @@
 package com.fongmi.android.tv.ui.custom;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.util.AttributeSet;
@@ -15,14 +10,12 @@ import android.widget.FrameLayout;
 import androidx.activity.ComponentActivity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
-import androidx.palette.graphics.Palette;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
@@ -44,14 +37,6 @@ import pl.droidsonroids.gif.GifDrawable;
 public class CustomWallView extends FrameLayout implements DefaultLifecycleObserver {
 
     private static final int[] WALL_PAPERS = {0, R.drawable.wallpaper_1, R.drawable.wallpaper_2, R.drawable.wallpaper_3, R.drawable.wallpaper_4};
-    private static final int[] WALL_COLORS = {0, 0xFF40C090, 0xFF4870E0, 0xFF48B0C0, 0xFF404040};
-    /**
-     * Contrast to keep for the white text that every layout draws straight onto the wallpaper.
-     * 6:1 leaves room for the translucent white cards layered on top of it (a 10% white card still
-     * lands above 4.5:1) while keeping the scrim as light as possible.
-     */
-    private static final double TARGET_CONTRAST = 6.0;
-    private static final int MAX_SCRIM = 204;
     private static final int TYPE_RES = 0;
     private static final int TYPE_GIF = 1;
     private static final int TYPE_VIDEO = 2;
@@ -59,7 +44,8 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private GifDrawable drawable;
     private PlayerView video;
     private ExoPlayer player;
-    /** Incremented per refresh so a slower earlier decode cannot overwrite a newer wallpaper. */
+    private boolean resumed;
+    /** Only media loading is asynchronous; a late decode must not replace a newer wallpaper. */
     private int wallGeneration;
 
     public CustomWallView(@NonNull Context context, @Nullable AttributeSet attrs) {
@@ -81,107 +67,47 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     }
 
     private void refresh() {
+        if (binding == null) return;
         stop();
-        // Built-in wallpapers are cheap; custom image/gif decode + Palette must leave
-        // the main thread or every activity enter pays for it (high input latency).
-        // Wallpaper switches can overlap, so a task may only apply its result while it is still
-        // the newest request; otherwise the slower of two switches wins and the wrong wall shows.
         final int generation = ++wallGeneration;
         int wall = Setting.getWall();
         int type = Setting.getWallType();
-        if (isBuiltIn(wall, type)) {
-            loadRes(WALL_PAPERS[wall]);
-            applyWallColor(getWallColor());
+        if (type == TYPE_RES && wall > 0 && wall < WALL_PAPERS.length) {
+            // Built-in art needs no colour sampling, cache or background task.
+            binding.image.setImageResource(WALL_PAPERS[wall]);
             return;
         }
         Task.execute(() -> {
             if (type == TYPE_VIDEO) {
-                int color = getWallColor();
                 Drawable poster = cache();
                 App.post(() -> {
                     if (binding == null || generation != wallGeneration) return;
                     loadVideo(Path.wall(wall), poster);
-                    applyWallColor(color);
                 });
                 return;
             }
             GifDrawable gifDraw = type == TYPE_GIF ? gif(Path.wall(wall)) : null;
             Drawable decoded = gifDraw != null ? gifDraw : cache();
-            int color = getWallColor();
             App.post(() -> {
                 if (binding == null || generation != wallGeneration) {
-                    // Never leak a decoded GIF that lost the race.
                     if (gifDraw != null) gifDraw.recycle();
                     return;
                 }
                 if (gifDraw != null) {
                     drawable = gifDraw;
                     binding.image.setImageDrawable(gifDraw);
+                    if (!resumed) gifDraw.pause();
                 } else if (decoded != null) {
                     binding.image.setImageDrawable(decoded);
                 } else {
                     binding.image.setImageResource(R.drawable.wallpaper_1);
                 }
-                applyWallColor(color);
             });
         });
     }
 
-    private void applyWallColor(int color) {
-        applyScrim(color);
-        applyThemeColor(color);
-    }
-
-    /**
-     * Darken the wallpaper just enough for the white text on top of it to stay readable. A scrim
-     * beats shipping darker art because the wallpaper can be any photo the user picked, and it
-     * stays out of the way for the wallpapers that were already dark enough.
-     */
-    private void applyScrim(int color) {
-        binding.scrim.setBackgroundColor(Color.argb(scrimFor(color), 0, 0, 0));
-    }
-
-    /**
-     * The colour a self-drawn backdrop should end up as for white text to stay readable.
-     *
-     * Exposed because the playback pages deliberately skip the wallpaper layer (see
-     * {@code PlaybackActivity.customWall()}) — no image decode, no video behind a video. Without
-     * this their backdrop was the theme's window background, a flat grey that ignored the user's
-     * colour entirely, so the detail page looked nothing like the wallpaper-backed pages.
-     */
-    public static int readableBackdrop(int color) {
-        return darken(color, scrimFor(color));
-    }
-
-    private static int scrimFor(int color) {
-        double target = 1.05 / TARGET_CONTRAST - 0.05;
-        int alpha = 0;
-        while (alpha < MAX_SCRIM && luminance(darken(color, alpha)) > target) alpha += 4;
-        return alpha;
-    }
-
-    private static int darken(int color, int alpha) {
-        int keep = 255 - alpha;
-        return Color.rgb(Color.red(color) * keep / 255, Color.green(color) * keep / 255, Color.blue(color) * keep / 255);
-    }
-
-    private static double luminance(int color) {
-        return 0.2126 * channel(Color.red(color)) + 0.7152 * channel(Color.green(color)) + 0.0722 * channel(Color.blue(color));
-    }
-
-    private static double channel(int value) {
-        double v = value / 255.0;
-        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    }
-
-    private void applyThemeColor(int newColor) {
-        int oldColor = Setting.getWallColor();
-        if (newColor == oldColor) return;
-        Setting.putWallColor(newColor);
-    }
-
     private void stop() {
-        if (player != null && player.isPlaying()) {
+        if (player != null) {
             player.stop();
             player.clearMediaItems();
         }
@@ -196,16 +122,13 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         }
     }
 
-    private void loadRes(int resId) {
-        binding.image.setImageResource(resId);
-    }
-
     private void loadVideo(File file, Drawable poster) {
         ensurePlayer();
         ensureVideoView();
-        video.setPlayer(player);
+        video.setPlayer(resumed ? player : null);
         video.setVisibility(VISIBLE);
         binding.image.setImageDrawable(poster);
+        player.setPlayWhenReady(resumed);
         player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)));
         player.prepare();
     }
@@ -227,86 +150,19 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         if (player != null) return;
         player = new ExoPlayer.Builder(getContext()).build();
         player.setRepeatMode(Player.REPEAT_MODE_ALL);
-        player.setPlayWhenReady(true);
+        player.setPlayWhenReady(false);
         player.mute();
     }
 
     private void ensureVideoView() {
         if (video != null) return;
         video = (PlayerView) LayoutInflater.from(getContext()).inflate(R.layout.view_wall_video, this, false);
-        // Insert below the scrim so a video wallpaper gets darkened like any other wallpaper.
+        // Video, like image/GIF art, stays below the fixed scrim defined by view_wall.xml.
         addView(video, 1, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
     }
 
     private boolean hasVideo() {
         return player != null && video != null && video.getVisibility() == VISIBLE && player.getMediaItemCount() > 0;
-    }
-
-    private int getWallColor() {
-        int wall = Setting.getWall();
-        int type = Setting.getWallType();
-        if (isBuiltIn(wall, type)) return resourceColor(wall);
-        File file = Path.wallCache();
-        return file.exists() ? paletteColor(file) : WALL_COLORS[1];
-    }
-
-    /**
-     * Colour of a built-in wallpaper, sampled from the art itself.
-     *
-     * This used to be a hard-coded table. It drifted: the mobile and leanback source sets ship
-     * different images under the same {@code wallpaper_N} name, so one table cannot describe both,
-     * and an entry that disagreed with its art made every page that derives from this colour (the
-     * playback pages' backdrop, the wallpaper scrim) read as an unrelated hue — a green wallpaper
-     * producing a teal page, for instance. Sampling the drawable keeps the colour and the picture
-     * in step, in both flavours, without a second table to maintain.
-     *
-     * Falls back to the old table if the drawable cannot be decoded.
-     */
-    private int resourceColor(int wall) {
-        try {
-            Drawable drawable = ContextCompat.getDrawable(getContext(), WALL_PAPERS[wall]);
-            Bitmap bitmap = drawable instanceof BitmapDrawable ? ((BitmapDrawable) drawable).getBitmap() : toBitmap(drawable);
-            if (bitmap == null) return WALL_COLORS[wall];
-            return swatchColor(Palette.from(bitmap).maximumColorCount(8).generate());
-        } catch (Exception e) {
-            return WALL_COLORS[wall];
-        }
-    }
-
-    private Bitmap toBitmap(Drawable drawable) {
-        if (drawable == null) return null;
-        int width = drawable.getIntrinsicWidth();
-        int height = drawable.getIntrinsicHeight();
-        if (width <= 0 || height <= 0) return null;
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-        drawable.draw(canvas);
-        return bitmap;
-    }
-
-    private int paletteColor(File file) {
-        Bitmap bitmap = decodeBitmap(file);
-        if (bitmap == null) return WALL_COLORS[1];
-        Palette palette = Palette.from(bitmap).maximumColorCount(8).generate();
-        bitmap.recycle();
-        return swatchColor(palette);
-    }
-
-    private Bitmap decodeBitmap(File file) {
-        BitmapFactory.Options opts = new BitmapFactory.Options();
-        opts.inSampleSize = 8;
-        return BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
-    }
-
-    private int swatchColor(Palette palette) {
-        Palette.Swatch swatch = palette.getVibrantSwatch();
-        if (swatch == null) swatch = palette.getDominantSwatch();
-        return swatch != null ? swatch.getRgb() : WALL_COLORS[1];
-    }
-
-    private boolean isBuiltIn(int wall, int type) {
-        return type == TYPE_RES && wall > 0 && wall < WALL_PAPERS.length;
     }
 
     @Override
@@ -316,6 +172,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     @Override
     public void onResume(@NonNull LifecycleOwner owner) {
+        resumed = true;
         if (drawable != null) drawable.start();
         if (!hasVideo()) return;
         video.setPlayer(player);
@@ -324,6 +181,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     @Override
     public void onPause(@NonNull LifecycleOwner owner) {
+        resumed = false;
         if (drawable != null) drawable.pause();
         if (!hasVideo()) return;
         video.setPlayer(null);
@@ -333,6 +191,8 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     @Override
     public void onDestroy(@NonNull LifecycleOwner owner) {
         EventBus.getDefault().unregister(this);
+        ++wallGeneration;
+        resumed = false;
         if (drawable != null) drawable.recycle();
         if (video != null) removeView(video);
         if (player != null) player.release();

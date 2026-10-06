@@ -112,7 +112,6 @@ dependencies {
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media
-    implementation libs.palette
     implementation libs.recyclerview
     implementation libs.room.runtime
     implementation libs.splashscreen

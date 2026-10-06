@@ -9,6 +9,7 @@ import com.hierynomus.msfscc.FileAttributes;
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation;
 import com.hierynomus.mssmb2.SMB2CreateDisposition;
 import com.hierynomus.mssmb2.SMBApiException;
+import com.hierynomus.mssmb2.SMB2MessageCommandCode;
 import com.hierynomus.mssmb2.SMB2ShareAccess;
 import com.hierynomus.smbj.SMBClient;
 import com.hierynomus.smbj.SmbConfig;
@@ -250,12 +251,16 @@ public class SmbClientHelper implements AutoCloseable {
         }
         connectShare(shareName);
         String smbPath = normalizeFile(fileInside);
-        return share.openFile(smbPath,
-                EnumSet.of(AccessMask.GENERIC_READ),
-                null,
-                SMB2ShareAccess.ALL,
-                SMB2CreateDisposition.FILE_OPEN,
-                null);
+        try {
+            return share.openFile(smbPath,
+                    EnumSet.of(AccessMask.GENERIC_READ),
+                    null,
+                    SMB2ShareAccess.ALL,
+                    SMB2CreateDisposition.FILE_OPEN,
+                    null);
+        } catch (Exception e) {
+            throw new IOException(rootMessage(e), e);
+        }
     }
 
     private String resolveConfiguredShare() {
@@ -311,7 +316,9 @@ public class SmbClientHelper implements AutoCloseable {
                 case STATUS_OBJECT_PATH_NOT_FOUND:
                 case STATUS_OBJECT_NAME_NOT_FOUND:
                 case STATUS_NO_SUCH_FILE:
-                    return ResUtil.getString(R.string.network_storage_smb_share_missing);
+                    return ResUtil.getString(isMissingShare(e)
+                            ? R.string.network_storage_smb_share_missing
+                            : R.string.network_storage_smb_path_missing);
                 case STATUS_LOGON_FAILURE:
                     return ResUtil.getString(R.string.network_storage_smb_auth_failed);
                 case STATUS_ACCESS_DENIED:
@@ -332,6 +339,11 @@ public class SmbClientHelper implements AutoCloseable {
         if (upper.contains("STATUS_ACCESS_DENIED") || text.contains("0xc0000022")) {
             return ResUtil.getString(R.string.network_storage_smb_access_denied);
         }
+        if (upper.contains("STATUS_OBJECT_PATH_NOT_FOUND") || upper.contains("0XC000003A")
+                || upper.contains("STATUS_OBJECT_NAME_NOT_FOUND") || upper.contains("0XC0000034")
+                || upper.contains("STATUS_NO_SUCH_FILE") || upper.contains("0XC000000F")) {
+            return ResUtil.getString(R.string.network_storage_smb_path_missing);
+        }
         // A dead host surfaces as a raw transport exception (usually EOFException). Printing the
         // class name tells the user nothing, so map it to something actionable.
         if (cur instanceof java.io.IOException
@@ -349,34 +361,35 @@ public class SmbClientHelper implements AutoCloseable {
      * the failure never reached the SMB layer (transport error, auth handshake, ...).
      */
     static NtStatus smbStatus(Throwable e) {
+        SMBApiException api = smbException(e);
+        return api == null ? null : api.getStatus();
+    }
+
+    private static SMBApiException smbException(Throwable e) {
         for (Throwable cur = e; cur != null; cur = cur.getCause()) {
-            if (cur instanceof SMBApiException) return ((SMBApiException) cur).getStatus();
+            if (cur instanceof SMBApiException) return (SMBApiException) cur;
         }
         return null;
     }
 
-    /** Whether the chain says the requested share does not exist on the server. */
+    /** File-system status aliases imply a missing share only during TREE_CONNECT. */
     public static boolean isMissingShare(Throwable e) {
-        NtStatus status = smbStatus(e);
-        if (status != null) {
-            switch (status) {
-                case STATUS_BAD_NETWORK_NAME:
-                case STATUS_BAD_NETWORK_PATH:
-                case STATUS_OBJECT_PATH_NOT_FOUND:
-                case STATUS_OBJECT_NAME_NOT_FOUND:
-                case STATUS_NO_SUCH_FILE:
-                    return true;
-                default:
-                    return false;
-            }
+        SMBApiException api = smbException(e);
+        if (api != null) {
+            if (api.getFailedCommand() != SMB2MessageCommandCode.SMB2_TREE_CONNECT || api.getStatus() == null) return false;
+            return switch (api.getStatus()) {
+                case STATUS_BAD_NETWORK_NAME, STATUS_BAD_NETWORK_PATH,
+                     STATUS_OBJECT_PATH_NOT_FOUND, STATUS_OBJECT_NAME_NOT_FOUND, STATUS_NO_SUCH_FILE -> true;
+                default -> false;
+            };
         }
         for (Throwable cur = e; cur != null; cur = cur.getCause()) {
             String msg = cur.getMessage();
             if (msg == null) continue;
             String upper = msg.toUpperCase(Locale.US);
+            // Without command metadata do not guess that a missing file/path is a share failure:
+            // the browse fallback would persistently clear the user's configured share name.
             if (upper.contains("STATUS_BAD_NETWORK_NAME") || upper.contains("0XC00000CC")
-                    || upper.contains("STATUS_BAD_NETWORK_PATH") || upper.contains("0XC00000B3")
-                    || upper.contains("STATUS_OBJECT_PATH_NOT_FOUND") || upper.contains("0XC000003A")
                     || msg.contains("共享不存在")) {
                 return true;
             }

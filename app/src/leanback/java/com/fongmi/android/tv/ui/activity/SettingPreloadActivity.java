@@ -11,6 +11,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingPreloadBinding;
 import com.fongmi.android.tv.player.exo.PreloadPolicy;
+import com.fongmi.android.tv.player.exo.PreloadDiagnosticsMonitor;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -22,6 +23,7 @@ import com.fongmi.android.tv.utils.FileUtil;
 public class SettingPreloadActivity extends BaseActivity {
 
     private ActivitySettingPreloadBinding mBinding;
+    private final PreloadDiagnosticsMonitor diagnostics = new PreloadDiagnosticsMonitor(this::applyDiagnostics);
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingPreloadActivity.class));
@@ -58,6 +60,18 @@ public class SettingPreloadActivity extends BaseActivity {
         setVisible();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        diagnostics.start();
+    }
+
+    @Override
+    protected void onPause() {
+        diagnostics.stop();
+        super.onPause();
+    }
+
     private void setVisible() {
         boolean preload = PreloadSetting.isPreload();
         mBinding.preloadSize.setVisibility(preload ? View.VISIBLE : View.GONE);
@@ -70,11 +84,15 @@ public class SettingPreloadActivity extends BaseActivity {
     private void setMetered(View view) {
         PreloadSetting.putPreloadOnMetered(!PreloadSetting.isPreloadOnMetered());
         mBinding.preloadMeteredText.setText(Setting.getSwitch(PreloadSetting.isPreloadOnMetered()));
+        setDiagnosticsText();
+        diagnostics.refresh();
     }
 
     private void setPreload(View view) {
         PreloadSetting.putPreload(!PreloadSetting.isPreload());
         mBinding.preloadText.setText(Setting.getSwitch(PreloadSetting.isPreload()));
+        setDiagnosticsText();
+        diagnostics.refresh();
         setVisible();
     }
 
@@ -109,7 +127,10 @@ public class SettingPreloadActivity extends BaseActivity {
      * same verdict the dialog computes; the reason detail stays in the dialog.
      */
     private void setDiagnosticsText() {
-        boolean allowed = PreloadPolicy.evaluate(App.get()).allowed();
-        mBinding.preloadDiagnosticsText.setText(allowed ? R.string.player_preload_diagnostics_allowed : R.string.player_preload_diagnostics_blocked);
+        applyDiagnostics(PreloadPolicy.evaluate(App.get()).allowed());
+    }
+
+    private void applyDiagnostics(boolean allowed) {
+        if (mBinding != null) mBinding.preloadDiagnosticsText.setText(allowed ? R.string.player_preload_diagnostics_allowed : R.string.player_preload_diagnostics_blocked);
     }
 }

@@ -379,6 +379,7 @@
     <string name="network_storage_list_fail">目錄讀取失敗</string>
     <string name="network_storage_share_missing">共用名稱不存在，已列出可用共用</string>
     <string name="network_storage_smb_share_missing">共用名稱不存在，請檢查共用名稱——留空只會嘗試常見名稱</string>
+    <string name="network_storage_smb_path_missing">檔案或資料夾不存在，請重新整理清單後再試</string>
     <string name="network_storage_smb_auth_failed">帳號或密碼錯誤</string>
     <string name="network_storage_smb_access_denied">沒有存取權限</string>
     <string name="network_storage_smb_unreachable">無法連線 SMB 伺服器，請檢查位址與連接埠</string>

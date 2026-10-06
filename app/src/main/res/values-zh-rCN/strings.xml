@@ -380,6 +380,7 @@
     <string name="network_storage_list_fail">目录读取失败</string>
     <string name="network_storage_share_missing">共享名不存在，已列出可用共享</string>
     <string name="network_storage_smb_share_missing">共享名不存在，请检查共享名——留空只会尝试常见共享名</string>
+    <string name="network_storage_smb_path_missing">文件或目录不存在，请刷新列表后重试</string>
     <string name="network_storage_smb_auth_failed">账号或密码错误</string>
     <string name="network_storage_smb_access_denied">没有访问权限</string>
     <string name="network_storage_smb_unreachable">无法连接 SMB 服务器，请检查地址与端口</string>
