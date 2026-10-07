@@ -48,7 +48,7 @@ public class NetworkStorageAdapter extends RecyclerView.Adapter<NetworkStorageAd
         NetworkStorage item = items.get(position);
         holder.binding.title.setText(item.displayTitle());
         holder.binding.subtitle.setText(item.displaySubtitle());
-        holder.binding.type.setText(item.isSmb() ? R.string.network_storage_type_smb : R.string.network_storage_type_webdav);
+        holder.binding.type.setText(item.isFtp() ? R.string.network_storage_type_ftp : item.isSmb() ? R.string.network_storage_type_smb : R.string.network_storage_type_webdav);
         holder.binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
         holder.binding.getRoot().setOnLongClickListener(v -> {
             listener.onItemLongClick(item);

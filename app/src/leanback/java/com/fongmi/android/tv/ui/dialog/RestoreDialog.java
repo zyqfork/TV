@@ -27,6 +27,10 @@ public class RestoreDialog extends BaseAlertDialog implements RestoreAdapter.OnC
         return this;
     }
 
+    public void show(FragmentActivity activity, Callback callback) {
+        callback(callback).show(activity);
+    }
+
     public void show(FragmentActivity activity) {
         show(activity.getSupportFragmentManager(), null);
     }

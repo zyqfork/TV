@@ -82,6 +82,11 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public void start(PlaySpec spec, long startPositionMs, boolean playWhenReady) {
+        session.start(spec, startPositionMs, playWhenReady);
+    }
+
+    @Override
     public void preload(PlaySpec spec, long startPositionMs) {
         session.preload(spec, startPositionMs);
     }

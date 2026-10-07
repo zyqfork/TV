@@ -99,6 +99,30 @@ public class Setting {
         Prefers.put("dlna_library", enabled);
     }
 
+    public static boolean isAutoSourceRefresh() {
+        return Prefers.getBoolean("auto_source_refresh", true);
+    }
+
+    public static void putAutoSourceRefresh(boolean enabled) {
+        Prefers.put("auto_source_refresh", enabled);
+    }
+
+    public static boolean isIgnoreParserSslErrors() {
+        return Prefers.getBoolean("ignore_parser_ssl_errors", false);
+    }
+
+    public static void putIgnoreParserSslErrors(boolean enabled) {
+        Prefers.put("ignore_parser_ssl_errors", enabled);
+    }
+
+    public static boolean isParserSslWarningAccepted() {
+        return Prefers.getBoolean("parser_ssl_warning_accepted", false);
+    }
+
+    public static void putParserSslWarningAccepted(boolean accepted) {
+        Prefers.put("parser_ssl_warning_accepted", accepted);
+    }
+
     public static boolean getUpdate() {
         return Prefers.getBoolean("update", true);
     }

@@ -17,6 +17,8 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class Doh {
 
@@ -33,6 +35,26 @@ public class Doh {
         String[] names = context.getResources().getStringArray(R.array.doh_name);
         for (int i = 0; i < names.length; i++) items.add(new Doh().name(names[i]).url(urls[i]));
         return items;
+    }
+
+    /** Keep system DNS first; source overrides other built-ins, one entry per endpoint. */
+    public static List<Doh> merge(List<Doh> builtIns, List<Doh> configured) {
+        List<Doh> items = new ArrayList<>(builtIns);
+        if (configured != null) {
+            List<Doh> sources = new ArrayList<>();
+            // Empty/missing endpoints mean system DNS, not a source-defined DoH service.
+            // They must not rename, replace or hide the localized system entry.
+            for (Doh item : configured) {
+                if (item != null && !item.getUrl().trim().isEmpty()) sources.add(item);
+            }
+            items.removeAll(sources);
+            items.addAll(sources);
+        }
+        Map<String, Doh> unique = new LinkedHashMap<>();
+        for (Doh item : items) {
+            if (item != null) unique.putIfAbsent(item.getUrl(), item);
+        }
+        return new ArrayList<>(unique.values());
     }
 
     public static Doh objectFrom(String str) {

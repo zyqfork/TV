@@ -16,7 +16,7 @@ import com.fongmi.android.tv.storage.NetworkMediaTypes;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.storage.SmbClientHelper;
-import com.fongmi.android.tv.storage.WebDavClientHelper;
+import com.fongmi.android.tv.storage.NetworkStorageAccess;
 import com.fongmi.android.tv.ui.adapter.NetworkEntryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.Notify;
@@ -71,15 +71,11 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
         int generation = ++loadGeneration;
         Task.execute(() -> {
             try {
-                List<NetworkEntry> entries;
-                if (storage.isSmb()) {
-                    entries = listSmb(storage, requestPath);
-                } else {
-                    entries = new WebDavClientHelper(storage).list(requestPath);
-                }
-                List<NetworkEntry> result = entries;
+                NetworkStorageAccess.Listing listing = NetworkStorageAccess.list(storage, requestPath);
+                List<NetworkEntry> result = listing.entries();
                 App.post(() -> {
                     if (isFinishing() || generation != loadGeneration) return;
+                    if (listing.shareRediscovered()) Notify.show(R.string.network_storage_share_missing);
                     mAdapter.setItems(result);
                     mBinding.recycler.setSelectedPosition(0);
                     mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
@@ -93,37 +89,6 @@ public class NetworkBrowseActivity extends BaseActivity implements NetworkEntryA
                 });
             }
         });
-    }
-
-    private List<NetworkEntry> listSmb(NetworkStorage storage, String requestPath) throws Exception {
-        try (SmbClientHelper client = new SmbClientHelper(storage)) {
-            return client.list(requestPath);
-        } catch (Exception e) {
-            boolean root = TextUtils.isEmpty(requestPath);
-            boolean hasShare = !TextUtils.isEmpty(storage.getShare());
-            if (!root || !hasShare || !isBadShareName(e)) throw e;
-            NetworkStorage copy = NetworkStorage.create(NetworkStorage.TYPE_SMB);
-            copy.setId(storage.getId());
-            copy.setHost(storage.getHost());
-            copy.setPort(storage.getPort());
-            copy.setUsername(storage.getUsername());
-            copy.setPassword(storage.getPassword());
-            copy.setAllowSmbEncryptionDowngrade(storage.isAllowSmbEncryptionDowngrade());
-            copy.setShare("");
-            try (SmbClientHelper client = new SmbClientHelper(copy)) {
-                List<NetworkEntry> shares = client.list("");
-                storage.setShare("");
-                NetworkStorageStore.save(storage);
-                App.post(() -> Notify.show(R.string.network_storage_share_missing));
-                return shares;
-            }
-        }
-    }
-
-    private static boolean isBadShareName(Throwable e) {
-        // Delegate to the one status-aware implementation so the browse path and the play path
-        // can never disagree about what "share does not exist" looks like.
-        return SmbClientHelper.isMissingShare(e);
     }
 
     @Override

@@ -65,6 +65,10 @@ final class ExoPlayerSession {
     }
 
     void start(PlaySpec spec, long startPositionMs) {
+        start(spec, startPositionMs, true);
+    }
+
+    void start(PlaySpec spec, long startPositionMs, boolean playWhenReady) {
         // Keep the retry budget when the same URL is restarted after a failure;
         // only a new item (or explicit reset) may clear attempts. Otherwise a
         // dead endpoint loops forever through start() -> attempts=0.
@@ -78,7 +82,7 @@ final class ExoPlayerSession {
         startGeneration++;
         // Normal EXO HLS must not fetch the playlist and first segment twice. The rare
         // PNG-prefixed TS workaround is tried only after a parsing failure.
-        startInternal(startPositionMs);
+        startInternal(startPositionMs, playWhenReady);
     }
 
     void preload(PlaySpec spec, long startPositionMs) {
@@ -133,13 +137,13 @@ final class ExoPlayerSession {
         originalUrl = null;
     }
 
-    private void startInternal(long positionMs) {
+    private void startInternal(long positionMs, boolean playWhenReady) {
         if (released || spec == null) return;
         MediaItem item = MediaItemFactory.from(spec, decode);
         player.setMediaItem(item, positionMs);
         preCache.start(player, item);
+        player.setPlayWhenReady(playWhenReady);
         player.prepare();
-        player.play();
     }
 
     private PlayerEngine.ErrorAction seekToDefaultPosition() {
@@ -171,7 +175,7 @@ final class ExoPlayerSession {
             App.post(() -> {
                 if (released || generation != startGeneration) return;
                 spec = prepared;
-                startInternal(position);
+                startInternal(position, player.getPlayWhenReady());
             });
         });
         return PlayerEngine.ErrorAction.RECOVERED;

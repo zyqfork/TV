@@ -8,6 +8,7 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -49,7 +50,7 @@ abstract class BaseConfig {
             if (isLoaded()) return;
             if (config == null) config = defaultConfig();
             Server.get().start();
-            load(config);
+            loadWithSavedConfig(config, !Setting.isAutoSourceRefresh());
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -79,20 +80,56 @@ abstract class BaseConfig {
         OkHttp.dns().addAll(hosts);
     }
 
+    /** Only startup obeys the refresh preference; explicit imports/refresh always fetch. */
+    public void loadOnStartup(Callback callback) {
+        scheduleLoad(callback, !Setting.isAutoSourceRefresh());
+    }
+
     public void load(Callback callback) {
+        scheduleLoad(callback, false);
+    }
+
+    private void scheduleLoad(Callback callback, boolean preferSaved) {
         int id = taskId.incrementAndGet();
         if (future != null && !future.isDone()) future.cancel(true);
-        future = Task.submit(() -> loadConfig(id, config, callback));
+        Config requested = config;
+        future = Task.submit(() -> loadConfig(id, requested, callback, preferSaved));
         callback.start();
     }
 
     protected void loadConfig(int id, Config config, Callback callback) {
+        loadConfig(id, config, callback, false);
+    }
+
+    /** Subclasses restore validated configuration snapshots stored in the existing Config table. */
+    protected boolean loadSaved(Config config) throws Throwable {
+        return false;
+    }
+
+    private boolean loadWithSavedConfig(Config config, boolean preferSaved) throws Throwable {
+        if (preferSaved && config != null && !TextUtils.isEmpty(config.getJson())) {
+            try {
+                if (loadSaved(config)) return true;
+            } catch (Throwable e) {
+                if (isCanceled(e)) throw e;
+                // Bad/missing snapshots may fetch once; never replace a good snapshot on failure.
+                e.printStackTrace();
+            }
+        }
+        load(config);
+        return false;
+    }
+
+    private void loadConfig(int id, Config config, Callback callback, boolean preferSaved) {
         try {
             Server.get().start();
             OkHttp.cancel(getTag());
-            load(config);
+            boolean restored = loadWithSavedConfig(config, preferSaved);
             if (taskId.get() != id) return;
-            if (config.equals(this.config)) config.update();
+            if (config.equals(this.config)) {
+                if (restored) config.save();
+                else config.update();
+            }
             App.post(() -> Notify.show(config.getNotice()));
             App.post(callback::success);
         } catch (Throwable e) {
@@ -123,6 +160,8 @@ abstract class BaseConfig {
             if (item.isJsonPrimitive()) result.addAll(fetch(item.getAsString()));
             else if (item.isJsonObject()) result.add(item);
         }
+        // Persist expanded external lists so saved startup does not refetch them.
+        object.add(key, result);
         return result;
     }
 

@@ -77,6 +77,8 @@
                 android:value="androidx.startup" />
         </provider>
 
+        <activity android:name=".ui.activity.SettingOtherActivity" android:exported="false" />
+
         <activity
             android:name=".ui.activity.CrashActivity"
             android:process=":error_activity"

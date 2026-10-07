@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.extractor;
 import android.net.Uri;
 
 import com.fongmi.android.tv.utils.UrlUtil;
+import com.fongmi.android.tv.storage.NetworkPlayResolver;
 import com.github.catvod.utils.Path;
 import com.p2p.P2PClass;
 
@@ -17,7 +18,11 @@ public class JianPian implements Source.Extractor {
 
     @Override
     public boolean match(Uri uri) {
-        return List.of("tvbox-xg", "jianpian", "ftp").contains(UrlUtil.scheme(uri));
+        // Saved FTP storage URLs are opaque profile IDs, not legacy JianPian links.
+        // Leave them unchanged so engine selection and the FTP data source see the real scheme.
+        String scheme = UrlUtil.scheme(uri);
+        if ("ftp".equals(scheme) && NetworkPlayResolver.isNetworkPlayUrl(uri.toString())) return false;
+        return List.of("tvbox-xg", "jianpian", "ftp").contains(scheme);
     }
 
     private void init() {

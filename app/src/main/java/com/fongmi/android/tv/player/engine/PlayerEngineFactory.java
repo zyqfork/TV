@@ -64,7 +64,7 @@ public final class PlayerEngineFactory {
 
     public static boolean requiresExo(PlaySpec spec) {
         if (spec == null) return false;
-        if (spec.getDrm() != null || "smb".equals(UrlUtil.scheme(spec.getUrl()))) return true;
+        if (spec.getDrm() != null || "smb".equals(UrlUtil.scheme(spec.getUrl())) || ("ftp".equals(UrlUtil.scheme(spec.getUrl())) && com.fongmi.android.tv.storage.NetworkPlayResolver.isNetworkPlayUrl(spec.getUrl()))) return true;
         String url = spec.getUrl();
         String lowerUrl = url == null ? "" : url.toLowerCase(java.util.Locale.US);
         String format = spec.getFormat();

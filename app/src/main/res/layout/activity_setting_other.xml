@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:fitsSystemWindows="true" android:orientation="vertical">
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="?attr/actionBarSize" android:visibility="gone" app:navigationIconTint="@android:color/white" app:title="@string/setting_other" app:titleTextAppearance="@style/ToolbarTextAppearance" />
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="24dp">
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/autoRefresh" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_auto_source_refresh" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/autoRefreshText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/ssl" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_parser_ssl" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/sslText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/doh" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_doh" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/dohText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/ua" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="horizontal">
+            <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/player_ua" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/refreshSources" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_refresh_sources" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/refreshSourcesText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <com.google.android.material.textview.MaterialTextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:layout_marginBottom="12dp" android:text="@string/setting_other_privacy" android:textColor="@color/white" android:textSize="20sp" />
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/incognito" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_incognito" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/incognitoText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/update" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_check_update" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/updateText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <com.google.android.material.textview.MaterialTextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:layout_marginBottom="12dp" android:text="@string/setting_other_maintenance" android:textColor="@color/white" android:textSize="20sp" />
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/cache" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_cache" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/cacheText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/backup" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_backup" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/backupText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+        <androidx.appcompat.widget.LinearLayoutCompat android:id="@+id/restore" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:background="@drawable/selector_item" android:focusable="true" android:focusableInTouchMode="true" android:orientation="vertical">
+            <androidx.appcompat.widget.LinearLayoutCompat android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/setting_restore" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+                <com.google.android.material.textview.MaterialTextView android:id="@+id/restoreText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:textColor="@color/white" android:textSize="@dimen/setting_item_text_size" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </androidx.core.widget.NestedScrollView>
+</androidx.appcompat.widget.LinearLayoutCompat>

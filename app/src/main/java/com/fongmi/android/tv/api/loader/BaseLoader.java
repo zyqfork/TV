@@ -84,9 +84,13 @@ public class BaseLoader {
     }
 
     public void parseJar(String jar, boolean recent) {
+        parseJar(jar, recent, false);
+    }
+
+    public void parseJar(String jar, boolean recent, boolean preferCached) {
         if (TextUtils.isEmpty(jar)) return;
         String key = Crypto.md5(jar);
-        jarLoader.parseJar(key, jar);
+        jarLoader.parseJar(key, jar, preferCached);
         if (recent) jarLoader.setRecent(key);
     }
 

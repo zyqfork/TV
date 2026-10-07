@@ -97,7 +97,8 @@ public class NetworkStorageEditActivity extends BaseActivity implements NetworkI
         boolean smb = mStorage.isSmb();
         mBinding.share.setVisibility(smb ? View.VISIBLE : View.GONE);
         mBinding.path.setVisibility(smb ? View.GONE : View.VISIBLE);
-        mBinding.https.setVisibility(smb ? View.GONE : View.VISIBLE);
+        mBinding.https.setVisibility(mStorage.isWebDav() ? View.VISIBLE : View.GONE);
+        mBinding.insecureAuthLabel.setText(mStorage.isFtp() ? R.string.network_storage_ftp_insecure_auth : R.string.network_storage_insecure_auth);
         mBinding.insecureAuth.setVisibility(smb ? View.GONE : View.VISIBLE);
         mBinding.smbDowngrade.setVisibility(smb ? View.VISIBLE : View.GONE);
     }
@@ -109,7 +110,7 @@ public class NetworkStorageEditActivity extends BaseActivity implements NetworkI
     private void refresh() {
         mBinding.nameText.setText(mStorage.getName());
         mBinding.hostText.setText(mStorage.getHost());
-        mBinding.portText.setText(mStorage.getPort() > 0 ? String.valueOf(mStorage.getPort()) : "");
+        mBinding.portText.setText(mStorage.getPort() > 0 ? String.valueOf(mStorage.getPort()) : mStorage.isFtp() ? "21" : "");
         mBinding.shareText.setText(mStorage.getShare());
         mBinding.pathText.setText(mStorage.getPath());
         mBinding.usernameText.setText(mStorage.getUsername());

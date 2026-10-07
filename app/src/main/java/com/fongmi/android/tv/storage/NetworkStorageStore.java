@@ -147,7 +147,7 @@ public class NetworkStorageStore {
         if (a == null || b == null) return false;
         if (!a.getType().equalsIgnoreCase(b.getType())) return false;
         if (!a.getHost().equalsIgnoreCase(b.getHost())) return false;
-        if (a.getPort() != b.getPort()) return false;
+        if (a.isFtp() ? a.effectivePort() != b.effectivePort() : a.getPort() != b.getPort()) return false;
         if (a.isSmb() && !a.getShare().equalsIgnoreCase(b.getShare())) return false;
         try {
             return NetworkPathPolicy.cleanRelative(a.getPath())

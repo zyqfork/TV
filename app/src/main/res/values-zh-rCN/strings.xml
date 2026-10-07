@@ -187,7 +187,7 @@
     <string name="player_mpv_conf_import_failed">导入 mpv.conf 失败</string>
     <string name="player_mpv_conf_save_failed">保存 mpv.conf 失败</string>
     <string name="player_mpv_conf_conflict">以下选项由播放模式管理并会被覆盖：%1$s</string>
-    <string name="player_ua">User-Agent</string>
+    <string name="player_ua">UA</string>
 
     <!-- Danmaku -->
     <string name="danmaku_load">弹幕加载</string>
@@ -385,6 +385,7 @@
     <string name="network_storage_smb_access_denied">没有访问权限</string>
     <string name="network_storage_smb_unreachable">无法连接 SMB 服务器，请检查地址与端口</string>
     <string name="network_storage_share_optional">共享名（可留空，进入后自动列出）</string>
+    <string name="network_storage_type_ftp">FTP</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
 
@@ -482,4 +483,22 @@
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
     <string name="subtitle_close">关闭字幕</string>
+    <string name="setting_other">其他设置</string>
+    <string name="setting_other_privacy">隐私与更新</string>
+    <string name="setting_other_maintenance">维护</string>
+    <string name="setting_auto_source_refresh">自动刷新源</string>
+    <string name="setting_parser_ssl">忽略证书错误</string>
+    <string name="setting_parser_ssl_warning">允许网页解析绕过 HTTPS 证书错误？伪造的网页可能窃取 Cookie 和鉴权信息。仅对可信解析源开启。</string>
+    <string name="setting_check_update">检查更新</string>
+    <string name="setting_refresh_sources">立即刷新源</string>
+    <string name="setting_sources_refreshed">源已刷新</string>
+    <string name="setting_cache_confirm">仅清理下载缓存，不清除配置、历史和数据库；插件文件可能需要重新下载。</string>
+    <string name="setting_restore_confirm">从备份恢复？这会替换已保存的配置及用户数据。</string>
+    <string name="setting_sources_missing">请先配置点播或直播源。</string>
+    <string name="network_storage_add_ftp">添加 FTP</string>
+    <string name="network_storage_ftp_insecure_auth">允许 FTP 明文登录</string>
+    <string name="network_storage_ftp_auth_disabled">FTP 会明文传输账号、密码及数据。仅对可信服务器开启明文登录。</string>
+    <string name="network_storage_ftp_auth_failed">FTP 账号或密码错误</string>
+    <string name="network_storage_ftp_path_missing">FTP 文件或目录不存在，或无访问权限</string>
+    <string name="network_storage_ftp_failed">FTP 操作失败</string>
 </resources>

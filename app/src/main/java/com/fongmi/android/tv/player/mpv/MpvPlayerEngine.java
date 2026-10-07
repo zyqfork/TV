@@ -67,6 +67,14 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public void stop() {
+        // A playlist/segment probe may have already queued its main-thread reply.
+        // Invalidate it before stopping so it cannot load an item after the user exits.
+        startGeneration++;
+        player.stop();
+    }
+
+    @Override
     public Player rebuild() {
         startGeneration++;
         player.release();
@@ -126,9 +134,18 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public void start(PlaySpec spec, long startPositionMs) {
+        start(spec, startPositionMs, true);
+    }
+
+    @Override
+    public void start(PlaySpec spec, long startPositionMs, boolean playWhenReady) {
         this.spec = spec;
         long position = startPositionMs == C.TIME_UNSET ? 0 : Math.max(0, startPositionMs);
         int generation = ++startGeneration;
+        // Establish this request's initial intent before asynchronous preparation. Stop
+        // the old item first; a pause during the probe must not be overwritten later.
+        player.stop();
+        player.setPlayWhenReady(playWhenReady);
         Task.submit(() -> {
             PlaySpec prepared = HlsPngTsPrepare.prepare(spec);
             App.post(() -> {
@@ -140,6 +157,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     private void startInternal(long position) {
+        boolean playWhenReady = player.getPlayWhenReady();
         effect.applyVideoEffect();
         // Must go through the effect, not setAudioFilter(""): clearing here left the configured
         // audio chain unapplied for the whole session. applyAudioEffect() also emits "" when the
@@ -147,7 +165,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         effect.applyAudioEffect();
         player.setMediaItem(MediaItemFactory.from(spec), position);
         player.prepare();
-        player.play();
+        player.setPlayWhenReady(playWhenReady);
     }
 
     @Override

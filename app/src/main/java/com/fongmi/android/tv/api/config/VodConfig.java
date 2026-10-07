@@ -116,6 +116,14 @@ public class VodConfig extends BaseConfig {
     }
 
     @Override
+    protected boolean loadSaved(Config config) throws Throwable {
+        JsonObject object = Json.parse(ConfigSnapshotStore.read(config)).getAsJsonObject();
+        if (object.has("urls") || object.has("msg") || (!object.has("sites") && !object.has("lives"))) return false;
+        parseConfig(config, object, true);
+        return true;
+    }
+
+    @Override
     protected boolean isLoaded() {
         return !getSites().isEmpty();
     }
@@ -140,14 +148,19 @@ public class VodConfig extends BaseConfig {
     }
 
     private void parseConfig(Config config, JsonObject object) {
+        parseConfig(config, object, false);
+    }
+
+    private void parseConfig(Config config, JsonObject object, boolean preferCachedJar) {
         initList(object);
-        initLive(config, object);
+        initLive(config, object, preferCachedJar);
         initWall(config, object);
-        initSite(config, object);
+        initSite(config, object, preferCachedJar);
         initParse(config, object);
         config.setLogo(Json.safeString(object, "logo"));
         config.setNotice(Json.safeString(object, "notice"));
         config.setDanmaku(Json.safeString(object, "danmaku"));
+        ConfigSnapshotStore.save(config, object.toString());
     }
 
     private void initList(JsonObject object) {
@@ -160,11 +173,11 @@ public class VodConfig extends BaseConfig {
         setAds(Json.safeListString(object, "ads"));
     }
 
-    private void initLive(Config config, JsonObject object) {
+    private void initLive(Config config, JsonObject object, boolean preferCachedJar) {
         if (Json.isEmpty(object, "lives")) return;
         Config temp = Config.find(config, LIVE).save();
         boolean sync = LiveConfig.get().needSync(config.getUrl());
-        if (sync) LiveConfig.get().config(temp.update()).parse(object);
+        if (sync) LiveConfig.get().config(temp.update()).parse(object, preferCachedJar);
     }
 
     private void initWall(Config config, JsonObject object) {
@@ -175,9 +188,9 @@ public class VodConfig extends BaseConfig {
         if (sync) WallConfig.get().config(temp.update());
     }
 
-    private void initSite(Config config, JsonObject object) {
+    private void initSite(Config config, JsonObject object, boolean preferCachedJar) {
         String spider = Json.safeString(object, "spider");
-        BaseLoader.get().parseJar(spider, true);
+        BaseLoader.get().parseJar(spider, true, preferCachedJar);
         setSites(Json.safeListElement(object, "sites").stream().map(e -> Site.objectFrom(e, spider)).distinct().collect(Collectors.toCollection(ArrayList::new)));
         Map<String, Site> items = Site.findAll().stream().collect(Collectors.toMap(Site::getKey, Function.identity()));
         getSites().forEach(site -> site.sync(items.get(site.getKey())));
@@ -207,11 +220,7 @@ public class VodConfig extends BaseConfig {
     }
 
     public List<Doh> getDoh() {
-        List<Doh> items = Doh.get(App.get());
-        if (doh == null) return items;
-        items.removeAll(doh);
-        items.addAll(doh);
-        return items;
+        return Doh.merge(Doh.get(App.get()), doh);
     }
 
     private void setDoh(List<Doh> doh) {

@@ -46,6 +46,7 @@ quickjs = "3.2.3"
 sardine = "0.9"
 simpleXml = "2.7.1"
 smbj = "0.14.0"
+commons-net = "3.12.0"
 textdrawable = "1.0.3"
 zxingAndroidEmbedded = "4.3.0"
 zxingCore = "3.5.4"
@@ -102,6 +103,7 @@ quickjs-java = { group = "wang.harlon.quickjs", name = "wrapper-java", version.r
 sardine = { group = "com.github.thegrizzlylabs", name = "sardine-android", version.ref = "sardine" }
 simple-xml = { group = "org.simpleframework", name = "simple-xml", version.ref = "simpleXml" }
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
+commons-net = { group = "commons-net", name = "commons-net", version.ref = "commons-net" }
 textdrawable = { group = "com.github.jahirfiquitiva", name = "TextDrawable", version.ref = "textdrawable" }
 zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }

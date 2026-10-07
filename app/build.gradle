@@ -132,6 +132,7 @@ dependencies {
     implementation libs.simple.xml
     implementation libs.sardine
     implementation libs.smbj
+    implementation libs.commons.net
     implementation libs.textdrawable
     leanbackImplementation libs.leanback
     leanbackImplementation libs.androidautosize

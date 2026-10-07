@@ -186,7 +186,7 @@
     <string name="player_mpv_conf_import_failed">Failed to import mpv.conf</string>
     <string name="player_mpv_conf_save_failed">Failed to save mpv.conf</string>
     <string name="player_mpv_conf_conflict">These options are managed by the playback mode and will be overridden: %1$s</string>
-    <string name="player_ua">User-Agent</string>
+    <string name="player_ua">UA</string>
 
     <!-- Danmaku -->
     <string name="danmaku_load">Danmaku load</string>
@@ -394,6 +394,7 @@
     <string name="network_storage_smb_access_denied">Access denied</string>
     <string name="network_storage_smb_unreachable">Cannot reach the SMB server. Check the address and port.</string>
     <string name="network_storage_share_optional">Share (optional, leave empty to list)</string>
+    <string name="network_storage_type_ftp">FTP</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
 
@@ -495,4 +496,22 @@
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
     <string name="subtitle_close">Turn off subtitles</string>
+    <string name="setting_other">Other settings</string>
+    <string name="setting_other_privacy">Privacy &amp; updates</string>
+    <string name="setting_other_maintenance">Maintenance</string>
+    <string name="setting_auto_source_refresh">Auto-refresh sources</string>
+    <string name="setting_parser_ssl">Ignore certificate errors</string>
+    <string name="setting_parser_ssl_warning">Allow webpage parsing to bypass HTTPS certificate errors? A forged page could expose cookies and credentials. Enable only for trusted sources.</string>
+    <string name="setting_check_update">Check for updates</string>
+    <string name="setting_refresh_sources">Refresh sources now</string>
+    <string name="setting_sources_refreshed">Sources refreshed</string>
+    <string name="setting_cache_confirm">Clear downloaded cache only. Configurations, history and the database are retained; plugin files may need downloading again.</string>
+    <string name="setting_restore_confirm">Restore from a backup? This replaces saved configuration and user data.</string>
+    <string name="setting_sources_missing">Configure a VOD or live source first.</string>
+    <string name="network_storage_add_ftp">Add FTP</string>
+    <string name="network_storage_ftp_insecure_auth">Allow plaintext FTP credentials</string>
+    <string name="network_storage_ftp_auth_disabled">FTP sends passwords and data unencrypted. Enable plaintext credentials for this trusted server.</string>
+    <string name="network_storage_ftp_auth_failed">FTP authentication failed</string>
+    <string name="network_storage_ftp_path_missing">FTP file or directory missing, or access denied</string>
+    <string name="network_storage_ftp_failed">FTP operation failed</string>
 </resources>

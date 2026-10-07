@@ -19,6 +19,7 @@ public class NetworkStorage {
 
     public static final String TYPE_SMB = "smb";
     public static final String TYPE_WEBDAV = "webdav";
+    public static final String TYPE_FTP = "ftp";
 
     @SerializedName("id")
     private String id;
@@ -86,6 +87,10 @@ public class NetworkStorage {
     public boolean isWebDav() {
         return TYPE_WEBDAV.equalsIgnoreCase(getType());
     }
+
+    public boolean isFtp() { return TYPE_FTP.equalsIgnoreCase(getType()); }
+
+    public int effectivePort() { return port > 0 ? port : isSmb() ? 445 : isFtp() ? 21 : https ? 443 : 80; }
 
     public String getName() {
         return name == null ? "" : name;
@@ -185,6 +190,12 @@ public class NetworkStorage {
             String authority = getHost() + (port > 0 && port != 445 ? ":" + port : "");
             return "smb://" + authority + (TextUtils.isEmpty(share) ? "" : "/" + share);
         }
+        if (isFtp()) {
+            String host = getHost();
+            if (host.contains(":") && !host.startsWith("[")) host = "[" + host + "]";
+            return new Uri.Builder().scheme("ftp").encodedAuthority(host + (port > 0 && port != 21 ? ":" + port : ""))
+                    .path("/" + NetworkPathPolicy.cleanRelative(getPath())).build().toString();
+        }
         return webDavBaseUrl();
     }
 
@@ -212,6 +223,7 @@ public class NetworkStorage {
     }
 
     public boolean isValid() {
+        if (!isSmb() && !isWebDav() && !isFtp()) return false;
         if (!NetworkPathPolicy.validHost(getHost()) || port < 0 || port > 65535) return false;
         try {
             NetworkPathPolicy.cleanRelative(getPath());

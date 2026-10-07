@@ -186,7 +186,7 @@
     <string name="player_mpv_conf_import_failed">匯入 mpv.conf 失敗</string>
     <string name="player_mpv_conf_save_failed">儲存 mpv.conf 失敗</string>
     <string name="player_mpv_conf_conflict">以下選項由播放模式管理並會被覆蓋：%1$s</string>
-    <string name="player_ua">User-Agent</string>
+    <string name="player_ua">UA</string>
 
     <!-- Danmaku -->
     <string name="danmaku_load">彈幕載入</string>
@@ -384,6 +384,7 @@
     <string name="network_storage_smb_access_denied">沒有存取權限</string>
     <string name="network_storage_smb_unreachable">無法連線 SMB 伺服器，請檢查位址與連接埠</string>
     <string name="network_storage_share_optional">共用名稱（可留空，進入後自動列出）</string>
+    <string name="network_storage_type_ftp">FTP</string>
     <string name="network_storage_type_smb">SMB</string>
     <string name="network_storage_type_webdav">WebDAV</string>
 
@@ -481,4 +482,22 @@
     <string name="home_history">最近觀看</string>
     <string name="home_recommend">更新推薦</string>
     <string name="subtitle_close">關閉字幕</string>
+    <string name="setting_other">其他設定</string>
+    <string name="setting_other_privacy">隱私與更新</string>
+    <string name="setting_other_maintenance">維護</string>
+    <string name="setting_auto_source_refresh">自動更新來源</string>
+    <string name="setting_parser_ssl">忽略憑證錯誤</string>
+    <string name="setting_parser_ssl_warning">允許網頁解析略過 HTTPS 憑證錯誤？偽造網頁可能竊取 Cookie 及驗證資訊。僅對可信解析來源啟用。</string>
+    <string name="setting_check_update">檢查更新</string>
+    <string name="setting_refresh_sources">立即重新整理來源</string>
+    <string name="setting_sources_refreshed">來源已重新整理</string>
+    <string name="setting_cache_confirm">僅清除下載快取，不清除設定、歷史及資料庫；外掛檔案可能需要重新下載。</string>
+    <string name="setting_restore_confirm">從備份還原？這會取代已儲存的設定及使用者資料。</string>
+    <string name="setting_sources_missing">請先設定點播或直播來源。</string>
+    <string name="network_storage_add_ftp">新增 FTP</string>
+    <string name="network_storage_ftp_insecure_auth">允許 FTP 明文登入</string>
+    <string name="network_storage_ftp_auth_disabled">FTP 會以明文傳輸帳號、密碼及資料。僅對可信伺服器啟用明文登入。</string>
+    <string name="network_storage_ftp_auth_failed">FTP 帳號或密碼錯誤</string>
+    <string name="network_storage_ftp_path_missing">FTP 檔案或目錄不存在，或無存取權限</string>
+    <string name="network_storage_ftp_failed">FTP 操作失敗</string>
 </resources>

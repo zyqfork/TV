@@ -34,6 +34,7 @@ import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.engine.PlayerEngineFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.player.parse.ParseJob;
+import com.fongmi.android.tv.player.parse.ParsePlaybackState;
 import com.fongmi.android.tv.player.subtitle.SecondarySubtitleStore;
 import com.fongmi.android.tv.player.track.TrackUtil;
 import com.fongmi.android.tv.setting.AudioSetting;
@@ -42,7 +43,6 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
-import com.google.common.net.HttpHeaders;
 
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +70,7 @@ public class PlayerManager implements ParseCallback {
     private PlayerEngine engine;
     private VideoSize videoSize;
     private ParseJob parseJob;
+    private final ParsePlaybackState parsePlaybackState = new ParsePlaybackState();
     private PendingPreload pendingPreload;
     private PlaySpec spec;
     private Player player;
@@ -320,8 +321,9 @@ public class PlayerManager implements ParseCallback {
     public void refreshAudioSetting() {
         if (engine != null && engine.requiresAudioEffectRebuild() && AudioSetting.hasEffect(8)) {
             long position = Math.max(0, getPosition());
+            boolean playWhenReady = player.getPlayWhenReady();
             setPlayer(engine.rebuild());
-            startCurrent(position);
+            startCurrent(position, playWhenReady);
             return;
         }
         effects.refreshAudioSetting();
@@ -340,8 +342,9 @@ public class PlayerManager implements ParseCallback {
                 && player instanceof androidx.media3.mpvplayer.MpvPlayer mpv
                 && mpv.getDecode() != com.fongmi.android.tv.player.mpv.MpvUtil.internalDecode(decode, liveMode)) {
             long position = Math.max(0, getPosition());
+            boolean playWhenReady = player.getPlayWhenReady();
             setPlayer(engine.rebuild());
-            startCurrent(position);
+            startCurrent(position, playWhenReady);
             return;
         }
         effects.refreshVideoSetting();
@@ -432,8 +435,8 @@ public class PlayerManager implements ParseCallback {
         if (sub == null || sub.isEmpty()) return;
         enableSubtitles();
         if (spec != null) spec.setSub(sub);
-        if (engine.addSubtitle(sub)) play();
-        else startCurrent();
+        // Importing a subtitle is not a request to resume paused playback.
+        if (!engine.addSubtitle(sub)) startCurrent();
     }
 
     @Nullable
@@ -638,19 +641,29 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void play() {
+        parsePlaybackState.setPlayWhenReady(true);
         player.play();
     }
 
     public void pause() {
+        parsePlaybackState.setPlayWhenReady(false);
         player.pause();
     }
 
+    public boolean isParsing() {
+        return parsePlaybackState.isPending();
+    }
+
     public void stop() {
+        // Neither a watchdog nor a scheduled transport retry may restart a stopped item.
+        App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         engine.stop();
         stopParse();
     }
 
     public void clearMediaItems() {
+        // Clearing the player alone leaves engine-owned probes/recovery work alive.
+        stop();
         player.clearMediaItems();
     }
 
@@ -726,6 +739,7 @@ public class PlayerManager implements ParseCallback {
 
     private void switchDecode(boolean persist, boolean freshAttempt) {
         long position = Math.max(0, getPosition());
+        boolean playWhenReady = player.getPlayWhenReady();
         if (persist) {
             decode = nextDecode(decode);
         } else {
@@ -743,7 +757,7 @@ public class PlayerManager implements ParseCallback {
         if (rebuild) setPlayer(engine.rebuild());
         if (freshAttempt) beginFreshAttempt();
         // Changing hwdec does not replace an already-open decoder; always reload the item.
-        startCurrent(position);
+        startCurrent(position, playWhenReady);
     }
 
     /** Only user-visible software and hardware decode modes remain. */
@@ -863,6 +877,7 @@ public class PlayerManager implements ParseCallback {
         }
         mpvFallbackUsed = true;
         long position = Math.max(0, getPosition());
+        boolean playWhenReady = player.getPlayWhenReady();
         PlayerEngine old = engine;
         player.removeListener(listener);
         decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
@@ -870,7 +885,7 @@ public class PlayerManager implements ParseCallback {
         // Keep the old render target attached until native MPV shutdown is complete.
         old.release();
         setPlayer(engine.getPlayer());
-        engine.start(spec, position);
+        engine.start(spec, position, playWhenReady);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, Constant.TIMEOUT_PLAY);
         callback.onPrepare();
@@ -901,6 +916,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void start(PlaySpec spec, long timeout, long startPositionMs) {
+        stopParse();
         // New URL resets retry/watchdog state. Same-URL restarts must not, or a
         // dead endpoint loops forever through start() -> budgets cleared.
         resetBudgetsIfUrlChanged(this.spec == null ? null : this.spec.getUrl(), spec == null ? null : spec.getUrl());
@@ -932,25 +948,35 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, long startPositionMs) {
-        stopParse();
+        // Parsing replaces the current request, including engine-owned asynchronous work.
+        stop();
         clearSecondarySubTransient();
         pendingStartPositionMs = startPositionMs;
         subtitlesDisabled = false;
         spec = PlaySpec.fromParse(result, key, metadata);
         restoreSecondarySubtitle(spec);
+        parsePlaybackState.begin();
+        // Publish the pending request's initial intent to controller controls, too.
+        player.setPlayWhenReady(true);
         parseJob = ParseJob.create(this).start(result, useParse);
     }
 
     private void stopParse() {
+        parsePlaybackState.cancel();
         if (parseJob != null) parseJob.stop();
         parseJob = null;
         pendingStartPositionMs = C.TIME_UNSET;
     }
 
     private void setMediaItem(long timeout, long startPositionMs) {
+        setMediaItem(timeout, startPositionMs, true);
+    }
+
+    private void setMediaItem(long timeout, long startPositionMs, boolean playWhenReady) {
         if (spec == null || spec.getUrl() == null) return;
-        // Drop stale play/first-frame timeouts before engine.start; keep sourceRetry across retries.
-        App.removeCallbacks(runnable, firstFrameRunnable);
+        // Cancel old schedules, not their budgets: an explicit restart or a new source
+        // must not inherit a queued retry that later restarts the replacement item.
+        App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         ensureEngine(spec.checkUa());
         if (player.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) != subtitlesDisabled)
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
@@ -962,7 +988,7 @@ public class PlayerManager implements ParseCallback {
             firstFrameDeadlineMs = SystemClock.elapsedRealtime() + firstFrameTimeoutMs();
         }
         playStartRealtimeMs = SystemClock.elapsedRealtime();
-        engine.start(spec, startPositionMs);
+        engine.start(spec, startPositionMs, playWhenReady);
         setDanmakus(spec.getDanmakus());
         App.post(runnable, timeout);
         scheduleFirstFrameTimeout();
@@ -991,7 +1017,11 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void startCurrent(long startPositionMs) {
-        setMediaItem(Constant.TIMEOUT_PLAY, startPositionMs);
+        startCurrent(startPositionMs, player.getPlayWhenReady());
+    }
+
+    private void startCurrent(long startPositionMs, boolean playWhenReady) {
+        setMediaItem(Constant.TIMEOUT_PLAY, startPositionMs, playWhenReady);
     }
 
     private void startPreloadIfReady() {
@@ -1027,19 +1057,25 @@ public class PlayerManager implements ParseCallback {
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!TextUtils.isEmpty(from)) Notify.show(ResUtil.getString(R.string.parse_from, from));
-        if (headers != null) headers.remove(HttpHeaders.RANGE);
+        headers = ParsePlaybackState.playbackHeaders(headers);
         // parse() mutates the spec in place and restarts through startCurrent(), which bypasses the
         // URL-change check in start(). A parse result is a new source, so reset the budgets here;
         // otherwise the new URL inherits the previous attempt's watchdog deadline and retry count.
         resetBudgetsIfUrlChanged(spec == null ? null : spec.getUrl(), url);
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
-        startCurrent(pendingStartPositionMs);
+        // New parses start with autoplay, but explicit pause/resume during resolution wins.
+        boolean playWhenReady = parsePlaybackState.complete();
+        parseJob = null;
+        setMediaItem(Constant.TIMEOUT_PLAY, pendingStartPositionMs, playWhenReady);
         pendingStartPositionMs = C.TIME_UNSET;
     }
 
     @Override
     public void onParseError() {
+        parsePlaybackState.cancel();
+        parseJob = null;
+        player.pause();
         pendingStartPositionMs = C.TIME_UNSET;
         callback.onError(ResUtil.getString(R.string.error_play_parse));
     }

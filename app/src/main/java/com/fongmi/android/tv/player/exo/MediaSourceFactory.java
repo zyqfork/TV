@@ -102,9 +102,19 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
         Uri uri = mediaItem.localConfiguration != null ? mediaItem.localConfiguration.uri : Uri.EMPTY;
+        if ("ftp".equalsIgnoreCase(uri.getScheme()) && com.fongmi.android.tv.storage.NetworkPlayResolver.isNetworkPlayUrl(uri.toString())) {
+            // Infer progressive/HLS/DASH from the item, and resolve relative FTP segments.
+            // External HTTP(S) references use normal HTTP with no FTP login credentials.
+            DataSource.Factory upstream = createUpstreamDataSourceFactory(Map.of());
+            DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(
+                    () -> new NetworkRoutingDataSource(upstream.createDataSource()), getExtractorsFactory());
+            if (drmProvider != null) factory.setDrmSessionManagerProvider(drmProvider);
+            if (loadErrorPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorPolicy);
+            return factory.createMediaSource(mediaItem);
+        }
         if ("smb".equalsIgnoreCase(uri.getScheme())) {
             ProgressiveMediaSource.Factory factory = new ProgressiveMediaSource.Factory(
-                    new SmbDataSource.Factory(), getExtractorsFactory());
+                    new NetworkFileDataSource.Factory(), getExtractorsFactory());
             if (drmProvider != null) factory.setDrmSessionManagerProvider(drmProvider);
             if (loadErrorPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorPolicy);
             return factory.createMediaSource(mediaItem);

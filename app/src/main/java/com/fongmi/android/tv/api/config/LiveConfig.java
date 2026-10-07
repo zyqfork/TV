@@ -120,6 +120,23 @@ public class LiveConfig extends BaseConfig {
     }
 
     @Override
+    protected boolean loadSaved(Config config) throws Throwable {
+        String saved = ConfigSnapshotStore.read(config);
+        if (Json.isObj(saved)) {
+            JsonObject object = Json.parse(saved).getAsJsonObject();
+            if (object.has("urls") || object.has("msg") || !object.has("lives")) return false;
+            parseConfig(config, object, true);
+        } else {
+            parseText(config, saved);
+        }
+        return !getLives().isEmpty();
+    }
+
+    public void loadOnStartup() {
+        if (!sync) loadOnStartup(new Callback());
+    }
+
+    @Override
     protected boolean isLoaded() {
         return !getLives().isEmpty() && !getHome().getGroups().isEmpty();
     }
@@ -146,6 +163,7 @@ public class LiveConfig extends BaseConfig {
         lives = new ArrayList<>(List.of(live));
         LiveParser.text(live, text);
         setHome(config, live, false);
+        ConfigSnapshotStore.save(config, text);
     }
 
     private void checkJson(Config config, JsonObject object) throws Throwable {
@@ -168,12 +186,23 @@ public class LiveConfig extends BaseConfig {
     }
 
     private void parseConfig(Config config, JsonObject object) {
+        parseConfig(config, object, false);
+    }
+
+    private void parseConfig(Config config, JsonObject object, boolean preferCachedJar) {
         initList(object);
-        initLive(config, object);
+        initLive(config, object, preferCachedJar);
+        ConfigSnapshotStore.save(config, object.toString());
     }
 
     public void parse(JsonObject object) {
-        initLive(getConfig(), object);
+        parse(object, false);
+    }
+
+    public void parse(JsonObject object, boolean preferCachedJar) {
+        initLive(getConfig(), object, preferCachedJar);
+        ConfigSnapshotStore.save(getConfig(), object.toString());
+        getConfig().save();
     }
 
     private void initList(JsonObject object) {
@@ -184,9 +213,9 @@ public class LiveConfig extends BaseConfig {
         setAds(Json.safeListString(object, "ads"));
     }
 
-    private void initLive(Config config, JsonObject object) {
+    private void initLive(Config config, JsonObject object, boolean preferCachedJar) {
         String spider = Json.safeString(object, "spider");
-        BaseLoader.get().parseJar(spider, false);
+        BaseLoader.get().parseJar(spider, false, preferCachedJar);
         setLives(Json.safeListElement(object, "lives").stream().map(e -> Live.objectFrom(e, spider)).distinct().collect(Collectors.toCollection(ArrayList::new)));
         Map<String, Live> items = Live.findAll().stream().collect(Collectors.toMap(Live::getName, Function.identity()));
         getLives().forEach(live -> live.sync(items.get(live.getName())));

@@ -171,7 +171,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     private boolean shouldKeepAlive() {
         if (player.isPlaying()) return true;
         if (!PlayerSetting.isBackgroundOn()) return false;
-        return player.getPlaybackState() != Player.STATE_IDLE;
+        return player.isParsing() || player.getPlaybackState() != Player.STATE_IDLE;
     }
 
     @Override
@@ -200,7 +200,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     private void stopAndClear() {
-        player.stop();
+        // Manager clearing already invalidates parser/probes/retries and stops the engine.
         player.clearMediaItems();
     }
 
@@ -347,7 +347,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     public void dispatchStop() {
-        if (player.getPlaybackState() == Player.STATE_IDLE) return;
+        if (player.getPlaybackState() == Player.STATE_IDLE && !player.isParsing()) return;
         if (hasNavigationCallback() && isNavigationOwner()) dispatch(NavigationCallback::onStop);
         else {
             saveProgress();
@@ -434,6 +434,22 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private ForwardingPlayer wrap(Player base) {
         return new ForwardingPlayer(base) {
+            @Override
+            public void play() {
+                PlaybackService.this.player.play();
+            }
+
+            @Override
+            public void pause() {
+                PlaybackService.this.player.pause();
+            }
+
+            @Override
+            public void setPlayWhenReady(boolean playWhenReady) {
+                if (playWhenReady) PlaybackService.this.player.play();
+                else PlaybackService.this.player.pause();
+            }
+
             @Override
             public void setMediaItem(@NonNull MediaItem item) {
                 interceptItem(item, C.TIME_UNSET);
@@ -530,6 +546,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     @Override
     public void onError(String msg) {
         playerCallbacks.forEach(callback -> callback.onError(msg));
+        // Background parsing may have kept an otherwise idle service alive after unbind.
+        // Once it fails, release only if no navigation owner or media client still needs it.
+        if (!shouldKeepAlive()) tryShutdown();
     }
 
     @Override

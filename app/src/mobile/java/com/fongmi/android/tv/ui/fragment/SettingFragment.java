@@ -19,7 +19,6 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.FragmentSettingBinding;
-import com.fongmi.android.tv.db.BackupManager;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -33,20 +32,17 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.activity.SettingCastActivity;
+import com.fongmi.android.tv.ui.activity.SettingOtherActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
-import com.fongmi.android.tv.ui.dialog.RestoreDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
-import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.github.catvod.bean.Doh;
-import com.github.catvod.net.OkHttp;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.EventBus;
@@ -63,16 +59,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     public static SettingFragment newInstance() {
         return new SettingFragment();
-    }
-
-    private int getDohIndex() {
-        return Math.max(0, VodConfig.get().getDoh().indexOf(Doh.objectFrom(Setting.getDoh())));
-    }
-
-    private String[] getDohList() {
-        List<String> list = new ArrayList<>();
-        for (Doh item : VodConfig.get().getDoh()) list.add(item.getName());
-        return list.toArray(new String[0]);
     }
 
     private HomeActivity getRoot() {
@@ -92,12 +78,9 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.wallUrl.setText(WallConfig.getDesc());
         mBinding.versionText.setText(BuildConfig.VERSION_NAME);
         setOtherText();
-        setCacheText();
     }
 
     private void setOtherText() {
-        mBinding.dohText.setText(getDohList()[getDohIndex()]);
-        mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
         mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.castText.setText(getCastText());
@@ -126,37 +109,24 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         return on.isEmpty() ? getString(R.string.setting_off) : TextUtils.join(" · ", on);
     }
 
-    private void setCacheText() {
-        FileUtil.getCacheSize(new Callback() {
-            @Override
-            public void success(String result) {
-                mBinding.cacheText.setText(result);
-            }
-        });
-    }
-
     @Override
     protected void initEvent() {
         mBinding.vod.setOnClickListener(this::onVod);
-        mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
         mBinding.dlnaLibrary.setOnClickListener(this::setDlnaLibrary);
         mBinding.cast.setOnClickListener(this::onCast);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
-        mBinding.cache.setOnClickListener(this::onCache);
-        mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.player.setOnClickListener(this::onPlayer);
         mBinding.danmaku.setOnClickListener(this::onDanmaku);
-        mBinding.restore.setOnClickListener(this::onRestore);
         mBinding.version.setOnClickListener(this::onVersion);
+        mBinding.other.setOnClickListener(v -> SettingOtherActivity.start(getActivity()));
         mBinding.vod.setOnLongClickListener(this::onVodEdit);
         mBinding.vodHome.setOnClickListener(this::onVodHome);
         mBinding.live.setOnLongClickListener(this::onLiveEdit);
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
-        mBinding.incognito.setOnClickListener(this::setIncognito);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
@@ -198,7 +168,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
             @Override
             public void success() {
                 Notify.dismiss();
-                setCacheText();
             }
 
             @Override
@@ -290,11 +259,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         return true;
     }
 
-    private void setIncognito(View view) {
-        Setting.putIncognito(!Setting.isIncognito());
-        mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
-    }
-
     private void setSize(View view) {
         new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
             mBinding.sizeText.setText(size[which]);
@@ -302,19 +266,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
             RefreshEvent.size();
             dialog.dismiss();
         }).show();
-    }
-
-    private void setDoh(View view) {
-        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_doh).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDohList(), getDohIndex(), (dialog, which) -> {
-            setDoh(VodConfig.get().getDoh().get(which));
-            dialog.dismiss();
-        }).show();
-    }
-
-    private void setDoh(Doh doh) {
-        OkHttp.dns().setDoh(doh);
-        Setting.putDoh(doh.toString());
-        mBinding.dohText.setText(doh.getName());
     }
 
     private void onNetworkStorage(View view) {
@@ -332,51 +283,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         SettingCastActivity.start(getActivity());
     }
 
-    private void onCache(View view) {
-        FileUtil.clearCache(new Callback() {
-            @Override
-            public void success() {
-                setCacheText();
-            }
-        });
-    }
-
-    private void onBackup(View view) {
-        PermissionUtil.requestFile(this, allGranted -> BackupManager.backup(new Callback() {
-            @Override
-            public void success() {
-                Notify.show(R.string.backup_success);
-            }
-
-            @Override
-            public void error() {
-                Notify.show(R.string.backup_fail);
-            }
-        }));
-    }
-
-    private void onRestore(View view) {
-        PermissionUtil.requestFile(this, allGranted -> RestoreDialog.create().show(requireActivity(), new Callback() {
-            @Override
-            public void success() {
-                Notify.show(R.string.restore_success);
-                setOtherText();
-                initConfig();
-            }
-
-            @Override
-            public void error() {
-                Notify.show(R.string.restore_fail);
-            }
-        }));
-    }
-
-    private void initConfig() {
-        VodConfig.get().init().load(getCallback());
-        LiveConfig.get().init().load();
-        WallConfig.get().init().load();
-    }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onConfigEvent(ConfigEvent event) {
         if (event.type() != ConfigEvent.Type.COMMON) return;
@@ -390,12 +296,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         super.onResume();
         // returning from 投屏设置: a receiver switch may have changed
         if (mBinding != null) mBinding.castText.setText(getCastText());
-    }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        if (hidden) return;
-        setCacheText();
     }
 
     @Override

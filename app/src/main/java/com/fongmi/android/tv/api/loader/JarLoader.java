@@ -82,6 +82,10 @@ public class JarLoader {
     }
 
     public void parseJar(String key, String jar) {
+        parseJar(key, jar, false);
+    }
+
+    public void parseJar(String key, String jar, boolean preferCached) {
         if (loaders.containsKey(key)) return;
         if (jar.startsWith("assets")) jar = UrlUtil.convert(jar);
         Object lock = locks.computeIfAbsent(key, k -> new Object());
@@ -89,6 +93,11 @@ public class JarLoader {
             if (loaders.containsKey(key)) return;
             String[] texts = jar.split(";md5;");
             String md5 = texts.length > 1 ? texts[1].trim() : "";
+            boolean cachedValid = md5.isEmpty() || md5.startsWith("http") || Crypto.equals(Path.jar(texts[0]), md5);
+            if (preferCached && texts[0].startsWith("http") && Path.exists(Path.jar(texts[0])) && cachedValid) {
+                load(key, Path.jar(texts[0]));
+                if (loaders.containsKey(key)) return;
+            }
             if (md5.startsWith("http")) md5 = OkHttp.string(md5).trim();
             jar = texts[0];
             if (!md5.isEmpty() && Crypto.equals(Path.jar(jar), md5)) {

@@ -148,9 +148,12 @@ def main():
     # Both root-browse fallbacks must use the command-aware predicate before clearing a share.
     for flavor in ("leanback", "mobile"):
         browse = (ROOT / f"app/src/{flavor}/java/com/fongmi/android/tv/ui/activity/NetworkBrowseActivity.java").read_text(encoding="utf-8")
-        assert "return SmbClientHelper.isMissingShare(e);" in browse
-        assert "if (!root || !hasShare || !isBadShareName(e)) throw e;" in browse
-    print("PASS SMB browse fallback wiring: only a classified share failure can reset share configuration")
+        assert "NetworkStorageAccess.list(storage, requestPath)" in browse
+        assert "listing.shareRediscovered()" in browse
+    access = (ROOT / 'app/src/main/java/com/fongmi/android/tv/storage/NetworkStorageAccess.java').read_text(encoding='utf-8')
+    assert 'storage.getShare().isEmpty() || !SmbClientHelper.isMissingShare(e)' in access
+    assert access.index('!SmbClientHelper.isMissingShare(e)') < access.index('storage.setShare("")')
+    print("PASS shared SMB browse fallback wiring: only a classified root share failure can reset share configuration")
 
 
 if __name__ == "__main__":

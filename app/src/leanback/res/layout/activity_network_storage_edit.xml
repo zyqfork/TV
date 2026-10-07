@@ -216,6 +216,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
+                android:id="@+id/insecureAuthLabel"
                 android:text="@string/network_storage_insecure_auth"
                 android:textColor="@color/white"
                 android:textSize="18sp" />

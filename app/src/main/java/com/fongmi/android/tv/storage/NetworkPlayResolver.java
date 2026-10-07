@@ -19,9 +19,14 @@ public final class NetworkPlayResolver {
         try {
             Uri uri = Uri.parse(url);
             String scheme = uri.getScheme();
-            return (NetworkStorage.TYPE_SMB.equals(scheme) || NetworkStorage.TYPE_WEBDAV.equals(scheme))
+            boolean candidate = (NetworkStorage.TYPE_SMB.equals(scheme) || NetworkStorage.TYPE_WEBDAV.equals(scheme) || NetworkStorage.TYPE_FTP.equals(scheme))
                     && !TextUtils.isEmpty(uri.getHost()) && TextUtils.isEmpty(uri.getUserInfo())
                     && TextUtils.isEmpty(uri.getQuery()) && TextUtils.isEmpty(uri.getFragment());
+            if (!candidate || !NetworkStorage.TYPE_FTP.equals(scheme)) return candidate;
+            // Do not intercept ordinary ftp://server/file links previously handled by MPV.
+            // Our private URLs use saved IDs, not actual server addresses.
+            return uri.getHost().matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    || NetworkStorageStore.find(uri.getHost()) != null;
         } catch (Exception e) {
             return false;
         }
@@ -66,9 +71,9 @@ public final class NetworkPlayResolver {
         if (!isNetworkPlayUrl(url)) return "";
         try {
             NetworkStorage storage = requireStorage(url);
-            return storage.isWebDav() ? "WebDAV" : "SMB";
+            return storage.isFtp() ? "FTP" : storage.isWebDav() ? "WebDAV" : "SMB";
         } catch (Exception e) {
-            return url.startsWith("webdav://") ? "WebDAV" : "SMB";
+            return url.startsWith("ftp://") ? "FTP" : url.startsWith("webdav://") ? "WebDAV" : "SMB";
         }
     }
 

@@ -49,6 +49,7 @@ public class NetworkStorageActivity extends BaseActivity implements NetworkStora
     protected void initEvent() {
         mBinding.addSmb.setOnClickListener(v -> startDiscover());
         mBinding.addWebdav.setOnClickListener(v -> NetworkStorageEditActivity.start(this, NetworkStorage.TYPE_WEBDAV, null));
+        mBinding.addFtp.setOnClickListener(v -> NetworkStorageEditActivity.start(this, NetworkStorage.TYPE_FTP, null));
     }
 
     @Override

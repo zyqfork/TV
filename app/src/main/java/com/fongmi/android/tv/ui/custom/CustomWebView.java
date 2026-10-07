@@ -47,6 +47,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private static final int MAX_URLS = 5;
 
     private final AtomicReference<ParseCallback> callbackRef = new AtomicReference<>();
+    private final List<CustomWebView> children = new ArrayList<>();
     private LinkedHashSet<String> urls;
     private WebResourceResponse empty;
     private WebDialog dialog;
@@ -136,9 +137,10 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
             }
 
             @Override
-            @SuppressLint("WebViewClientOnReceivedSslError")
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.proceed();
+                // Explicit, default-off compatibility option for parser WebViews only.
+                if (Setting.isIgnoreParserSslErrors()) handler.proceed();
+                else handler.cancel();
             }
 
             @Override
@@ -206,7 +208,13 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private void onParseAdd(Map<String, String> headers, String url) {
         ParseCallback cb = callbackRef.get();
         if (cb == null) return;
-        post(() -> CustomWebView.create(App.get()).start(key, from, headers, url, click, cb, false));
+        post(() -> {
+            // The parent may have stopped or succeeded while this UI task was queued.
+            if (stopped || callbackRef.get() != cb) return;
+            CustomWebView child = CustomWebView.create(App.get());
+            children.add(child);
+            child.start(key, from, headers, url, click, cb, false);
+        });
     }
 
     private void onParseSuccess(Map<String, String> headers, String url) {
@@ -227,6 +235,11 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
         stopLoading();
         loadUrl(BLANK);
         App.removeCallbacks(timer);
+        for (CustomWebView child : children) {
+            child.stop(false);
+            child.destroy();
+        }
+        children.clear();
         if (error) onParseError();
         else callbackRef.set(null);
     }

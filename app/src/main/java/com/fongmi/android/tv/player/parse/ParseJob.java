@@ -159,7 +159,9 @@ public class ParseJob implements ParseCallback {
     }
 
     private void checkResult(Map<String, String> headers, String url, String from, boolean fatal) {
-        if (url.length() > 40) onParseSuccess(headers, url, from);
+        // Short signed/redirect/local URLs are valid too; length says nothing about
+        // whether an address is playable. Reject empty or schemeless parser messages.
+        if (!TextUtils.isEmpty(url) && !UrlUtil.scheme(url).isEmpty()) onParseSuccess(headers, url, from);
         else if (fatal) onParseError();
     }
 
@@ -188,7 +190,12 @@ public class ParseJob implements ParseCallback {
         if (!WebViewUtil.support()) {
             onParseError();
         } else {
-            App.post(() -> webViews.add(CustomWebView.create(App.get()).start(key, from, headers, url, click, this, !url.contains("player/?url="))));
+            App.post(() -> {
+                // stop() or another parser may have won before this UI task runs.
+                // Do not create a WebView after cleanup has already completed.
+                if (done.get()) return;
+                webViews.add(CustomWebView.create(App.get()).start(key, from, headers, url, click, this, !url.contains("player/?url=")));
+            });
         }
     }
 

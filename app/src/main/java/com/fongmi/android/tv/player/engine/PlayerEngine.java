@@ -37,6 +37,9 @@ public interface PlayerEngine {
 
     void start(PlaySpec spec, long startPositionMs);
 
+    /** Restart/rebuild without implicitly resuming a user-paused item. */
+    void start(PlaySpec spec, long startPositionMs, boolean playWhenReady);
+
     default void preload(PlaySpec spec, long startPositionMs) {
     }
 

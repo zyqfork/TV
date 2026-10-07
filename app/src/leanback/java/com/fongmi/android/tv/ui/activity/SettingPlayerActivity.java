@@ -17,7 +17,6 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingPlayerBinding;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.SubtitleListener;
-import com.fongmi.android.tv.impl.UaListener;
 import com.fongmi.android.tv.player.mpv.MpvUtil;
 import com.fongmi.android.tv.player.subtitle.ExternalFont;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -29,14 +28,13 @@ import com.fongmi.android.tv.ui.dialog.ExternalFontDialog;
 import com.fongmi.android.tv.ui.dialog.MpvConfDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleApiDialog;
-import com.fongmi.android.tv.ui.dialog.UaDialog;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 
 import java.text.DecimalFormat;
 
-public class SettingPlayerActivity extends BaseActivity implements UaListener, SpeedListener, SubtitleListener, ExternalFontDialog.Listener {
+public class SettingPlayerActivity extends BaseActivity implements SpeedListener, SubtitleListener, ExternalFontDialog.Listener {
 
     private ActivitySettingPlayerBinding mBinding;
     private DecimalFormat format;
@@ -97,7 +95,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
         mBinding.liveLatency.setOnClickListener(this::setLiveLatency);
         mBinding.preload.setOnClickListener(this::onPreloadSetting);
         mBinding.decode.setOnClickListener(this::onDecodeSetting);
-        mBinding.ua.setOnClickListener(this::onUa);
         mBinding.subtitleAssrt.setOnClickListener(this::onSubtitleAssrt);
         mBinding.subtitleFont.setOnClickListener(this::onSubtitleFont);
         mBinding.speed.setOnLongClickListener(this::onVolumeGain);
@@ -277,15 +274,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, S
 
     private void onDecodeSetting(View view) {
         SettingDecodeActivity.start(this);
-    }
-
-    private void onUa(View view) {
-        UaDialog.show(this);
-    }
-
-    @Override
-    public void setUa(String ua) {
-        Setting.putUa(ua);
     }
 
     @Override
