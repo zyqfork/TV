@@ -26,6 +26,14 @@ public interface PlayerEngine {
         return false;
     }
 
+    /**
+     * True when this engine was built from playback settings that have since changed.
+     * LoadControl, renderers, and track selection are fixed at construction.
+     */
+    default boolean refreshConfig() {
+        return false;
+    }
+
     void release();
 
     Player rebuild();

@@ -58,7 +58,7 @@ public class PreCache {
         if (mediaItem.equals(preloadedItem) && manager != null) return;
         stopManager();
         preloadedItem = mediaItem;
-        manager = createManager(mediaItem);
+        manager = createManager(mediaItem, PreloadDiagnostics.beginWatch(mediaItem));
         player.setPriorityTaskManager(priorityTaskManager);
         DiskPreloadManager.Options options = createOptions(startPositionMs);
         PreloadDiagnostics.started(mediaItem, startPositionMs, PreloadSetting.getPreloadDurationMs());
@@ -85,8 +85,10 @@ public class PreCache {
         if (player != null) player.setPriorityTaskManager(null);
     }
 
-    private DiskPreloadManager createManager(MediaItem mediaItem) {
-        return new DiskPreloadManager.Builder(App.get(), MediaSourceFactory.getCache(), MediaSourceFactory.createUpstreamDataSourceFactory(ExoUtil.extractHeaders(mediaItem)), ExoUtil.buildRenderersFactory())
+    private DiskPreloadManager createManager(MediaItem mediaItem, String watchId) {
+        androidx.media3.datasource.cache.Cache cache = MediaSourceFactory.getCache();
+        if (watchId != null) cache = new PreloadKeyCache(cache, watchId);
+        return new DiskPreloadManager.Builder(App.get(), cache, MediaSourceFactory.createUpstreamDataSourceFactory(ExoUtil.extractHeaders(mediaItem)), ExoUtil.buildRenderersFactory())
                 .setPriorityTaskManager(priorityTaskManager)
                 .setListener(new PreloadListener())
                 .build();

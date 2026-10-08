@@ -10,7 +10,6 @@
     <string name="nav_setting">设置</string>
 
     <!-- Menu -->
-    <string name="menu_sync">同步</string>
     <string name="menu_delete">删除</string>
     <string name="menu_search">搜索</string>
     <string name="menu_site">站点</string>
@@ -27,7 +26,6 @@
     <string name="detail_search">快搜“<xliff:g name="name">%s</xliff:g>”</string>
 
     <!-- Device -->
-    <string name="device_select">选择装置</string>
     <string name="device_offline">装置已离线</string>
     <string name="device_scan">请扫描影视 QRCode 进行绑定</string>
 
@@ -60,7 +58,6 @@
     </string-array>
 
 
-    <string name="device_searching">正在搜索设备…</string>
     <string name="device_empty">未发现设备，请刷新或确认同一 Wi‑Fi</string>
     <string name="device_casting">正在投屏…</string>
 </resources>

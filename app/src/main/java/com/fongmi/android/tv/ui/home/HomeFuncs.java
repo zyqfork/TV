@@ -35,4 +35,11 @@ public final class HomeFuncs {
         items.add(Func.create(R.string.home_setting));
         return items;
     }
+
+    /** Identity plus label, so a resume can skip rebuilding an unchanged entry row. */
+    public static boolean same(List<Func> left, List<Func> right) {
+        if (left == null || right == null || left.size() != right.size()) return false;
+        for (int i = 0; i < left.size(); i++) if (!left.get(i).isSameContent(right.get(i))) return false;
+        return true;
+    }
 }

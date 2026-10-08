@@ -200,9 +200,18 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     }
 
     private void setFunc() {
-        mBinding.func.setHasFixedSize(true);
-        mBinding.func.setAdapter(mFuncAdapter = new HomeFuncAdapter(this));
+        if (mFuncAdapter == null) {
+            mBinding.func.setHasFixedSize(true);
+            mBinding.func.setAdapter(mFuncAdapter = new HomeFuncAdapter(this));
+        }
         mFuncAdapter.setItems(HomeFuncs.create());
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // The pin can change while this screen is stopped. Rebind from the store on return.
+        if (mBinding != null) setFunc();
     }
 
     /**

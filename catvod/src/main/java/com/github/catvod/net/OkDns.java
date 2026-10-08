@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -21,18 +22,36 @@ import okhttp3.dnsoverhttps.DnsOverHttps;
 
 public class OkDns implements Dns {
 
+    private static final int DOH_FAILURE_LIMIT = 3;
+
     private final ConcurrentHashMap<String, String> map;
     private volatile Supplier<Doh> supplier;
     private volatile DnsOverHttps doh;
+    private volatile int dohFailures;
 
     public OkDns() {
         this.map = new ConcurrentHashMap<>();
     }
 
     public synchronized void setDoh(Doh item) {
-        HttpUrl url = HttpUrl.parse(item.getUrl());
-        this.doh = url == null ? null : new DnsOverHttps.Builder().client(new OkHttpClient()).url(url).bootstrapDnsHosts(item.getHosts()).build();
         this.supplier = null;
+        this.dohFailures = 0;
+        this.doh = null;
+        if (item == null) return;
+        HttpUrl url = HttpUrl.parse(item.getUrl().trim());
+        if (!isDohUrl(url)) return;
+        try {
+            OkHttpClient client = new OkHttpClient.Builder().connectTimeout(2, TimeUnit.SECONDS).readTimeout(2, TimeUnit.SECONDS).callTimeout(3, TimeUnit.SECONDS).build();
+            this.doh = new DnsOverHttps.Builder().client(client).url(url).bootstrapDnsHosts(item.getHosts()).build();
+        } catch (RuntimeException ignored) {
+            this.doh = null;
+        }
+    }
+
+    private static boolean isDohUrl(HttpUrl url) {
+        if (url == null || url.host() == null || url.host().isEmpty()) return false;
+        String scheme = url.scheme();
+        return "https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme);
     }
 
     public synchronized void setDoh(Supplier<Doh> supplier) {
@@ -57,13 +76,38 @@ public class OkDns implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-        Supplier<Doh> supplier = this.supplier;
-        if (supplier != null) initDoh(supplier);
-        return (doh != null ? doh : Dns.SYSTEM).lookup(get(hostname));
+        Supplier<Doh> pending = this.supplier;
+        if (pending != null) initDoh(pending);
+        String target = get(hostname);
+        DnsOverHttps current = this.doh;
+        if (current == null) return Dns.SYSTEM.lookup(target);
+        try {
+            List<InetAddress> addresses = current.lookup(target);
+            dohFailures = 0;
+            return addresses;
+        } catch (UnknownHostException e) {
+            if (e.getCause() == null) throw e;
+            return fallback(target);
+        } catch (RuntimeException ignored) {
+            return fallback(target);
+        }
+    }
+
+    private List<InetAddress> fallback(String hostname) throws UnknownHostException {
+        if (++dohFailures >= DOH_FAILURE_LIMIT) doh = null;
+        return Dns.SYSTEM.lookup(hostname);
     }
 
     private synchronized void initDoh(Supplier<Doh> supplier) {
         if (supplier != this.supplier) return;
-        setDoh(supplier.get());
+        Doh item;
+        try {
+            item = supplier.get();
+        } catch (RuntimeException ignored) {
+            this.supplier = null;
+            this.doh = null;
+            return;
+        }
+        setDoh(item);
     }
 }

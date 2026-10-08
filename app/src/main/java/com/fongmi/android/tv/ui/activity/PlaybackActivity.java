@@ -61,6 +61,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private PlaybackService mService;
     private SecondarySubtitleOverlay secondarySubtitleOverlay;
     private com.fongmi.android.tv.ui.playback.SubtitleResourceBinding subtitleResourceBinding;
+    private int appliedRender = -1;
     private boolean initialized;
     private boolean audioOnly;
     private boolean scrubbing;
@@ -393,6 +394,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void attachSurface() {
+        if (appliedRender != PlayerSetting.getRender()) {
+            setRender();
+            return;
+        }
         if (mService != null) {
             boolean mpv = player().getEngine() == PlayerSetting.ENGINE_MPV;
             // MPV renders directly to the Surface. An artwork/EPG logo left by PlayerView can
@@ -437,7 +442,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void setRender() {
-        getPlayerView().setRender(PlayerSetting.getRender());
+        appliedRender = PlayerSetting.getRender();
+        getPlayerView().setRender(appliedRender);
         detachSurface();
         attachSurface();
     }
@@ -447,7 +453,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         // App overlay owns pause/transport UI; Media3 PlayerView must stay chrome-free.
         playerView.setUseController(false);
         playerView.setControllerAutoShow(false);
-        playerView.setRender(PlayerSetting.getRender());
+        appliedRender = PlayerSetting.getRender();
+        playerView.setRender(appliedRender);
         playerView.getSubtitleView().setStyle(getCaptionStyle());
         playerView.getSubtitleView().setApplyEmbeddedStyles(true);
         playerView.getSubtitleView().setApplyEmbeddedFontSizes(false);

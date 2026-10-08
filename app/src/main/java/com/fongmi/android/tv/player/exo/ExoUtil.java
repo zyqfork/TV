@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.AudioOutputProvider;
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
@@ -53,7 +54,7 @@ public class ExoUtil {
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener, AudioProcessor audioProcessor, boolean live) {
         decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
         ExoPlayer player = new ExoPlayer.Builder(App.get())
-                .setTrackSelector(buildTrackSelector())
+                .setTrackSelector(buildTrackSelector(decode))
                 .setLoadControl(buildLoadControl(live))
                 .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioProcessor))
                 .setMediaSourceFactory(buildMediaSourceFactory())
@@ -71,26 +72,48 @@ public class ExoUtil {
         return buildLoadControl(false);
     }
 
+    /**
+     * The setting is the target reservoir in seconds. 1s and 15s must not collapse to the same
+     * floor. Playback still starts once half of that reservoir is ready, capped so a long buffer
+     * does not hold the first frame. Live low-latency ignores the reservoir and stays small.
+     * VOD keeps a short back buffer so a small rewind does not refetch.
+     */
     public static LoadControl buildLoadControl(boolean live) {
-        int bufferMs = PlayerSetting.getBuffer() * 1000;
-        int minBufferMs = Math.max(bufferMs, live ? 3000 : 5000);
-        int maxBufferMs = Math.clamp(minBufferMs * 3, live ? 8000 : 15000, live ? 15000 : 30000);
-        int playbackMs = Math.min(2500, Math.max(1000, bufferMs / 2));
-        int rebufferMs = Math.min(5000, Math.max(playbackMs, bufferMs));
+        int targetMs = PlayerSetting.getBuffer() * 1000;
+        int playbackMs = Math.clamp(targetMs / 2, 500, live ? 3000 : 5000);
+        int rebufferMs = Math.clamp(targetMs, playbackMs, live ? 8000 : 15000);
+        int minBufferMs = Math.max(targetMs, rebufferMs);
+        int maxBufferMs = Math.min(Math.max(minBufferMs * 2, minBufferMs), live ? 20000 : 60000);
         int targetBufferBytes = getTargetBufferBytes(live);
+        int backBufferMs = live ? 0 : Math.min(10000, targetMs);
         if (live && PlayerSetting.isLiveLowLatency()) {
-            minBufferMs = Math.max(1000, bufferMs / 2);
-            maxBufferMs = Math.max(minBufferMs * 2, 6000);
-            playbackMs = Math.min(1200, minBufferMs);
-            rebufferMs = Math.min(2500, Math.max(playbackMs, minBufferMs));
+            minBufferMs = Math.max(1000, Math.min(targetMs, 2000));
+            maxBufferMs = Math.max(minBufferMs * 2, 4000);
+            playbackMs = Math.min(1000, minBufferMs);
+            rebufferMs = Math.min(minBufferMs, Math.max(playbackMs, 1500));
             targetBufferBytes = 8 * 1024 * 1024;
+            backBufferMs = 0;
         }
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
                 .setTargetBufferBytes(targetBufferBytes)
-                .setBackBuffer(0, false)
+                .setBackBuffer(backBufferMs, backBufferMs > 0)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
+    }
+
+    /** Settings that are read only when an ExoPlayer is constructed. */
+    public static int playbackConfig(int decode, boolean live) {
+        int value = decode == PlayerEngine.SOFT ? 1 : 2;
+        value = value * 31 + (live ? 1 : 0);
+        value = value * 31 + PlayerSetting.getBuffer();
+        value = value * 31 + PlayerSetting.getLiveLatency();
+        value = value * 31 + (PlayerSetting.isTunnelingEnabled() ? 1 : 0);
+        value = value * 31 + (PlayerSetting.isAudioPassThrough() ? 1 : 0);
+        value = value * 31 + (PlayerSetting.isAudioPrefer() ? 1 : 0);
+        value = value * 31 + (PlayerSetting.isVideoPrefer() ? 1 : 0);
+        value = value * 31 + (PlayerSetting.isPreferAAC() ? 1 : 0);
+        return value;
     }
 
     /** Scale memory buffering to the actual device class rather than reserving 32 MiB everywhere. */
@@ -109,40 +132,29 @@ public class ExoUtil {
         return extras.keySet().stream().filter(key -> extras.getString(key) != null).collect(Collectors.toMap(key -> key, extras::getString));
     }
 
-    private static int getRenderMode(int decode) {
-        return decode == PlayerEngine.HARD ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
-    }
-
-    /**
-     * EXO soft decode must prefer Android software codecs (c2.android / OMX.google).
-     * This project's Media3 FFmpeg extension is audio-only, so software video comes from
-     * platform software decoders via MediaCodecSelector.PREFER_SOFTWARE.
-     */
-    private static MediaCodecSelector buildMediaCodecSelector(int decode) {
-        return decode == PlayerEngine.SOFT ? MediaCodecSelector.PREFER_SOFTWARE : MediaCodecSelector.DEFAULT;
-    }
-
-    private static TrackSelector buildTrackSelector() {
+    private static TrackSelector buildTrackSelector(int decode) {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
         if (PlayerSetting.isPreferAAC()) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
         builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
-        builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled());
+        // Tunneling needs a hardware video and audio decoder. Soft video, 「视频软解」 or
+        // 「音频软解」 makes Media3 fail the track instead of playing.
+        boolean software = decode == PlayerEngine.SOFT || PlayerSetting.isVideoPrefer() || PlayerSetting.isAudioPrefer();
+        builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled() && !software);
         trackSelector.setParameters(builder.build());
         return trackSelector;
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode, AudioProcessor audioProcessor) {
-        return buildRenderersFactory(getRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor);
+        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor);
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerEngine.HARD, null);
+        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerEngine.HARD, null);
     }
 
-    private static RenderersFactory buildRenderersFactory(int renderMode, boolean audioPrefer, boolean videoPrefer, int decode, AudioProcessor audioProcessor) {
-        boolean preferByDecode = renderMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
-        MediaCodecSelector codecSelector = buildMediaCodecSelector(decode);
+    private static RenderersFactory buildRenderersFactory(boolean audioPrefer, boolean videoPrefer, int decode, AudioProcessor audioProcessor) {
+        boolean softwareDecode = decode == PlayerEngine.SOFT;
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
@@ -156,15 +168,12 @@ public class ExoUtil {
                                                VideoRendererEventListener eventListener,
                                                long allowedVideoJoiningTimeMs,
                                                ArrayList<Renderer> out) {
-                // `videoPrefer` ("视频软解") used to only flip the extension renderer mode, which is a
-                // no-op here because this project's Media3 FFmpeg extension is audio-only — so the
-                // setting looked alive in the UI but never changed video decoding. Route it to the
-                // codec selector, which is what actually decides software vs hardware for video.
+                // FFmpeg in this project is audio-only, so extension mode never changes the video
+                // codec. Scene soft decode and 「视频软解」 both have to select PREFER_SOFTWARE.
+                boolean videoSoftware = softwareDecode || videoPrefer;
                 super.buildVideoRenderers(context,
-                        preferByDecode || videoPrefer
-                                ? EXTENSION_RENDERER_MODE_PREFER
-                                : EXTENSION_RENDERER_MODE_ON,
-                        videoPrefer ? MediaCodecSelector.PREFER_SOFTWARE : mediaCodecSelector,
+                        videoSoftware ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON,
+                        videoSoftware ? MediaCodecSelector.PREFER_SOFTWARE : mediaCodecSelector,
                         enableDecoderFallback, eventHandler, eventListener,
                         allowedVideoJoiningTimeMs, out);
             }
@@ -176,11 +185,15 @@ public class ExoUtil {
                                                Handler eventHandler,
                                                AudioRendererEventListener eventListener,
                                                ArrayList<Renderer> out) {
+                boolean audioSoftware = softwareDecode || audioPrefer;
+                MediaCodecSelector audioSelector = audioSoftware
+                        ? MediaCodecSelector.PREFER_SOFTWARE
+                        : mediaCodecSelector;
                 super.buildAudioRenderers(context,
-                        preferByDecode || audioPrefer
+                        audioSoftware
                                 ? EXTENSION_RENDERER_MODE_PREFER
                                 : EXTENSION_RENDERER_MODE_ON,
-                        codecSelector, enableDecoderFallback, audioSink, eventHandler,
+                        audioSelector, enableDecoderFallback, audioSink, eventHandler,
                         eventListener, out);
             }
         };
@@ -190,7 +203,12 @@ public class ExoUtil {
 
     private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, AudioProcessor audioProcessor) {
         DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
-        if (!PlayerSetting.isAudioPassThrough()) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+        if (!PlayerSetting.isAudioPassThrough()) {
+            // The default provider already is AudioTrack and still accepts AC3/DTS/E-AC3 directly.
+            // Rejecting non-PCM is what actually turns passthrough off.
+            AudioOutputProvider output = new AudioTrackAudioOutputProvider.Builder(context).build();
+            builder.setAudioOutputProvider(new PcmOnlyAudioOutputProvider(output));
+        }
         if (audioProcessor != null) builder.setAudioProcessors(new AudioProcessor[]{audioProcessor});
         return builder.build();
     }

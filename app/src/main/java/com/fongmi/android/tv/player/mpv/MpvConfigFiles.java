@@ -27,7 +27,8 @@ public final class MpvConfigFiles {
         String value = Path.read(file());
         if (value != null && !value.trim().isEmpty()) return value;
         return "# mpv.conf — user options override Android defaults.\n"
-                + "# App still forces vo/hwdec when required by the selected playback mode.\n"
+                + "# Playback mode still owns vo/hwdec. slang and sub-font follow the in-app subtitle settings.\n"
+                + "# gpu-next and Vulkan are separate switches and override vo/gpu-api while enabled.\n"
                 + "# Example:\n"
                 + "# vo=gpu\n"
                 + "# hwdec=mediacodec-copy\n";

@@ -146,6 +146,10 @@ public final class MpvUtil {
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
+        // A silent libmpv software fallback would leave the hard-decode setting looking active.
+        if (!userOptions.containsKey("hwdec-software-fallback")) {
+            builder.addPreInitStringOption("hwdec-software-fallback", "no");
+        }
         if (decode == 2) {
             builder.addPreInitStringOption("vo", MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED)
                     .addPreInitStringOption("hwdec", MpvAutomaticOutputPolicy.HWDEC_MEDIACODEC);
@@ -163,7 +167,9 @@ public final class MpvUtil {
         if (!userOptions.containsKey("framedrop")) builder.addPreInitStringOption("framedrop", "vo");
         if (live && !userOptions.containsKey("video-sync")) builder.addPreInitStringOption("video-sync", "audio");
         if (!userOptions.containsKey("demuxer-max-bytes")) {
-            int mb = PlayerSetting.isLiveLowLatency()
+            // Low latency is a live setting. Applying it to VOD shrinks the cache of every title
+            // whenever the live page is set to low delay.
+            int mb = live && PlayerSetting.isLiveLowLatency()
                     ? Math.max(8, PlayerSetting.getBuffer() * 2)
                     : Math.max(15, PlayerSetting.getBuffer() * 3);
             builder.addPreInitStringOption("demuxer-max-bytes", mb + "MiB");
@@ -191,7 +197,7 @@ public final class MpvUtil {
             // playback buffer. On high-bitrate remote MKVs this repeatedly emptied the cache
             // after a seek (observed on home-rk as 0% -> ~1s -> 0%). Do not override explicit
             // mpv.conf values or the separate disk-preload policy.
-            if (!userOptions.containsKey("cache-secs") && !PreloadSetting.isPreload()) {
+            if (!userOptions.containsKey("cache-secs")) {
                 builder.addPreInitStringOption("cache-secs", Integer.toString(PlayerSetting.getBuffer()));
             }
             if (!userOptions.containsKey("demuxer-max-back-bytes")) {
@@ -205,6 +211,10 @@ public final class MpvUtil {
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
         if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
+        // Vulkan and gpu-next are alternate choices. Vulkan keeps vo=gpu with an androidvk context.
+        if (PlayerSetting.isMpvVulkan() && isVulkanAvailable()) {
+            return userOptions.containsKey("vo") ? null : VALUE_GPU;
+        }
         if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
         return userOptions.containsKey("vo") ? null : VALUE_GPU;
     }
@@ -245,24 +255,16 @@ public final class MpvUtil {
         if (!userOptions.containsKey("demuxer-cache-dir")) {
             builder.addPreInitStringOption("demuxer-cache-dir", mediaCache.getAbsolutePath());
         }
-        if (!userOptions.containsKey("cache-secs")) {
-            builder.addPreInitStringOption("cache-secs", Integer.toString(Math.max(1, PreloadSetting.getPreloadTimeSeconds())));
-        }
-        if (!userOptions.containsKey("demuxer-max-bytes")) {
-            builder.addPreInitStringOption("demuxer-max-bytes", Math.max(8, PreloadSetting.getPreloadSizeMb()) + "MiB");
-        }
-        if (!userOptions.containsKey("demuxer-max-back-bytes")) {
-            builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
-        }
+        // cache-secs and demuxer-max-bytes stay on the playback buffer. Preload only places the disk cache.
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {
         builder.addAndroidSubtitleOptions(App.get(), PlayerSetting.isCaption(), getSubtitlePosition(), getSubtitleScale());
-        // External fonts live under Path.font(); fonts.conf already lists that directory. The stored
-        // family is authoritative because libass/fontconfig resolve it by name, and re-parsing a TTC
-        // would only ever yield the collection's first face.
-        String family = com.fongmi.android.tv.setting.SubtitleSetting.getFontFamily();
-        if (!TextUtils.isEmpty(family)) builder.addPostInitStringOption("sub-font", family);
+        // fonts.conf already lists Path.font(). A TTC face is selected with fontconfig's style,
+        // because sub-font alone only matches the family and ignores faceIndex.
+        com.fongmi.android.tv.player.subtitle.ExternalFont.Entry entry = com.fongmi.android.tv.setting.SubtitleSetting.getFontEntry();
+        String font = entry == null ? com.fongmi.android.tv.setting.SubtitleSetting.getFontFamily() : entry.mpvFont();
+        if (!TextUtils.isEmpty(font)) builder.addPostInitStringOption("sub-font", font);
     }
 
     private static String getDefaultUserAgent() {

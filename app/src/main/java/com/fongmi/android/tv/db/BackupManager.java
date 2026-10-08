@@ -60,8 +60,20 @@ public final class BackupManager {
     private static boolean restore(File file) {
         Backup backup = Backup.objectFrom(FileUtil.readGzip(file));
         boolean valid = !backup.getConfig().isEmpty();
-        if (valid) backup.restore();
-        return valid;
+        if (!valid) return false;
+        Backup snapshot = Backup.create();
+        try {
+            backup.restore();
+            return true;
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Restore failed, rolling back file=" + file, e);
+            try {
+                snapshot.restore();
+            } catch (RuntimeException rollback) {
+                Log.e(TAG, "Rollback after failed restore also failed", rollback);
+            }
+            return false;
+        }
     }
 
     private static void post(Callback callback, boolean success) {

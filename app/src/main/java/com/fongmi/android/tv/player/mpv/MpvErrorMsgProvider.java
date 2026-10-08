@@ -5,7 +5,7 @@ import androidx.media3.common.PlaybackException;
 public class MpvErrorMsgProvider {
 
     public String get(PlaybackException e) {
-        return switch (e.errorCode) {
+        String name = switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_BAD_VALUE -> "MPV Bad Value";
             case PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK -> "MPV Runtime Error";
             case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> "MPV IO Error";
@@ -16,5 +16,11 @@ public class MpvErrorMsgProvider {
             case PlaybackException.ERROR_CODE_DECODING_FAILED -> "MPV Decoding Failed";
             default -> "MPV Playback Error";
         };
+        String text = name + " (" + e.errorCode + ")";
+        String detail = e.getMessage();
+        if (detail == null || detail.isBlank()) return text;
+        String oneLine = detail.replace('\n', ' ').trim();
+        if (oneLine.length() > 140) oneLine = oneLine.substring(0, 137) + "...";
+        return text + ": " + oneLine;
     }
 }

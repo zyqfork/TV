@@ -1,16 +1,9 @@
 package com.fongmi.android.tv.ui.dialog;
 
-import android.app.Activity;
-import android.content.Intent;
 import android.content.res.TypedArray;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
@@ -26,13 +19,13 @@ import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.Setting;
-import com.fongmi.android.tv.ui.activity.ScanActivity;
 import com.fongmi.android.tv.ui.adapter.DeviceAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.github.catvod.net.OkHttp;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.IOException;
 import java.util.Locale;
@@ -42,7 +35,7 @@ import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 
-public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.OnClickListener, ScanTask.Listener {
+public class SyncDialog extends BaseAlertDialog implements DeviceAdapter.OnClickListener, ScanTask.Listener {
 
     private final FormBody.Builder body;
     private final OkHttpClient client;
@@ -89,13 +82,20 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     }
 
     @Override
-    protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
-        return binding = DialogDeviceBinding.inflate(inflater, container, false);
+    protected ViewBinding getBinding() {
+        return binding = DialogDeviceBinding.inflate(getLayoutInflater());
+    }
+
+    @Override
+    protected MaterialAlertDialogBuilder getBuilder() {
+        return builder().setView(getBinding().getRoot());
     }
 
     @Override
     protected void initView() {
         binding.mode.setVisibility(View.VISIBLE);
+        // TV remotes rarely have a camera; LAN refresh is enough.
+        binding.scan.setVisibility(View.GONE);
         setRecyclerView();
         getDevice();
         setMode();
@@ -104,7 +104,6 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     @Override
     protected void initEvent() {
         binding.mode.setOnClickListener(v -> onMode());
-        binding.scan.setOnClickListener(v -> onScan());
         binding.refresh.setOnClickListener(v -> onRefresh());
     }
 
@@ -135,10 +134,6 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
         Setting.putSyncMode(index = index == mode.length() - 1 ? 0 : ++index);
         binding.mode.setImageResource(mode.getResourceId(index, 0));
         binding.mode.setTag(String.valueOf(index));
-    }
-
-    private void onScan() {
-        launcher.launch(new Intent(requireActivity(), ScanActivity.class));
     }
 
     private boolean found;
@@ -214,7 +209,9 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
         scanTask.stop();
     }
 
-    private final ActivityResultLauncher<Intent> launcher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) scanTask.start(result.getData().getStringExtra("address"));
-    });
+    @Override
+    public void onStart() {
+        super.onStart();
+        setWidth(0.5f);
+    }
 }

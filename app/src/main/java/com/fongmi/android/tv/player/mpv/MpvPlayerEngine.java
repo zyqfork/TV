@@ -187,19 +187,44 @@ public class MpvPlayerEngine implements PlayerEngine {
     public ErrorAction handleError(PlaybackException e) {
         return switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;
-            case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> retryHls();
+            case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> retryHls(e);
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                  PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-                 PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
                  PlaybackException.ERROR_CODE_TIMEOUT -> ErrorAction.RETRY;
             default -> ErrorAction.FATAL;
         };
     }
 
-    private ErrorAction retryHls() {
-        if (spec == null || MimeTypes.APPLICATION_M3U8.equals(spec.getFormat())) return ErrorAction.FATAL;
+    private ErrorAction retryHls(PlaybackException e) {
+        if (spec == null || MimeTypes.APPLICATION_M3U8.equals(spec.getFormat()) || !shouldHintHls(e)) return ErrorAction.FATAL;
         spec.setFormat(MimeTypes.APPLICATION_M3U8);
         startInternal(player.getCurrentPosition());
         return ErrorAction.RECOVERED;
+    }
+
+    /**
+     * One HLS format hint when the URL or the error already says HLS.
+     * A live address with no container suffix gets the same hint. VOD without those signs does not.
+     */
+    private boolean shouldHintHls(PlaybackException e) {
+        String url = spec.getUrl() == null ? "" : spec.getUrl().toLowerCase(java.util.Locale.ROOT);
+        int query = url.indexOf('?');
+        String path = query >= 0 ? url.substring(0, query) : url;
+        if (endsWithContainer(path)) return false;
+        String format = spec.getFormat();
+        if (format != null && !format.isEmpty()) {
+            String lower = format.toLowerCase(java.util.Locale.ROOT);
+            return lower.contains("mpegurl") || lower.contains("m3u8") || lower.contains("hls");
+        }
+        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(java.util.Locale.ROOT);
+        int slash = path.lastIndexOf('/');
+        String leaf = slash >= 0 ? path.substring(slash + 1) : path;
+        if (leaf.contains(".m3u8") || message.contains("m3u8") || message.contains("hls")) return true;
+        return live && !leaf.contains(".");
+    }
+
+    private static boolean endsWithContainer(String path) {
+        return path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".flv")
+                || path.endsWith(".mpd") || path.endsWith(".avi") || path.endsWith(".mov") || path.endsWith(".ts");
     }
 }

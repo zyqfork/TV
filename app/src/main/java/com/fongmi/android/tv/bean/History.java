@@ -280,7 +280,12 @@ public class History implements Diffable<History> {
 
     public String getVodId() {
         String[] parts = getKey().split(AppDatabase.SYMBOL);
-        return parts.length > 1 ? parts[1] : "";
+        if (parts.length < 2) return "";
+        if (parts.length == 2) return parts[1];
+        // siteKey@@@vodId(with @@@)@@@cid — join the middle segments.
+        StringBuilder sb = new StringBuilder(parts[1]);
+        for (int i = 2; i < parts.length - 1; i++) sb.append(AppDatabase.SYMBOL).append(parts[i]);
+        return sb.toString();
     }
 
     public Flag getFlag() {

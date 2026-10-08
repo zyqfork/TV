@@ -29,6 +29,8 @@ import fi.iki.elonen.NanoHTTPD.Response.Status;
 public class Local implements Process {
 
     private static final String FILE = "/file";
+    private static final int ZIP_MAX_ENTRIES = 512;
+    private static final long ZIP_MAX_BYTES = 256L * 1024 * 1024;
 
     @Override
     public boolean isRequest(IHTTPSession session, String url) {
@@ -76,7 +78,9 @@ public class Local implements Process {
 
     private void storeUpload(File source, File directory, String name) throws IOException {
         if (name.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            if (!FileUtil.zipDecompress(source, directory)) throw new IOException("Unable to extract archive");
+            if (!FileUtil.zipDecompress(source, directory, ZIP_MAX_ENTRIES, ZIP_MAX_BYTES)) {
+                throw new IOException("Unable to extract archive");
+            }
         } else {
             FileUtil.copyAtomically(source, resolveChild(directory, name));
         }

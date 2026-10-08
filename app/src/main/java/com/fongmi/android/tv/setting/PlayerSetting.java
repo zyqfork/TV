@@ -31,6 +31,21 @@ public class PlayerSetting {
     private static final String EXO_DECODE_MIGRATION = "decode_defaults_migrated_v4";
     private static final float MIN_SPEED = 0.5f;
     private static final float MAX_SPEED = 5.0f;
+    /** Playback and long-press speed choices. Clicking speed cycles this list. */
+    public static final float[] SPEED_PRESETS = {0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 3.0f, 5.0f};
+
+    public static float nextSpeed(float current) {
+        for (float preset : SPEED_PRESETS) if (preset > current + 0.01f) return preset;
+        return SPEED_PRESETS[0];
+    }
+
+    public static int nearestSpeedIndex(float value) {
+        int best = 0;
+        for (int i = 1; i < SPEED_PRESETS.length; i++) {
+            if (Math.abs(SPEED_PRESETS[i] - value) < Math.abs(SPEED_PRESETS[best] - value)) best = i;
+        }
+        return best;
+    }
 
     public static int getEngine() {
         int legacy = Prefers.getInt("player_engine", ENGINE_EXO);
@@ -134,6 +149,7 @@ public class PlayerSetting {
 
     public static void putMpvGpuNext(boolean gpuNext) {
         Prefers.put("mpv_gpu_next", gpuNext);
+        if (gpuNext) Prefers.put("mpv_vulkan", false);
     }
 
     public static boolean isMpvVulkan() {
@@ -142,6 +158,7 @@ public class PlayerSetting {
 
     public static void putMpvVulkan(boolean vulkan) {
         Prefers.put("mpv_vulkan", vulkan);
+        if (vulkan) Prefers.put("mpv_gpu_next", false);
     }
 
     /**

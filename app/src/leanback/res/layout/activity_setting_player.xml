@@ -59,6 +59,16 @@
                 android:textColor="@color/white"
                 android:textSize="18sp" />
 
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/decodeText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:visibility="gone"
+                tools:text="硬解" />
+
         </androidx.appcompat.widget.LinearLayoutCompat>
 
         <androidx.appcompat.widget.LinearLayoutCompat

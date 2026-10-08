@@ -10,6 +10,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivityNetworkStorageEditBinding;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.storage.NetworkStorage;
 import com.fongmi.android.tv.storage.NetworkStorageStore;
@@ -127,6 +128,7 @@ public class NetworkStorageEditActivity extends BaseActivity implements NetworkI
         if (TextUtils.isEmpty(mStorage.getName())) mStorage.setName(mStorage.getHost());
         try {
             NetworkStorageStore.save(mStorage);
+            ConfigEvent.common();
             finish();
         } catch (Exception e) {
             Notify.show(e.getMessage());

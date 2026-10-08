@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -735,8 +736,18 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         // deliberately keeps an error visible for in-place retries, so clearing it here (and on
         // STATE_READY) is the only thing that removes it again.
         hideError();
-        mPlaybackKey = result.getRealUrl();
+        mPlaybackKey = trackKey(mChannel, result);
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
+    }
+
+    /** Prefer a stable channel id so audio/subtitle Track rows survive URL/line changes. */
+    private static String trackKey(Channel channel, Result result) {
+        if (channel != null) {
+            String id = channel.getTvgId();
+            if (!TextUtils.isEmpty(id)) return "live@@@" + id;
+            if (!TextUtils.isEmpty(channel.getName())) return "live@@@" + channel.getName();
+        }
+        return result.getRealUrl();
     }
 
     private void stopPlayer() {

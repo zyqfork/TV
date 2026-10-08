@@ -290,9 +290,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mAdapter.setRecommendations(result.getList(), result.getStyle(getHome().getStyle()));
     }
 
+    private List<Func> funcItems = List.of();
+
     private void setFunc() {
         // Shared with the phone flavour so the two entry rows cannot drift apart.
-        mAdapter.setFunctions(HomeFuncs.create());
+        // Rebuilding always rebinds this row, so an unchanged resume must not do it.
+        List<Func> items = HomeFuncs.create();
+        if (HomeFuncs.same(funcItems, items)) return;
+        funcItems = items;
+        mAdapter.setFunctions(items);
     }
 
     private void getHistory() {
@@ -473,6 +479,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     protected void onResume() {
         super.onResume();
         mClock.start();
+        setFunc();
     }
 
     @Override

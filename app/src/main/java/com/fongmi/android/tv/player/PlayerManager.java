@@ -95,6 +95,7 @@ public class PlayerManager implements ParseCallback {
     /** Bitmask of decode modes already tried for the current item (avoids HARD↔SOFT oscillation). */
     private int decodeTriedMask;
     private int preferredEngine;
+    private String exoNoticeUrl;
     private long secondarySubtitleOffsetMs;
     private long playStartRealtimeMs;
     private boolean openReported;
@@ -287,7 +288,11 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getDecodeText() {
-        return ResUtil.getStringArray(R.array.select_decode)[decode];
+        int shown = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
+        if (shown == PlayerEngine.HARD && engine != null && engine.getType() == PlayerEngine.Type.EXO && PlayerSetting.isVideoPrefer()) {
+            shown = PlayerEngine.SOFT;
+        }
+        return ResUtil.getStringArray(R.array.select_decode)[shown];
     }
 
     public int getEngine() {
@@ -577,9 +582,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String addSpeed() {
-        float speed = getSpeed();
-        float step = speed >= 2 ? 1f : 0.25f;
-        return setSpeed(speed >= 5 ? 0.25f : Math.min(speed + step, 5.0f));
+        return setSpeed(PlayerSetting.nextSpeed(getSpeed()));
     }
 
     public String addSpeed(float value) {
@@ -741,7 +744,14 @@ public class PlayerManager implements ParseCallback {
         long position = Math.max(0, getPosition());
         boolean playWhenReady = player.getPlayWhenReady();
         if (persist) {
-            decode = nextDecode(decode);
+            // 「视频软解」forces the video codec even when the scene decode is still hard, so the
+            // control that says 软解 must be able to turn that force off and return to hardware.
+            if (engine.getType() == PlayerEngine.Type.EXO && PlayerSetting.isVideoPrefer()) {
+                decode = PlayerEngine.HARD;
+                PlayerSetting.putVideoPrefer(false);
+            } else {
+                decode = nextDecode(decode);
+            }
         } else {
             decodeTriedMask |= 1 << decode;
             int next = nextUnusedDecode(decode);
@@ -864,6 +874,13 @@ public class PlayerManager implements ParseCallback {
         PlayerEngine old = engine;
         player.removeListener(listener);
         engine = PlayerEngineFactory.create(decode, preferredEngine, liveMode, spec, listener);
+        if (preferredEngine == PlayerSetting.ENGINE_MPV && engine.getType() == PlayerEngine.Type.EXO && PlayerEngineFactory.requiresExo(spec)) {
+            String url = spec.getUrl() == null ? "" : spec.getUrl();
+            if (!url.equals(exoNoticeUrl)) {
+                exoNoticeUrl = url;
+                Notify.show(R.string.player_engine_requires_exo);
+            }
+        }
         // Release MPV while PlayerView still owns its valid Surface. Publishing the replacement
         // first detaches that Surface and makes MPV's asynchronous shutdown rebuild a surface-less
         // VO, which can leave the next channel black.
@@ -978,6 +995,7 @@ public class PlayerManager implements ParseCallback {
         // must not inherit a queued retry that later restarts the replacement item.
         App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         ensureEngine(spec.checkUa());
+        if (engine.refreshConfig()) setPlayer(engine.rebuild());
         if (player.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) != subtitlesDisabled)
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitlesDisabled).build());

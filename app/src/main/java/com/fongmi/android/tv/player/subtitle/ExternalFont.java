@@ -63,7 +63,7 @@ public final class ExternalFont {
         for (FontFamilyParser.Face face : faces) {
             String label = faces.size() > 1 ? display + " · " + face.family() : display;
             if (face.variable() && !face.instances().isEmpty()) label += " (" + String.join(", ", face.instances()) + ")";
-            entries.add(new Entry(file.getAbsolutePath(), label, face.family(), face.index(), face.variable(), face.instances()));
+            entries.add(new Entry(file.getAbsolutePath(), label, face.family(), face.index(), face.variable(), face.instances(), face.subfamily()));
         }
         return entries;
     }
@@ -139,7 +139,16 @@ public final class ExternalFont {
         return TextUtils.isEmpty(value) ? ("font-" + Crypto.md5(String.valueOf(System.nanoTime())) + ".ttf") : value;
     }
 
-    public record Entry(String path, String name, String family, int faceIndex, boolean variable, List<String> instances) {
+    public record Entry(String path, String name, String family, int faceIndex, boolean variable, List<String> instances, String subfamily) {
+
+        /** fontconfig pattern. A non-regular face is selected with family:style=subfamily. */
+        public String mpvFont() {
+            if (family == null || family.isEmpty()) return "";
+            if (subfamily == null) return family;
+            String style = subfamily.trim();
+            if (style.isEmpty() || style.equalsIgnoreCase("Regular") || style.equalsIgnoreCase("Normal") || "常规".equals(style) || "標準".equals(style)) return family;
+            return family + ":style=" + style;
+        }
 
         public Typeface typeface() {
             try {

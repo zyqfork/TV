@@ -665,8 +665,18 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         int type = mChannel != null ? mChannel.getPlayerType() : PlayerSetting.PLAYER_TYPE_FOLLOW;
         if (type < 0) type = getHome().getPlayerType();
         player().setEngineForNextPlayback(PlayerSetting.resolveEngine(true, type));
-        mPlaybackKey = result.getRealUrl();
+        mPlaybackKey = trackKey(mChannel, result);
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
+    }
+
+    /** Prefer a stable channel id so audio/subtitle Track rows survive URL/line changes. */
+    private static String trackKey(Channel channel, Result result) {
+        if (channel != null) {
+            String id = channel.getTvgId();
+            if (!android.text.TextUtils.isEmpty(id)) return "live@@@" + id;
+            if (!android.text.TextUtils.isEmpty(channel.getName())) return "live@@@" + channel.getName();
+        }
+        return result.getRealUrl();
     }
 
     private void stopPlayer() {

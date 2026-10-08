@@ -17,6 +17,7 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.dialog.SyncDialog;
 import com.fongmi.android.tv.utils.Notify;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -40,6 +41,11 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     protected void initView(Bundle savedInstanceState) {
         setRecyclerView();
         getKeep();
+    }
+
+    @Override
+    protected void initEvent() {
+        mBinding.sync.setOnClickListener(v -> SyncDialog.create().keep().show(this));
     }
 
     private void setRecyclerView() {

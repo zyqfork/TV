@@ -209,7 +209,7 @@
     <string name="subtitle_search_token_hint">Token</string>
     <string name="player_subtitle_assrt">字幕搜尋 Token</string>
     <string name="player_subtitle_font">字幕字型</string>
-    <string name="player_mpv_conf_precedence">mpv.conf 使用者選項優先於應用預設；播放模式強制項（vo/hwdec）仍會覆蓋。</string>
+    <string name="player_mpv_conf_precedence">mpv.conf 的使用者選項優先於應用預設。播放模式仍決定 vo/hwdec。字幕語言 slang 和字型 sub-font 以應用內字幕設定為準。開啟 gpu-next 或 Vulkan 時會覆蓋對應的 vo/gpu-api。</string>
     <string name="player_volume_gain_on">音量增益 1.5x</string>
     <string name="player_volume_gain_off">音量增益已關閉</string>
     <string name="subtitle_font_default">系統預設</string>
@@ -500,4 +500,8 @@
     <string name="network_storage_ftp_auth_failed">FTP 帳號或密碼錯誤</string>
     <string name="network_storage_ftp_path_missing">FTP 檔案或目錄不存在，或無存取權限</string>
     <string name="network_storage_ftp_failed">FTP 操作失敗</string>
+    <string name="menu_sync">同步</string>
+    <string name="device_select">選擇裝置</string>
+    <string name="device_searching">正在搜尋裝置…</string>
+    <string name="device_not_found">未找到裝置</string>
 </resources>

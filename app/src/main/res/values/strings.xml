@@ -209,7 +209,7 @@
     <string name="subtitle_search_token_hint">Token</string>
     <string name="player_subtitle_assrt">Subtitle search token</string>
     <string name="player_subtitle_font">Subtitle font</string>
-    <string name="player_mpv_conf_precedence">User options in mpv.conf override Android defaults. Playback-mode options (vo/hwdec) still win.</string>
+    <string name="player_mpv_conf_precedence">User options override Android defaults. Playback mode still owns vo/hwdec. Subtitle language (slang) and sub-font follow the in-app subtitle settings. gpu-next and Vulkan override vo/gpu-api while enabled.</string>
     <string name="player_volume_gain_on">Volume gain 1.5x</string>
     <string name="player_volume_gain_off">Volume gain off</string>
     <string name="subtitle_font_default">System default</string>
@@ -514,4 +514,8 @@
     <string name="network_storage_ftp_auth_failed">FTP authentication failed</string>
     <string name="network_storage_ftp_path_missing">FTP file or directory missing, or access denied</string>
     <string name="network_storage_ftp_failed">FTP operation failed</string>
+    <string name="menu_sync">Sync</string>
+    <string name="device_select">Select devices</string>
+    <string name="device_searching">Searching for devices…</string>
+    <string name="device_not_found">No devices found</string>
 </resources>

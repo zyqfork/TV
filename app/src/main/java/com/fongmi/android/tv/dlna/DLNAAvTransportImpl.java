@@ -84,7 +84,18 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
 
     public void setPlayerManager(PlayerManager player) {
         this.player = player;
-        if (player == null) reset();
+        if (player == null) {
+            reset();
+            return;
+        }
+        long ms = pendingSeekMs;
+        if (ms >= 0) {
+            pendingSeekMs = -1;
+            seekingToMs = ms;
+            App.post(() -> {
+                if (this.player == player) player.seekTo(ms);
+            });
+        }
     }
 
     public void setDlnaActive(boolean active) {
@@ -245,12 +256,14 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     public void seek(UnsignedIntegerFourBytes instanceId, String unit, String target) {
         if (!SeekMode.REL_TIME.toString().equals(unit) && !SeekMode.ABS_TIME.toString().equals(unit)) return;
         long ms = parseTimeToMs(target);
+        if (ms < 0) return;
         // Do not mutate posCache here (player seek is async). Expose target via seekingToMs instead.
-        if (ms >= 0) seekingToMs = ms;
-        if (dlnaActive) {
-            PlayerManager local = player;
-            if (local != null) App.post(() -> local.seekTo(ms));
+        seekingToMs = ms;
+        PlayerManager local = player;
+        if (dlnaActive && local != null) {
+            App.post(() -> local.seekTo(ms));
         } else {
+            // Cast page can mark the session active before PlaybackService finishes binding.
             pendingSeekMs = ms;
         }
     }
@@ -308,7 +321,8 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     }
 
     private boolean canNext() {
-        return dlnaActive && !currentURI.isEmpty() && hasNext();
+        // Same as Previous: the next URI is already known before the cast page marks itself active.
+        return !currentURI.isEmpty() && hasNext();
     }
 
     private boolean canPrevious() {
@@ -369,14 +383,15 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
 
     private long parseTimeToMs(String time) {
         try {
+            if (time == null || time.isEmpty()) return -1;
             String[] parts = time.split(":");
-            if (parts.length != 3) return 0;
+            if (parts.length != 3) return -1;
             int dot = parts[2].indexOf('.');
             long secs = Long.parseLong(dot >= 0 ? parts[2].substring(0, dot) : parts[2]);
             long frac = dot >= 0 ? Math.round(Double.parseDouble("0" + parts[2].substring(dot)) * 1000) : 0;
             return (Long.parseLong(parts[0]) * 3600 + Long.parseLong(parts[1]) * 60 + secs) * 1000 + frac;
         } catch (Exception ignored) {
-            return 0;
+            return -1;
         }
     }
 

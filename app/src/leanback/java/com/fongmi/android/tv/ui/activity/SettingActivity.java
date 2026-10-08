@@ -282,6 +282,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
+        setStorageText();
     }
 
 }

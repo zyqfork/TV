@@ -58,8 +58,12 @@ public class Doh {
     }
 
     public static Doh objectFrom(String str) {
-        Doh item = new Gson().fromJson(str, Doh.class);
-        return item == null ? new Doh() : item;
+        try {
+            Doh item = new Gson().fromJson(str, Doh.class);
+            return item == null ? new Doh() : item;
+        } catch (RuntimeException ignored) {
+            return new Doh();
+        }
     }
 
     public static List<Doh> arrayFrom(JsonElement element) {
@@ -95,13 +99,15 @@ public class Doh {
     }
 
     public List<InetAddress> getHosts() {
-        try {
-            List<InetAddress> list = new ArrayList<>();
-            for (String ip : getIps()) list.add(InetAddress.getByName(ip));
-            return list.isEmpty() ? null : list;
-        } catch (Exception ignored) {
-            return null;
+        List<InetAddress> list = new ArrayList<>();
+        for (String ip : getIps()) {
+            if (ip == null || ip.trim().isEmpty()) continue;
+            try {
+                list.add(InetAddress.getByName(ip.trim()));
+            } catch (Exception ignored) {
+            }
         }
+        return list.isEmpty() ? null : list;
     }
 
     @Override

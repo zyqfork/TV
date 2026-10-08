@@ -169,7 +169,9 @@ public class SettingPlayerActivity extends BaseActivity implements SpeedListener
         mBinding.mpvConf.setVisibility(mpv ? View.VISIBLE : View.GONE);
         mBinding.mpvVulkan.setVisibility(vulkan ? View.VISIBLE : View.GONE);
         mBinding.mpvGpuNext.setVisibility(mpv ? View.VISIBLE : View.GONE);
-        mBinding.decode.setVisibility(exo ? View.VISIBLE : View.GONE);
+        mBinding.decode.setVisibility(View.VISIBLE);
+        mBinding.decodeText.setVisibility(mpv ? View.VISIBLE : View.GONE);
+        if (mpv) bindMpvDecodeText();
         mBinding.adblock.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.buffer.setVisibility(View.VISIBLE);
         mBinding.http.setVisibility(exo ? View.VISIBLE : View.GONE);
@@ -208,12 +210,22 @@ public class SettingPlayerActivity extends BaseActivity implements SpeedListener
 
     private void setMpvGpuNext(View view) {
         PlayerSetting.putMpvGpuNext(!PlayerSetting.isMpvGpuNext());
-        mBinding.mpvGpuNextText.setText(Setting.getSwitch(PlayerSetting.isMpvGpuNext()));
+        bindMpvOutputSwitches();
     }
 
     private void setMpvVulkan(View view) {
         PlayerSetting.putMpvVulkan(!PlayerSetting.isMpvVulkan());
+        bindMpvOutputSwitches();
+    }
+
+    private void bindMpvOutputSwitches() {
+        mBinding.mpvGpuNextText.setText(Setting.getSwitch(PlayerSetting.isMpvGpuNext()));
         mBinding.mpvVulkanText.setText(Setting.getSwitch(PlayerSetting.isMpvVulkan()));
+    }
+
+    private void bindMpvDecodeText() {
+        int decode = PlayerSetting.getDecode(false, PlayerSetting.ENGINE_MPV);
+        mBinding.decodeText.setText(decode == 0 ? R.string.decode_soft : R.string.decode_hard);
     }
 
     private void setRender(View view) {
@@ -273,6 +285,13 @@ public class SettingPlayerActivity extends BaseActivity implements SpeedListener
     }
 
     private void onDecodeSetting(View view) {
+        if (PlayerSetting.isMpv()) {
+            int next = PlayerSetting.getDecode(false, PlayerSetting.ENGINE_MPV) == 0 ? 1 : 0;
+            PlayerSetting.putDecode(false, PlayerSetting.ENGINE_MPV, next);
+            PlayerSetting.putDecode(true, PlayerSetting.ENGINE_MPV, next);
+            bindMpvDecodeText();
+            return;
+        }
         SettingDecodeActivity.start(this);
     }
 

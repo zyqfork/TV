@@ -68,7 +68,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private static final String HWDEC_HARD = "mediacodec";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
-    private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "cache-buffering-state"};
+    private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "demuxer-cache-time"};
     private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "seekable"};
     private static final String[] OBSERVED_INT = {"video-params/w", "video-params/h"};
     private static final long END_FILE_ERROR_DEBOUNCE_MS = 500;
@@ -111,7 +111,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private int settlingWidth;
     private int settlingHeight;
     private final Runnable settleSurfaceRunnable = this::commitSettledSurface;
-    /** Event-driven black-screen recovery (scheduled from time-pos, not a blind timer). */
+    /** Embed-only: progress without a frame retries the Surface bind. GPU waits for the play timeout. */
     private final Runnable blackScreenWatchdog = this::checkBlackScreen;
     private long positionMs;
     private long firstFrameStartPositionMs;
@@ -643,9 +643,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private void applyPendingSeekAndSubtitles() {
         if (pendingSeekMs != C.TIME_UNSET && pendingSeekMs > 0) {
-            MPVLib.command(new String[]{
-                    "seek", Double.toString(pendingSeekMs / 1000.0), "absolute+exact"
-            });
+            seekAbsolute(pendingSeekMs);
             pendingSeekMs = C.TIME_UNSET;
         }
         enqueueConfiguredSubtitles();
@@ -748,11 +746,17 @@ public final class MpvPlayer extends SimpleBasePlayer
             currentMediaItemIndex = mediaItemIndex;
             mediaItem = playlist.get(mediaItemIndex);
             this.positionMs = Math.max(0, positionMs);
+            pendingSeekMs = this.positionMs > 0 ? this.positionMs : C.TIME_UNSET;
             handlePrepare();
             return done();
         }
+        if (fileLoaded && !seekable) return done();
         this.positionMs = Math.max(0, positionMs);
-        MPVLib.command(new String[]{"seek", Double.toString(this.positionMs / 1000.0), "absolute+exact"});
+        if (!fileLoaded) {
+            pendingSeekMs = this.positionMs > 0 ? this.positionMs : C.TIME_UNSET;
+        } else {
+            seekAbsolute(this.positionMs);
+        }
         state = state.buildUpon()
                 .setCurrentCues(CueGroup.EMPTY_TIME_ZERO)
                 .setContentPositionMs(() -> this.positionMs)
@@ -1304,9 +1308,18 @@ public final class MpvPlayer extends SimpleBasePlayer
     public void eventProperty(String property, boolean value) {
         onApplicationThread(() -> {
             switch (property) {
-                case "pause" -> updateState(state.playbackState, !value, state.playerError);
-                case "paused-for-cache" -> updateState(value ? STATE_BUFFERING : STATE_READY,
-                        state.playWhenReady, state.playerError);
+                case "pause" -> {
+                    // The initial "not paused" value arrives before any file. Applying it would
+                    // mark the idle player as ready to play.
+                    if (!fileLoaded) break;
+                    updateState(state.playbackState, !value, state.playerError);
+                }
+                case "paused-for-cache" -> {
+                    if (!fileLoaded) break;
+                    if (value) updateState(STATE_BUFFERING, state.playWhenReady, state.playerError);
+                    else if (state.playbackState == STATE_BUFFERING)
+                        updateState(STATE_READY, state.playWhenReady, state.playerError);
+                }
                 case "sub-visibility" -> checkSelectedSubtitles();
                 case "seekable" -> {
                     seekable = value;
@@ -1337,27 +1350,37 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Override
     public void eventProperty(String property, double value) {
         onApplicationThread(() -> {
+            boolean publish = false;
             switch (property) {
                 case "time-pos" -> {
                     positionMs = Math.max(0, (long) (value * 1000));
                     // Compare against this load's starting position. A resumed item must not look
                     // stuck merely because its absolute position is already greater than 300 ms.
-                    if (!firstFrameReported && fileLoaded && surfaceReady
+                    if (!firstFrameReported && fileLoaded && surfaceReady && isEmbedVo()
                             && Math.abs(positionMs - firstFrameStartPositionMs) >= 300) {
                         applicationHandler.removeCallbacks(blackScreenWatchdog);
                         applicationHandler.postDelayed(blackScreenWatchdog, 1_000);
                     }
                 }
-                case "duration" -> durationMs = value > 0 ? (long) (value * 1000) : C.TIME_UNSET;
-                case "cache-buffering-state" -> {
-                    if (durationMs != C.TIME_UNSET) {
-                        bufferedPositionMs = Math.min(durationMs,
-                                positionMs + (long) ((durationMs - positionMs) * value / 100.0));
-                    }
+                case "duration" -> {
+                    durationMs = value > 0 ? (long) (value * 1000) : C.TIME_UNSET;
+                    publish = true;
+                }
+                case "demuxer-cache-time" -> {
+                    // Absolute end of the demuxer cache, in seconds. cache-buffering-state is only
+                    // how full that cache is (0-100) and must not be scaled across the whole title.
+                    long end = value > 0 ? (long) (value * 1000) : positionMs;
+                    if (durationMs != C.TIME_UNSET) end = Math.min(durationMs, end);
+                    bufferedPositionMs = Math.max(positionMs, end);
                 }
             }
-            updateState(state.playbackState, state.playWhenReady, state.playerError);
+            if (publish) updateState(state.playbackState, state.playWhenReady, state.playerError);
         });
+    }
+
+    /** Live windows rarely survive an exact decode-to-timestamp seek. */
+    private void seekAbsolute(long positionMs) {
+        MPVLib.command(new String[]{"seek", Double.toString(positionMs / 1000.0), live ? "absolute" : "absolute+exact"});
     }
 
     @Override
@@ -1520,9 +1543,15 @@ public final class MpvPlayer extends SimpleBasePlayer
                 && (d.contains("surface") || d.contains("mediacodec") || d.contains("hwdec"))) {
             return PlaybackException.ERROR_CODE_DECODING_FAILED;
         }
-        if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("402")
-                || d.contains("401") || d.contains("503") || d.contains("502") || d.contains("500")) {
+        if (d.contains("http error") || d.contains("server returned") || d.contains("status code")) {
             return PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS;
+        }
+        // A codec the device cannot open in hardware (AV1 on many phones, MPEG-2/VC-1 on others)
+        // must switch to soft decode. "failed to open" alone is a network failure and stays there.
+        if (d.contains("could not open codec") || d.contains("cannot open codec")
+                || d.contains("failed to create mediacodec") || d.contains("mediacodec decoder")
+                || d.contains("no decoder") || d.contains("hwdec")) {
+            return PlaybackException.ERROR_CODE_DECODER_INIT_FAILED;
         }
         if (d.contains("timeout") || d.contains("timed out")) {
             return PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT;
@@ -1552,14 +1581,10 @@ public final class MpvPlayer extends SimpleBasePlayer
         if (!hasVideoTrack()) return;
         // Demuxer/audio advanced but no frame reached the Android window → classic black screen.
         if (Math.abs(positionMs - firstFrameStartPositionMs) < 300) return;
-        if (isEmbedVo()) {
-            recoverVideoOutput("progress without first frame");
-            return;
-        }
-        // Compatible-hard / soft path still black: escalate for a per-item decode fallback.
-        updateState(STATE_IDLE, false, new PlaybackException(
-                "video output stuck without first frame", null,
-                PlaybackException.ERROR_CODE_DECODING_FAILED));
+        // GPU output can take longer than a second on a high-bitrate open. A missing frame there
+        // stays with the playback timeout instead of flipping soft/hard decode.
+        if (!isEmbedVo()) return;
+        recoverVideoOutput("progress without first frame");
     }
 
     private void recoverVideoOutput(String reason) {
@@ -1775,7 +1800,8 @@ public final class MpvPlayer extends SimpleBasePlayer
             onApplicationThread(this::fallbackRendering);
             return;
         }
-        onApplicationThread(() -> lastNativeError = "mpv[" + prefix + "]: " + trimmed);
+        // Warnings such as a refused seek must not become the reason for a later empty END_FILE.
+        if (level <= 20) onApplicationThread(() -> lastNativeError = "mpv[" + prefix + "]: " + trimmed);
     }
 
     private void fallbackRendering() {

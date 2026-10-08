@@ -289,13 +289,17 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
+        setStorageText();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // returning from 投屏设置: a receiver switch may have changed
-        if (mBinding != null) mBinding.castText.setText(getCastText());
+        // 投屏开关和网盘首页标题都在别的页面里改，返回时要重读。
+        if (mBinding != null) {
+            mBinding.castText.setText(getCastText());
+            setStorageText();
+        }
     }
 
     @Override
