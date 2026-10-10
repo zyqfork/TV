@@ -207,8 +207,19 @@ Software decoding fallback is disabled.      <- 本该在这里回退
 
 ### 修复：把回退交还给 libmpv
 
-libmpv 本来就自带硬解→软解回退（`software_fallback` 默认 `3`，即连续失败 3 次后换软解）。
-应用层不该关掉它，所以**不再写这个键**（`mpv.conf` 里用户自己写的仍然生效，因为应用现在
+libmpv 本来就自带硬解→软解回退，而且分两条路径，`software_fallback`（默认 `3`）只作用于第二条：
+
+| 路径 | 触发 | 行为 |
+|---|---|---|
+| 解码器打不开 | `select_and_set_hwdec` 里 `init_generic_hwaccel` 失败 | **立即**换下一个，不计数 |
+| 能打开但解错帧 | `handle_err` 里 `hwdec_fail_count++` | 累计到 `software_fallback` 才回退；成功解出一帧即清零 |
+
+所以「设备不支持这个格式」属于第一条路径，**一次就回退，没有重试**。实测电视播 H.264
+4:4:4 时日志只有一次 `Trying hardware decoding` / `Could not open codec`，紧接着就是
+`Using software decoding`。第二条的容错是为了让偶发坏帧不至于把整条流降到软解，属于有益的
+保守设计，因此保留默认值，不改成 1。
+
+应用层不该关掉回退，所以**不再写这个键**（`mpv.conf` 里用户自己写的仍然生效，因为应用现在
 完全不碰它）。硬解模式的含义回归字面意思：设备能硬解就硬解，不能就软解。
 
 软解模式不受影响：它用 `hwdec=no`，根本不走这条路径。
