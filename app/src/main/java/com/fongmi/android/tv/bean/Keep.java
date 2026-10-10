@@ -15,6 +15,8 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 @Entity
@@ -76,9 +78,16 @@ public class Keep implements Diffable<Keep> {
     }
 
     public static void sync(List<Config> configs, List<Keep> targets) {
-        targets.forEach(target -> configs.stream()
-                .filter(config -> target.getCid() == config.getId()).findFirst()
-                .ifPresent(config -> target.save(Config.find(config).getId())));
+        Map<Integer, Config> byId = new HashMap<>();
+        Map<Integer, Integer> destinations = new HashMap<>();
+        configs.forEach(config -> byId.putIfAbsent(config.getId(), config));
+        targets.forEach(target -> {
+            Config config = byId.get(target.getCid());
+            if (config != null) {
+                int cid = destinations.computeIfAbsent(config.getId(), ignored -> Config.find(config).getId());
+                target.save(cid);
+            }
+        });
     }
 
     public static void replace(String oldKey, String newKey) {

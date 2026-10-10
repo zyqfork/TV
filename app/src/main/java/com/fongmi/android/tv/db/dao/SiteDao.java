@@ -10,6 +10,9 @@ import java.util.List;
 @Dao
 public abstract class SiteDao extends BaseDao<Site> {
 
+    @Query("DELETE FROM Site")
+    public abstract void deleteAllForRestore();
+
     @Query("SELECT * FROM Site")
     public abstract List<Site> findAll();
 }

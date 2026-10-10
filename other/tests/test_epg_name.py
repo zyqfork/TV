@@ -161,7 +161,9 @@ def main():
     assert "zipDecompress(source, directory, ZIP_MAX_ENTRIES, ZIP_MAX_BYTES)" in local
 
     backup = (ROOT / "app/src/main/java/com/fongmi/android/tv/db/BackupManager.java").read_text(encoding="utf-8")
-    assert "snapshot.restore()" in backup
+    assert "snapshot.restore()" not in backup
+    restore = (ROOT / "app/src/main/java/com/fongmi/android/tv/bean/Backup.java").read_text(encoding="utf-8")
+    assert "db.runInTransaction(" in restore and "db.clearAllTables()" not in restore
 
     history = (ROOT / "app/src/main/java/com/fongmi/android/tv/bean/History.java").read_text(encoding="utf-8")
     assert "parts.length - 1" in history

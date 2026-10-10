@@ -17,6 +17,14 @@
 
     <queries>
         <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
             <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
             <data android:scheme="package" />
         </intent>
@@ -78,6 +86,8 @@
         </provider>
 
         <activity android:name=".ui.activity.SettingOtherActivity" android:exported="false" />
+        <activity android:name=".ui.activity.UpdateInstallActivity" android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".ui.activity.CrashActivity"

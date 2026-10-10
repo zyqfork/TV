@@ -118,7 +118,12 @@ public class Updater implements Download.Callback, UpdateListener {
 
     @Override
     public void success(File file) {
-        FileUtil.openFile(file);
-        dismiss();
+        try {
+            com.fongmi.android.tv.ui.activity.UpdateInstallActivity.start();
+            dismiss();
+        } catch (RuntimeException launchError) {
+            android.util.Log.e("Updater", "Unable to start update handoff", launchError);
+            error(ResUtil.getString(R.string.error_update_installer));
+        }
     }
 }

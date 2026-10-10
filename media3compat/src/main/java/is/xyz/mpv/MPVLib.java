@@ -66,10 +66,18 @@ public final class MPVLib {
     public static boolean acquireInstance() {
         // Never time out this lock: the native bridge is process-global. Forcing it open while a
         // slow destroy is still running permits two Java players to control the same mpv handle.
-        return load() && instanceInUse.compareAndSet(false, true);
+        if (!load() || !instanceInUse.compareAndSet(false, true)) return false;
+        propertyCache = new MpvPropertyCache(MPVLib::observeProperty);
+        controls = new MpvNativeControls(new MpvNativeControls.Sender() {
+            public int property(long id, String name, String value) { return nativeSetPropertyAsync(id, name, value); }
+            public int command(long id, String[] args) { return nativeCommandAsync(id, args); }
+        });
+        return true;
     }
 
     public static void releaseInstance() {
+        MpvNativeControls current = controls;
+        if (current != null) current.close();
         instanceInUse.set(false);
     }
 
@@ -112,6 +120,36 @@ public final class MPVLib {
 
     private static native int nativeCommandAsync(long id, String[] command);
     private static native void nativeAbortAsyncCommand(long id);
+    private static native int nativeSetPropertyAsync(long id, String name, String value);
+    // Disjoint IDs and a reply barrier preserve pause/stop/VO/loadfile order.
+    private static volatile MpvNativeControls controls;
+
+    public static int commandAsync(String[] command) {
+        MpvNativeControls current = controls;
+        return current == null ? -3 : current.command(command);
+    }
+
+    public static int setPropertyAsync(String name, String value) {
+        try {
+            MpvNativeControls current = controls;
+            return current == null ? -3 : current.property(name, value);
+        } catch (UnsatisfiedLinkError missingBridge) {
+            // No synchronous fallback: an incompatible bridge must not freeze the UI.
+            throw new IllegalStateException("MPV async property bridge unavailable", missingBridge);
+        }
+    }
+
+    public static int setPropertyAsync(String name, boolean value) {
+        return setPropertyAsync(name, value ? "yes" : "no");
+    }
+
+    public static int setPropertyAsync(String name, double value) {
+        return setPropertyAsync(name, Double.toString(value));
+    }
+
+    public static int setPropertyAsync(String name, int value) {
+        return setPropertyAsync(name, Integer.toString(value));
+    }
 
     public static native int setOptionString(String name, String value);
 
@@ -134,6 +172,34 @@ public final class MPVLib {
     public static native void setPropertyString(String property, String value);
 
     public static native void observeProperty(String property, int format);
+    private static volatile MpvPropertyCache propertyCache;
+
+    private static Object cached(String name, int format) {
+        MpvPropertyCache current = propertyCache;
+        return current == null ? null : current.get(name, format);
+    }
+    public static String getCachedString(String name) {
+        Object value = cached(name, MpvFormat.STRING);
+        return value == null ? null : value.toString();
+    }
+    public static Integer getCachedInt(String name) {
+        Object value = cached(name, MpvFormat.INT64);
+        return value instanceof Number ? ((Number) value).intValue() : null;
+    }
+    public static Double getCachedDouble(String name) {
+        Object value = cached(name, MpvFormat.DOUBLE);
+        return value instanceof Number ? ((Number) value).doubleValue() : null;
+    }
+    public static Boolean getCachedBoolean(String name) {
+        Object value = cached(name, MpvFormat.FLAG);
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        return null;
+    }
+    private static void cache(String name, Object value) {
+        MpvPropertyCache current = propertyCache;
+        if (current != null) current.put(name, value);
+    }
 
     public static void addObserver(EventObserver observer) {
         observers.addIfAbsent(observer);
@@ -153,35 +219,44 @@ public final class MPVLib {
 
     @SuppressWarnings("unused")
     public static void eventProperty(String property) {
+        cache(property, null);
         for (EventObserver observer : observers) observer.eventProperty(property);
     }
 
     @SuppressWarnings("unused")
     public static void eventProperty(String property, long value) {
+        cache(property, value);
         for (EventObserver observer : observers) observer.eventProperty(property, value);
     }
 
     @SuppressWarnings("unused")
     public static void eventProperty(String property, boolean value) {
+        cache(property, value);
         for (EventObserver observer : observers) observer.eventProperty(property, value);
     }
 
     @SuppressWarnings("unused")
     public static void eventProperty(String property, String value) {
+        cache(property, value);
         for (EventObserver observer : observers) observer.eventProperty(property, value);
     }
 
     @SuppressWarnings("unused")
     public static void eventProperty(String property, double value) {
+        cache(property, value);
         for (EventObserver observer : observers) observer.eventProperty(property, value);
     }
 
     public static void event(int eventId) {
+        if (eventId == MpvEvent.START_FILE && propertyCache != null) propertyCache.clearMedia();
         for (EventObserver observer : observers) observer.event(eventId);
     }
 
     @SuppressWarnings("unused")
     public static void eventCommandReply(long id, int error) {
+        MpvNativeControls current = controls;
+        if (current != null) current.reply(id);
+        if (error < 0 && id >= (1L << 48)) Log.w(TAG, "Async control failed: " + error);
         for (EventObserver observer : observers) observer.eventCommandReply(id, error);
     }
 

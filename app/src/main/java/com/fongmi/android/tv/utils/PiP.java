@@ -2,6 +2,8 @@ package com.fongmi.android.tv.utils;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.app.PictureInPictureParams;
 import android.app.RemoteAction;
 import android.content.pm.PackageManager;
@@ -19,6 +21,8 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.receiver.ActionReceiver;
 import com.fongmi.android.tv.setting.PlayerSetting;
+
+import io.github.jqssun.airplay.service.AirPlayService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +75,32 @@ public class PiP {
         }
     }
 
+    /** AirPlay is a different playback owner; never send its buttons to PlaybackService. */
+    public void updateAirPlay(Activity activity, boolean playing, boolean canPlayPause, boolean canNext) {
+        try {
+            if (noPiP()) return;
+            List<RemoteAction> actions = new ArrayList<>();
+            if (canPlayPause) actions.add(buildAirPlayAction(activity,
+                    playing ? R.drawable.exo_icon_pause : R.drawable.exo_icon_play,
+                    playing ? R.string.exo_controls_pause_description : R.string.exo_controls_play_description,
+                    playing ? AirPlayService.ACTION_PAUSE : AirPlayService.ACTION_PLAY));
+            if (canNext) actions.add(buildAirPlayAction(activity, R.drawable.exo_icon_next,
+                    R.string.exo_controls_next_description, AirPlayService.ACTION_NEXT));
+            activity.setPictureInPictureParams(builder.setActions(actions).build());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    private RemoteAction buildAirPlayAction(Activity activity, int icon, int title, String action) {
+        Intent intent = new Intent(action).setPackage(activity.getPackageName());
+        PendingIntent pending = PendingIntent.getBroadcast(activity, action.hashCode(), intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new RemoteAction(Icon.createWithResource(activity, icon), activity.getString(title), "", pending);
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
     public void enter(Activity activity, int width, int height, int scale) {
         try {
             if (noPiP() || activity.isInPictureInPictureMode() || !PlayerSetting.isBackgroundPiP()) return;

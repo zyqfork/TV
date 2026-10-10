@@ -22,6 +22,7 @@ import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class MpvUtil {
@@ -56,6 +57,25 @@ public final class MpvUtil {
         } catch (Throwable e) {
             return false;
         }
+    }
+
+    /** Construction-only options; exact equality avoids hash-only rebuild decisions. */
+    public static Map<String, Object> playbackConfig(int decode, boolean live) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("decode", decode);
+        config.put("live", live);
+        config.put("user-options", Map.copyOf(MpvConfigFiles.readGlobalOptions()));
+        config.put("user-config", MpvConfigFiles.read()); // include edits inside named profiles
+        config.put("video-prefer", VideoSetting.isEnabled());
+        config.put("render", PlayerSetting.getRender());
+        config.put("gpu-next", PlayerSetting.isMpvGpuNext());
+        config.put("vulkan", PlayerSetting.isMpvVulkan());
+        config.put("buffer", PlayerSetting.getBuffer());
+        config.put("low-latency", PlayerSetting.isLiveLowLatency());
+        config.put("preload", PreloadSetting.isPreload());
+        config.put("ua", getDefaultUserAgent());
+        config.put("languages", LangUtil.getPreferredTextLanguageList());
+        return Map.copyOf(config);
     }
 
     public static MpvPlayer buildPlayer(int decode, Player.Listener listener) {
@@ -146,8 +166,10 @@ public final class MpvUtil {
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
-        // A silent libmpv software fallback would leave the hard-decode setting looking active.
-        if (!userOptions.containsKey("hwdec-software-fallback")) {
+        // Hard decode must not silently become software. Do not apply this to soft mode:
+        // libmpv treats hwdec=no plus hwdec-software-fallback=no as "every hardware decoder
+        // failed" and force-EOFs the video track. Audio keeps playing and the surface stays black.
+        if (decode != 0 && !userOptions.containsKey("hwdec-software-fallback")) {
             builder.addPreInitStringOption("hwdec-software-fallback", "no");
         }
         if (decode == 2) {
@@ -164,7 +186,8 @@ public final class MpvUtil {
         if (!userOptions.containsKey("network-timeout")) {
             builder.addPreInitStringOption("network-timeout", live ? "15" : "30");
         }
-        if (!userOptions.containsKey("framedrop")) builder.addPreInitStringOption("framedrop", "vo");
+        // Dropping late frames is how a live stream catches up. On VOD it reads as stutter.
+        if (live && !userOptions.containsKey("framedrop")) builder.addPreInitStringOption("framedrop", "vo");
         if (live && !userOptions.containsKey("video-sync")) builder.addPreInitStringOption("video-sync", "audio");
         if (!userOptions.containsKey("demuxer-max-bytes")) {
             // Low latency is a live setting. Applying it to VOD shrinks the cache of every title
@@ -176,7 +199,9 @@ public final class MpvUtil {
         }
         if (live) {
             if (!userOptions.containsKey("demuxer-max-back-bytes")) {
-                builder.addPreInitStringOption("demuxer-max-back-bytes", "0");
+                // A zero back buffer discards the only data pause can resume from.
+                builder.addPreInitStringOption("demuxer-max-back-bytes",
+                        PlayerSetting.isLiveLowLatency() ? "2MiB" : "8MiB");
             }
             if (!userOptions.containsKey("cache-secs")) {
                 int seconds = PlayerSetting.isLiveLowLatency()
@@ -184,11 +209,9 @@ public final class MpvUtil {
                         : Math.max(1, PlayerSetting.getBuffer());
                 builder.addPreInitStringOption("cache-secs", Integer.toString(seconds));
             }
-            if (!userOptions.containsKey("demuxer-lavf-o")) {
-                builder.addPreInitStringOption("demuxer-lavf-o", PlayerSetting.isLiveLowLatency()
-                        ? "analyzeduration=1000000,probesize=524288"
-                        : "analyzeduration=2500000,probesize=1048576");
-            }
+            // A live TS join may precede its next SPS/PPS/IDR by an entire GOP. Artificial
+            // 1-2.5s probe caps can publish an audio-only stream before video parameters exist.
+            // Use libavformat/mpv defaults, including in low-latency mode; explicit config wins.
             if (!userOptions.containsKey("rtsp-transport")) {
                 builder.addPreInitStringOption("rtsp-transport", "tcp");
             }
@@ -260,8 +283,8 @@ public final class MpvUtil {
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {
         builder.addAndroidSubtitleOptions(App.get(), PlayerSetting.isCaption(), getSubtitlePosition(), getSubtitleScale());
-        // fonts.conf already lists Path.font(). A TTC face is selected with fontconfig's style,
-        // because sub-font alone only matches the family and ignores faceIndex.
+        // fonts.conf already lists Path.font(). libass treats sub-font as a literal name;
+        // use the font's full face name, never a family:style= pattern.
         com.fongmi.android.tv.player.subtitle.ExternalFont.Entry entry = com.fongmi.android.tv.setting.SubtitleSetting.getFontEntry();
         String font = entry == null ? com.fongmi.android.tv.setting.SubtitleSetting.getFontFamily() : entry.mpvFont();
         if (!TextUtils.isEmpty(font)) builder.addPostInitStringOption("sub-font", font);

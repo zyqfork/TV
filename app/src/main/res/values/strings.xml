@@ -518,4 +518,8 @@
     <string name="device_select">Select devices</string>
     <string name="device_searching">Searching for devices…</string>
     <string name="device_not_found">No devices found</string>
+    <string name="error_sync_snapshot">The peer returned an invalid sync snapshot. Update both devices before replacing local data. Local data has been retained.</string>
+    <string name="error_update_apk">Downloaded update is invalid. Please download it again.</string>
+    <string name="error_update_permission">Allow installation from this app before installing the update.</string>
+    <string name="error_update_installer">Cannot open the system installer. The app has not been closed.</string>
 </resources>

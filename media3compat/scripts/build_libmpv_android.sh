@@ -94,6 +94,9 @@ fi
 }
 git -C deps/dav1d checkout --detach 54706fc6bc0cdecab7e9593974a4039cc038fca7
 git -C deps/ffmpeg checkout --detach 894da5ca7d742e4429ffb2af534fcda0103ef593
+# Restore these tracked files in the OWNED tree: checkout alone retains the rejected
+# codec-level experiment and older diagnostics. Never touch the shared seed.
+git -C deps/ffmpeg restore --source=894da5ca7d742e4429ffb2af534fcda0103ef593 --worktree -- libavcodec/mediacodecdec_common.c libavcodec/mediacodecdec.c
 git -C deps/freetype2 checkout --detach 0a0221a1347e2f1e07c395263540026e9a0aa7c7
 git -C deps/libass checkout --detach f9fd3d20dff1cd84b7c74c8ae7f79711ad7736fa
 git -C deps/libplacebo checkout --detach 4c426e466814536def653cb23f1d1c287ea7a7f5

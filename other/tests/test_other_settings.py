@@ -31,7 +31,7 @@ STUBS = {
 import com.fongmi.android.tv.bean.Config;import com.fongmi.android.tv.setting.Setting;import com.fongmi.android.tv.impl.Callback;import com.fongmi.android.tv.utils.Task;import com.google.gson.*;
 public class StartupSettingsProbe {
  static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
- static class Fixture extends BaseConfig {int network,saved;boolean fail,loaded;String seen;Fixture(Config c){config=c;}protected String getTag(){return "fixture";}protected Config defaultConfig(){return config;}protected boolean isLoaded(){return loaded;}protected void load(Config c)throws Throwable{network++;seen=c.url;if(fail)throw new java.io.IOException("offline");c.json="valid";loaded=true;}protected boolean loadSaved(Config c)throws Throwable{saved++;seen=c.url;if(c.json.equals("cancel"))throw new java.io.InterruptedIOException("Canceled");if(!c.json.equals("valid"))throw new IllegalArgumentException("corrupt");loaded=true;return true;}JsonArray expand(JsonObject o){return fetchArray(o,"headers");}}
+ static class Fixture extends BaseConfig {int network,saved;boolean fail,loaded;Throwable failure;String seen;Fixture(Config c){config=c;}protected String getTag(){return "fixture";}protected Config defaultConfig(){return config;}protected boolean isLoaded(){return loaded;}protected void load(Config c)throws Throwable{network++;seen=c.url;if(failure!=null)throw failure;if(fail)throw new java.io.IOException("offline");c.json="valid";loaded=true;}protected boolean loadSaved(Config c)throws Throwable{saved++;seen=c.url;if(c.json.equals("cancel"))throw new java.io.InterruptedIOException("Canceled");if(!c.json.equals("valid"))throw new IllegalArgumentException("corrupt");loaded=true;return true;}JsonArray expand(JsonObject o){return fetchArray(o,"headers");}}
  static class Reply extends Callback {int success,error;public void success(){success++;}public void error(String s){error++;}}
  public static void main(String[] args){
   check(Setting.isAutoSourceRefresh()&&!Setting.isIgnoreParserSslErrors()&&!Setting.isParserSslWarningAccepted(),"unsafe/changed defaults");
@@ -41,6 +41,7 @@ public class StartupSettingsProbe {
   f=new Fixture(new Config("owned-bad","corrupt"));r=new Reply();f.loadOnStartup(r);Task.drain();check(f.saved==1&&f.network==1&&r.success==1,"corrupt cache cannot recover once");
   f=new Fixture(new Config("owned-cancel","cancel"));r=new Reply();f.loadOnStartup(r);Task.drain();check(f.network==0&&r.success==0&&r.error==0,"canceled saved startup refetched");
   c=new Config("owned-offline","valid");f=new Fixture(c);f.fail=true;r=new Reply();f.load(r);Task.drain();check(r.error==1&&c.json.equals("valid"),"network error erased saved source");
+  f=new Fixture(new Config("owned-timeout","valid"));f.failure=new java.net.SocketTimeoutException("Read timed out");r=new Reply();f.load(r);Task.drain();check(r.error==1&&r.success==0,"timeout swallowed and loading UI left pending");
   f=new Fixture(new Config("owned-cold","valid"));f.ensureLoaded();check(f.saved==1&&f.network==0,"cold ensureLoaded ignored preference");
   f=new Fixture(new Config("owned-A","valid"));var old=new Reply();var fresh=new Reply();f.loadOnStartup(old);f.config=new Config("owned-B","valid");f.loadOnStartup(fresh);Task.drain();check(old.success==0&&fresh.success==1&&f.seen.equals("owned-B"),"obsolete startup published into new source");
   var object=new JsonObject();object.add("headers",new JsonElement("https://owned/headers"));int before=com.github.catvod.net.OkHttp.requests;f.expand(object);f.expand(object);check(com.github.catvod.net.OkHttp.requests==before+1&&object.get("headers").isJsonArray(),"expanded lists refetched on saved startup");
@@ -88,7 +89,7 @@ def main():
     wiring()
     with TemporaryDirectory() as tmp:
         folder = Path(tmp)
-        sources = [ROOT / p for p in ('app/src/main/java/com/fongmi/android/tv/api/config/BaseConfig.java','app/src/main/java/com/fongmi/android/tv/setting/Setting.java')]
+        sources = [ROOT / p for p in ('app/src/main/java/com/fongmi/android/tv/api/config/BaseConfig.java','app/src/main/java/com/fongmi/android/tv/api/config/ConfigLoadCancellation.java','app/src/main/java/com/fongmi/android/tv/setting/Setting.java')]
         for name, body in STUBS.items():
             path = folder / name
             path.parent.mkdir(parents=True, exist_ok=True)

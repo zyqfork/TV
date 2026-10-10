@@ -26,6 +26,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     private PlaySpec spec;
     private int decode;
     private int startGeneration;
+    private java.util.Map<String, Object> builtConfig;
     private boolean live;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
@@ -36,6 +37,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         this.decode = decode;
         this.live = live;
         this.listener = listener;
+        this.builtConfig = MpvUtil.playbackConfig(decode, live);
         this.player = MpvUtil.buildPlayer(decode, live, listener);
         this.effect = new MpvPlayerEffect(player);
         this.provider = new MpvErrorMsgProvider();
@@ -78,9 +80,15 @@ public class MpvPlayerEngine implements PlayerEngine {
     public Player rebuild() {
         startGeneration++;
         player.release();
+        builtConfig = MpvUtil.playbackConfig(decode, live);
         player = MpvUtil.buildPlayer(decode, live, listener);
         effect = new MpvPlayerEffect(player);
         return player;
+    }
+
+    @Override
+    public boolean refreshConfig() {
+        return !MpvUtil.playbackConfig(decode, live).equals(builtConfig);
     }
 
     @Override

@@ -26,10 +26,10 @@ STUBS = {
     'com/fongmi/android/tv/player/media/PlaySpec.java': '''package com.fongmi.android.tv.player.media;public class PlaySpec {public String url,format;public PlaySpec(String u){url=u;}public String getUrl(){return url;}public String getFormat(){return format;}public void setFormat(String f){format=f;}}''',
     'com/fongmi/android/tv/player/media/MediaItemFactory.java': '''package com.fongmi.android.tv.player.media;public class MediaItemFactory {public static androidx.media3.common.MediaItem from(PlaySpec s){return new androidx.media3.common.MediaItem(s.url);}public static androidx.media3.common.MediaItem from(PlaySpec s,int d){return from(s);}public static Object buildSubConfig(Object s){return s;}}''',
     'com/fongmi/android/tv/player/util/HlsPngTsPrepare.java': '''package com.fongmi.android.tv.player.util;public class HlsPngTsPrepare {public static com.fongmi.android.tv.player.media.PlaySpec prepare(com.fongmi.android.tv.player.media.PlaySpec s){return s;}}''',
-    'com/fongmi/android/tv/player/mpv/MpvUtil.java': '''package com.fongmi.android.tv.player.mpv;public class MpvUtil {public static boolean isAvailable(){return true;}public static androidx.media3.mpvplayer.MpvPlayer buildPlayer(int d,boolean l,androidx.media3.common.Player.Listener e){return new androidx.media3.mpvplayer.MpvPlayer();}public static void setSubtitleStyle(Object o){}}''',
+    'com/fongmi/android/tv/player/mpv/MpvUtil.java': '''package com.fongmi.android.tv.player.mpv;public class MpvUtil {public static int config=1;public static java.util.Map<String,Object> playbackConfig(int d,boolean l){return java.util.Map.of("setting",config,"decode",d,"live",l);}public static boolean isAvailable(){return true;}public static androidx.media3.mpvplayer.MpvPlayer buildPlayer(int d,boolean l,androidx.media3.common.Player.Listener e){return new androidx.media3.mpvplayer.MpvPlayer();}public static void setSubtitleStyle(Object o){}}''',
     'com/fongmi/android/tv/player/mpv/MpvPlayerEffect.java': '''package com.fongmi.android.tv.player.mpv;public class MpvPlayerEffect implements com.fongmi.android.tv.player.effect.PlayerEffect {public MpvPlayerEffect(Object p){}public void applyVideoEffect(){}public void applyAudioEffect(){}}''',
     'com/fongmi/android/tv/player/mpv/MpvErrorMsgProvider.java': '''package com.fongmi.android.tv.player.mpv;public class MpvErrorMsgProvider {public String get(Object e){return "error";}}''',
-    'com/fongmi/android/tv/player/exo/ExoUtil.java': '''package com.fongmi.android.tv.player.exo;public class ExoUtil {public static androidx.media3.exoplayer.ExoPlayer buildPlayer(int d,androidx.media3.common.Player.Listener l,Object p,boolean live){return new androidx.media3.exoplayer.ExoPlayer();}}''',
+    'com/fongmi/android/tv/player/exo/ExoUtil.java': '''package com.fongmi.android.tv.player.exo;public class ExoUtil {public static int config=1;public static int playbackConfig(int d,boolean l){return config;}public static androidx.media3.exoplayer.ExoPlayer buildPlayer(int d,androidx.media3.common.Player.Listener l,Object p,boolean live){return new androidx.media3.exoplayer.ExoPlayer();}}''',
     'com/fongmi/android/tv/player/exo/ExoPlayerEffect.java': '''package com.fongmi.android.tv.player.exo;public class ExoPlayerEffect implements com.fongmi.android.tv.player.effect.PlayerEffect {public boolean isAudioProcessorInstalled(){return true;}public ExoPlayerEffect(boolean b){}public Object getAudioProcessor(){return null;}public void setPlayer(Object p){}public void applyVideoEffect(){}public void applyAudioEffect(){}public void release(){}}''',
     'com/fongmi/android/tv/player/exo/ErrorMsgProvider.java': 'package com.fongmi.android.tv.player.exo;public class ErrorMsgProvider {public String get(Object e){return "error";}}',
     'com/fongmi/android/tv/player/exo/ExoVolumeGain.java': '''package com.fongmi.android.tv.player.exo;public class ExoVolumeGain {public void attach(Object p){}public void setGain(float g){}public void release(){}}''',
@@ -56,7 +56,13 @@ public class PendingStartProbe {
     check(e.getPlayer().getCurrentPosition()==321,"rebuild lost position");
     restart(e,s,321,true);settle();check(e.getPlayer().getPlayWhenReady(),"playing recovery lost intent");
     restart(e,s,321,false);e.getPlayer().play();settle();check(e.getPlayer().getPlayWhenReady(),"late preparation lost user resume");
-    e.start(s,0);settle();check(e.getPlayer().getPlayWhenReady(),"fresh start lost autoplay");e.release();
+    e.start(s,0);settle();check(e.getPlayer().getPlayWhenReady(),"fresh start lost autoplay");
+    check(!e.refreshConfig(),"unchanged settings requested a rebuild");
+    if(e.getType()==com.fongmi.android.tv.player.engine.PlayerEngine.Type.MPV)com.fongmi.android.tv.player.mpv.MpvUtil.config++;
+    else ExoUtil.config++;
+    check(e.refreshConfig(),"construction setting change ignored");e.rebuild();
+    check(!e.refreshConfig(),"rebuild did not refresh construction snapshot");
+    restart(e,s,321,false);settle();check(!e.getPlayer().getPlayWhenReady()&&e.getPlayer().getCurrentPosition()==321,"setting rebuild lost pause/position");e.release();
    }
    System.out.println("PASS both production engines preserve explicit restart/rebuild intent, position and fresh autoplay");
   }else if(a[0].equals("stop")){

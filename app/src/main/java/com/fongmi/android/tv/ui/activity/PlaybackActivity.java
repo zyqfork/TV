@@ -406,21 +406,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             // Do not use the deprecated setUseArtwork(boolean) helper here. FongMi's Media3 fork
             // currently maps its boolean in reverse, so setUseArtwork(false) enables FIT artwork
             // and leaves a static poster above MPV's moving Surface.
-            getPlayerView().setArtworkDisplayMode(
-                    mpv
-                            ? PlayerView.ARTWORK_DISPLAY_MODE_OFF
-                            : PlayerView.ARTWORK_DISPLAY_MODE_FIT);
+            // FIT artwork sits above the Surface. Software decode and a missed first-frame
+            // callback leave that layer (or the shutter) black while audio continues.
+            getPlayerView().setArtworkDisplayMode(PlayerView.ARTWORK_DISPLAY_MODE_OFF);
             if (getPlayerView().getPlayer() == null) {
                 getPlayerView().setPlayer(player().getPlayer());
             }
-            if (mpv) {
-                // PlaybackService may render MPV's first frame before this activity attaches its
-                // PlayerView listener. In that race PlayerView misses onRenderedFirstFrame() and
-                // its shutter permanently covers the live Surface with a static black/poster
-                // frame. MPV owns the visible Surface, so remove that overlay deterministically.
-                View shutter = getPlayerView().findViewById(androidx.media3.ui.R.id.exo_shutter);
-                if (shutter != null) shutter.setVisibility(View.INVISIBLE);
-            }
+            // Artwork is disabled above; keep the shutter until an actual first-frame event.
         }
         syncPlaybackOverlays();
     }
@@ -618,7 +610,21 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     @Override
     public void onVideoSizeChanged(@NonNull VideoSize size) {
-        if (isOwner()) onSizeChanged(size);
+        if (!isOwner()) return;
+        onSizeChanged(size);
+    }
+
+    @Override
+    public void onRenderedFirstFrame() {
+        if (isOwner()) revealVideo();
+    }
+
+    /** Drop the PlayerView cover only after the engine reports its first frame. */
+    private void revealVideo() {
+        PlayerView view = getPlayerView();
+        view.setArtworkDisplayMode(PlayerView.ARTWORK_DISPLAY_MODE_OFF);
+        View shutter = view.findViewById(androidx.media3.ui.R.id.exo_shutter);
+        if (shutter != null) shutter.setVisibility(View.INVISIBLE);
     }
 
     @Override

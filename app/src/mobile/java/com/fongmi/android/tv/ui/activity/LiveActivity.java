@@ -376,7 +376,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void checkPlay() {
-        if (player().isPlaying()) onPaused();
+        // isPlaying() is false while a live stream is still buffering, so the button never paused.
+        if (controller() != null && controller().getPlayWhenReady()) onPaused();
         else onPlay();
     }
 
@@ -854,8 +855,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
-        if (isPlaying || isPaused()) updatePlayControl(isPlaying);
-        if (!isPlaying && isPaused()) showControl();
+        boolean playing = controller() != null && controller().getPlayWhenReady();
+        updatePlayControl(playing);
+        if (!playing) showControl();
     }
 
     private void updatePlayControl(boolean isPlaying) {
@@ -1067,7 +1069,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     public void onDoubleTap() {
         if (isLock()) return;
         if (isVisible(mBinding.recycler)) hideUI();
-        if (player().isPlaying()) {
+        if (controller() != null && controller().getPlayWhenReady()) {
             showControl();
             onPaused();
         } else {

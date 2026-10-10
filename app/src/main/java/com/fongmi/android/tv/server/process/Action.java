@@ -10,6 +10,8 @@ import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.db.SyncSnapshot;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
@@ -20,6 +22,7 @@ import com.fongmi.android.tv.server.impl.Process;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
@@ -42,8 +45,13 @@ public class Action implements Process {
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
         Map<String, String> params = session.getParms();
         String param = params.get("do");
-        if (!TextUtils.isEmpty(param)) doJob(param, params);
-        return Nano.ok();
+        try {
+            if ("syncSnapshot".equals(param)) return Nano.ok(SyncSnapshot.export(params.get("type"), params.get("config")));
+            if (!TextUtils.isEmpty(param)) doJob(param, params);
+            return Nano.ok();
+        } catch (RuntimeException invalid) {
+            return Nano.error("Invalid action or sync data");
+        }
     }
 
     private void doJob(String param, Map<String, String> params) {
@@ -181,25 +189,24 @@ public class Action implements Process {
     }
 
     public void syncHistory(Map<String, String> params, boolean force) {
-        Config config = Config.find(Config.objectFrom(params.get("config")));
+        Config requested = Config.objectFrom(params.get("config"));
+        if (requested == null || requested.getUrl().isBlank()) throw new IllegalArgumentException("Missing sync source");
+        SyncSnapshot.requireArray(params.get("targets"));
         List<History> targets = History.arrayFrom(params.get("targets"));
-        if (config.getUrl() == null) return;
+        SyncSnapshot.validateHistory(targets);
+        Config config = Config.find(requested);
         if (config.getUrl().equals(VodConfig.getUrl())) {
-            if (force) History.delete(config.getId());
-            History.sync(targets);
-            RefreshEvent.history();
+            completeHistory(targets, force, config);
         } else {
-            VodConfig.load(config, getCallback(targets, force, config.getId()));
+            VodConfig.load(config, getCallback(targets, force, config));
         }
     }
 
-    private Callback getCallback(List<History> targets, boolean force, int cid) {
+    private Callback getCallback(List<History> targets, boolean force, Config config) {
         return new Callback() {
             @Override
             public void success() {
-                if (force) History.delete(cid);
-                History.sync(targets);
-                RefreshEvent.history();
+                completeHistory(targets, force, config);
             }
 
             @Override
@@ -210,24 +217,55 @@ public class Action implements Process {
     }
 
     private void syncKeep(Map<String, String> params, boolean force) {
+        SyncSnapshot.requireArray(params.get("targets"));
+        SyncSnapshot.requireArray(params.get("configs"));
         List<Keep> targets = Keep.arrayFrom(params.get("targets"));
         List<Config> configs = Config.arrayFrom(params.get("configs"));
+        SyncSnapshot.validateKeep(configs, targets);
         if (TextUtils.isEmpty(VodConfig.getUrl()) && !configs.isEmpty()) {
             VodConfig.load(Config.find(configs.get(0)), getCallback(configs, targets, force));
         } else {
-            if (force) Keep.deleteAll();
-            Keep.sync(configs, targets);
-            RefreshEvent.keep();
+            completeKeep(configs, targets, force);
         }
+    }
+
+    private void completeHistory(List<History> targets, boolean force, Config config) {
+        int cid = config.getId();
+        String url = config.getUrl();
+        performSync(() -> {
+            AppDatabase.get().runInTransaction(() -> {
+                Config destination = Config.find(cid);
+                if (destination == null || !url.equals(destination.getUrl())) throw new IllegalStateException("Sync source changed");
+                if (force) History.delete(cid);
+                History.sync(targets, cid);
+            });
+            RefreshEvent.history();
+        });
+    }
+
+    private void completeKeep(List<Config> configs, List<Keep> targets, boolean force) {
+        performSync(() -> {
+            AppDatabase.get().runInTransaction(() -> {
+                if (force) Keep.deleteAll();
+                Keep.sync(configs, targets);
+            });
+            RefreshEvent.keep();
+        });
+    }
+
+    private void performSync(Runnable sync) {
+        // VodConfig callbacks run on UI. Never run a bulk restore there.
+        Task.executeSerial(() -> {
+            try { sync.run(); }
+            catch (RuntimeException failure) { App.post(() -> Notify.show(failure.getMessage())); }
+        });
     }
 
     private Callback getCallback(List<Config> configs, List<Keep> targets, boolean force) {
         return new Callback() {
             @Override
             public void success() {
-                if (force) Keep.deleteAll();
-                Keep.sync(configs, targets);
-                RefreshEvent.keep();
+                completeKeep(configs, targets, force);
             }
 
             @Override

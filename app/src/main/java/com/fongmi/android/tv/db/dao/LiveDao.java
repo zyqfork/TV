@@ -10,6 +10,9 @@ import java.util.List;
 @Dao
 public abstract class LiveDao extends BaseDao<Live> {
 
+    @Query("DELETE FROM Live")
+    public abstract void deleteAllForRestore();
+
     @Query("SELECT * FROM Live")
     public abstract List<Live> findAll();
 

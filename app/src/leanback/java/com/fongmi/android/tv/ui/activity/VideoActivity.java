@@ -357,7 +357,7 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         mBinding.control.action.opening.setOnClickListener(view -> onOpening());
         mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
         mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
-        mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
+        mBinding.video.setOnTouchListener((view, event) -> isFullscreen() && mKeyDown.onTouchEvent(event));
         mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -1499,7 +1499,23 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (isFullscreen() && KeyUtil.isMenuKey(event)) onToggle();
+        if (isFullscreen() && KeyUtil.isMenuKey(event)) {
+            // Own both edges: toggling on DOWN and UP immediately hides the opened controls.
+            if (KeyUtil.isActionUp(event)) onToggle();
+            return true;
+        }
+        if (service() != null && controller() != null
+                && (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                || event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY
+                || event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PAUSE)) {
+            if (KeyUtil.isActionDown(event) && event.getRepeatCount() == 0) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY) onPlay();
+                else if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PAUSE) onPaused();
+                else onKeyCenter();
+            }
+            // Do not toggle here and then deliver the same key to MediaSession again.
+            return true;
+        }
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
         if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event) && service() != null) return mKeyDown.onKeyDown(event);

@@ -20,7 +20,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.io.InterruptedIOException;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -130,24 +129,24 @@ abstract class BaseConfig {
                 if (restored) config.save();
                 else config.update();
             }
-            App.post(() -> Notify.show(config.getNotice()));
-            App.post(callback::success);
+            App.post(() -> {
+                if (taskId.get() != id) return;
+                Notify.show(config.getNotice());
+                callback.success();
+            });
         } catch (Throwable e) {
             e.printStackTrace();
             if (isCanceled(e)) return;
             if (taskId.get() != id) return;
-            if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
-            else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+            String error = TextUtils.isEmpty(config.getUrl()) ? "" : Notify.getError(R.string.error_config_get, e);
+            App.post(() -> { if (taskId.get() == id) callback.error(error); });
         } finally {
             if (taskId.get() == id) postEvent();
         }
     }
 
     protected boolean isCanceled(Throwable e) {
-        if ("Canceled".equals(e.getMessage())) return true;
-        if (e instanceof InterruptedException) return true;
-        if (e instanceof InterruptedIOException) return true;
-        return e.getCause() instanceof InterruptedIOException;
+        return ConfigLoadCancellation.isCanceled(e);
     }
 
     protected JsonArray fetchArray(JsonObject object, String key) {

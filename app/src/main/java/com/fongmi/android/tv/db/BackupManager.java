@@ -61,17 +61,12 @@ public final class BackupManager {
         Backup backup = Backup.objectFrom(FileUtil.readGzip(file));
         boolean valid = !backup.getConfig().isEmpty();
         if (!valid) return false;
-        Backup snapshot = Backup.create();
         try {
             backup.restore();
             return true;
         } catch (RuntimeException e) {
-            Log.e(TAG, "Restore failed, rolling back file=" + file, e);
-            try {
-                snapshot.restore();
-            } catch (RuntimeException rollback) {
-                Log.e(TAG, "Rollback after failed restore also failed", rollback);
-            }
+            // Backup.restore owns its SQLite transaction and preference compensation.
+            Log.e(TAG, "Restore failed; original database retained, file=" + file, e);
             return false;
         }
     }

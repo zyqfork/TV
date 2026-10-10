@@ -11,6 +11,9 @@ import java.util.List;
 @Dao
 public abstract class ConfigDao extends BaseDao<Config> {
 
+    @Query("DELETE FROM Config")
+    public abstract void deleteAllForRestore();
+
     @Query("SELECT * FROM Config")
     public abstract List<Config> findAll();
 

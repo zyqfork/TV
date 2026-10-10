@@ -505,4 +505,8 @@
     <string name="device_select">选择装置</string>
     <string name="device_searching">正在搜索设备…</string>
     <string name="device_not_found">未找到设备</string>
+    <string name="error_sync_snapshot">对方未返回有效同步快照。覆盖本地数据前请更新两端；原有数据已保留。</string>
+    <string name="error_update_apk">更新安装包无效，请重新下载</string>
+    <string name="error_update_permission">请允许此应用安装未知来源应用后再安装更新</string>
+    <string name="error_update_installer">无法打开系统安装器，当前应用未退出</string>
 </resources>

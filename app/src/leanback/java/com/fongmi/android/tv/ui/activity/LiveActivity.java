@@ -369,7 +369,8 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     private void checkPlay() {
-        if (player().isPlaying()) onPaused();
+        // isPlaying() is false while a live stream is still buffering, so the button never paused.
+        if (controller() != null && controller().getPlayWhenReady()) onPaused();
         else onPlay();
     }
 
@@ -518,8 +519,10 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
-        if (isPlaying || isPaused()) updatePlayControl(isPlaying);
-        if (!isPlaying && isPaused()) showControl(getFocus2());
+        boolean playing = controller() != null && controller().getPlayWhenReady();
+        updatePlayControl(playing);
+        // Do not steal fullscreen remote focus when pausing: the next OK must resume,
+        // not activate the configuration button. Explicit touch/control actions show their UI.
     }
 
     private void updatePlayControl(boolean isPlaying) {
@@ -975,7 +978,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
-        if (mKeyDown.hasEvent(event) && service() != null) mKeyDown.onKeyDown(event);
+        if (mKeyDown.hasEvent(event) && service() != null && mKeyDown.onKeyDown(event)) return true;
         return super.dispatchKeyEvent(event);
     }
 
@@ -1045,8 +1048,24 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     public void onKeyCenter() {
+        if (controller() == null) return;
+        controller().setPlayWhenReady(!controller().getPlayWhenReady());
+    }
+
+    @Override
+    public void onChannelList() {
         hideInfo();
         showUI();
+    }
+
+    @Override
+    public void onMediaPlay(boolean play) {
+        if (controller() != null) controller().setPlayWhenReady(play);
+    }
+
+    @Override
+    public void onPlayPause() {
+        onKeyCenter();
     }
 
     @Override
@@ -1062,7 +1081,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     public void onDoubleTap() {
         if (isVisible(mBinding.recycler)) hideUI();
-        if (player().isPlaying()) {
+        if (controller() != null && controller().getPlayWhenReady()) {
             showControl(getFocus2());
             onPaused();
         } else {

@@ -28,6 +28,9 @@ public class OkDns implements Dns {
     private volatile Supplier<Doh> supplier;
     private volatile DnsOverHttps doh;
     private volatile int dohFailures;
+    private DnsOverHttps retryDoh;
+    private long retryAfterNs;
+    private long resolverGeneration;
 
     public OkDns() {
         this.map = new ConcurrentHashMap<>();
@@ -35,8 +38,11 @@ public class OkDns implements Dns {
 
     public synchronized void setDoh(Doh item) {
         this.supplier = null;
+        this.resolverGeneration++;
         this.dohFailures = 0;
         this.doh = null;
+        this.retryDoh = null;
+        this.retryAfterNs = 0;
         if (item == null) return;
         HttpUrl url = HttpUrl.parse(item.getUrl().trim());
         if (!isDohUrl(url)) return;
@@ -56,6 +62,10 @@ public class OkDns implements Dns {
 
     public synchronized void setDoh(Supplier<Doh> supplier) {
         this.supplier = supplier;
+        this.resolverGeneration++;
+        this.doh = null;
+        this.retryDoh = null;
+        this.dohFailures = 0;
     }
 
     public void clear() {
@@ -79,22 +89,42 @@ public class OkDns implements Dns {
         Supplier<Doh> pending = this.supplier;
         if (pending != null) initDoh(pending);
         String target = get(hostname);
-        DnsOverHttps current = this.doh;
+        DnsOverHttps current;
+        long currentGeneration;
+        synchronized (this) {
+            if (doh == null && retryDoh != null && System.nanoTime() >= retryAfterNs) {
+                resolverGeneration++;
+                doh = retryDoh;
+                retryDoh = null;
+                dohFailures = 0;
+            }
+            current = doh;
+            currentGeneration = resolverGeneration;
+        }
         if (current == null) return Dns.SYSTEM.lookup(target);
         try {
             List<InetAddress> addresses = current.lookup(target);
-            dohFailures = 0;
+            synchronized (this) {
+                if (current == doh && currentGeneration == resolverGeneration) dohFailures = 0;
+            }
             return addresses;
         } catch (UnknownHostException e) {
             if (e.getCause() == null) throw e;
-            return fallback(target);
+            return fallback(target, current, currentGeneration);
         } catch (RuntimeException ignored) {
-            return fallback(target);
+            return fallback(target, current, currentGeneration);
         }
     }
 
-    private List<InetAddress> fallback(String hostname) throws UnknownHostException {
-        if (++dohFailures >= DOH_FAILURE_LIMIT) doh = null;
+    private List<InetAddress> fallback(String hostname, DnsOverHttps failed, long generation) throws UnknownHostException {
+        synchronized (this) {
+            // Old lookups must not disable a resolver selected after they started.
+            if (failed == doh && generation == resolverGeneration && ++dohFailures >= DOH_FAILURE_LIMIT) {
+                doh = null;
+                retryDoh = failed;
+                retryAfterNs = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            }
+        }
         return Dns.SYSTEM.lookup(hostname);
     }
 
@@ -104,8 +134,7 @@ public class OkDns implements Dns {
         try {
             item = supplier.get();
         } catch (RuntimeException ignored) {
-            this.supplier = null;
-            this.doh = null;
+            setDoh((Doh) null);
             return;
         }
         setDoh(item);

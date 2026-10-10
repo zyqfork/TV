@@ -63,7 +63,7 @@ public final class ExternalFont {
         for (FontFamilyParser.Face face : faces) {
             String label = faces.size() > 1 ? display + " · " + face.family() : display;
             if (face.variable() && !face.instances().isEmpty()) label += " (" + String.join(", ", face.instances()) + ")";
-            entries.add(new Entry(file.getAbsolutePath(), label, face.family(), face.index(), face.variable(), face.instances(), face.subfamily()));
+            entries.add(new Entry(file.getAbsolutePath(), label, face.family(), face.index(), face.variable(), face.instances(), face.subfamily(), face.fullName(), face.postScriptName(), face.postScript()));
         }
         return entries;
     }
@@ -139,15 +139,19 @@ public final class ExternalFont {
         return TextUtils.isEmpty(value) ? ("font-" + Crypto.md5(String.valueOf(System.nanoTime())) + ".ttf") : value;
     }
 
-    public record Entry(String path, String name, String family, int faceIndex, boolean variable, List<String> instances, String subfamily) {
+    public record Entry(String path, String name, String family, int faceIndex, boolean variable, List<String> instances, String subfamily, String fullName, String postScriptName, boolean postScript) {
 
-        /** fontconfig pattern. A non-regular face is selected with family:style=subfamily. */
+        /** libass accepts a literal family/full name, NOT a parsed family:style= pattern. */
         public String mpvFont() {
-            if (family == null || family.isEmpty()) return "";
-            if (subfamily == null) return family;
-            String style = subfamily.trim();
-            if (style.isEmpty() || style.equalsIgnoreCase("Regular") || style.equalsIgnoreCase("Normal") || "常规".equals(style) || "標準".equals(style)) return family;
-            return family + ":style=" + style;
+            // Keep normal family matching for Regular faces so ASS bold/italic can select
+            // real variants, rather than forcing synthetic styling of a fixed Regular face.
+            String style = subfamily == null ? "" : subfamily.trim();
+            if (style.isEmpty() || style.equalsIgnoreCase("Regular") || style.equalsIgnoreCase("Normal")
+                    || "常规".equals(style) || "標準".equals(style)) return family == null ? "" : family;
+            // libass uses PostScript names for CFF outlines and full names for TrueType.
+            if (postScript && postScriptName != null && !postScriptName.isBlank()) return postScriptName;
+            if (fullName != null && !fullName.isBlank()) return fullName;
+            return family == null ? "" : family;
         }
 
         public Typeface typeface() {

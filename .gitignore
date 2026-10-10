@@ -19,3 +19,5 @@ other/upstream-subtitle/
 other/tools/webdav_root/
 other/tools/tvboxosc-*
 NUL
+# Local APK/media evidence bundles (never source)
+.pi-apks/

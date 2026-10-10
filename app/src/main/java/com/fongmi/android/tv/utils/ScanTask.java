@@ -7,130 +7,112 @@ import com.github.catvod.net.OkHttp;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 
+/** One bounded scan owner. Network workers never publish into a newer scan. */
 public class ScanTask {
-
     private static final int CONNECT_MS = 250;
     private static final int CALL_MS = 400;
     private static final int PROBES = 48;
-
-    private final CopyOnWriteArrayList<Future<?>> future;
+    private final Object gate = new Object();
+    private final String callTag = "scan-" + UUID.randomUUID();
+    private final List<Future<?>> futures = new ArrayList<>();
     private final OkHttpClient client;
-    private final AtomicInteger generation = new AtomicInteger();
-    private final AtomicReference<ExecutorService> pool = new AtomicReference<>();
+    private int generation;
+    private ExecutorService pool;
     private Listener listener;
 
     public ScanTask(Listener listener) {
-        this.client = OkHttp.client(CONNECT_MS).newBuilder().callTimeout(CALL_MS, TimeUnit.MILLISECONDS).build();
-        this.future = new CopyOnWriteArrayList<>();
+        client = OkHttp.client(CONNECT_MS).newBuilder().callTimeout(CALL_MS, TimeUnit.MILLISECONDS).build();
         this.listener = listener;
     }
 
-    public void start() {
-        int gen = generation.incrementAndGet();
-        cancelProbes();
-        Task.execute(() -> run(getUrl(), gen));
-    }
+    public void start() { startBatch(null); }
+    public void start(String url) { startBatch(url == null || url.isBlank() ? List.of() : List.of(url)); }
 
-    public void start(String url) {
-        int gen = generation.incrementAndGet();
-        cancelProbes();
-        Task.execute(() -> run(List.of(url), gen));
+    private void startBatch(List<String> urls) {
+        final int gen;
+        synchronized (gate) {
+            if (listener == null) return;
+            gen = ++generation;
+            cancelProbes();
+        }
+        Task.execute(() -> run(urls == null ? getUrl() : urls, gen));
     }
 
     public void stop() {
-        listener = null;
-        generation.incrementAndGet();
-        cancelProbes();
+        synchronized (gate) {
+            listener = null;
+            generation++;
+            cancelProbes();
+        }
     }
 
     private void cancelProbes() {
-        OkHttp.cancel(client, "scan");
-        future.forEach(f -> f.cancel(true));
-        future.clear();
-        ExecutorService previous = pool.getAndSet(null);
-        if (previous != null) previous.shutdownNow();
+        OkHttp.cancel(client, callTag);
+        futures.forEach(f -> f.cancel(true));
+        futures.clear();
+        if (pool != null) pool.shutdownNow();
+        pool = null;
     }
 
     private void run(List<String> urls, int gen) {
-        if (generation.get() != gen) return;
-        if (urls.isEmpty()) {
-            finish(gen);
-            return;
-        }
-        int threads = Math.min(PROBES, urls.size());
-        ExecutorService local = Executors.newFixedThreadPool(threads);
-        ExecutorService replaced = pool.getAndSet(local);
-        if (replaced != null) replaced.shutdownNow();
-        if (generation.get() != gen) {
-            local.shutdownNow();
-            return;
-        }
         List<Future<?>> batch = new ArrayList<>();
-        try {
-            for (String url : urls) {
-                if (generation.get() != gen || local.isShutdown()) return;
-                Future<?> item = local.submit(() -> findDevice(url));
-                future.add(item);
-                batch.add(item);
+        synchronized (gate) {
+            // Registration and cancellation share the same ownership boundary.
+            if (generation != gen || listener == null) return;
+            if (!urls.isEmpty()) {
+                pool = Executors.newFixedThreadPool(Math.min(PROBES, urls.size()));
+                for (String url : urls) {
+                    Future<?> item = pool.submit(() -> findDevice(url, gen));
+                    futures.add(item);
+                    batch.add(item);
+                }
+                pool.shutdown();
             }
-        } catch (RejectedExecutionException ignored) {
-            local.shutdownNow();
-        } finally {
-            local.shutdown();
         }
         for (Future<?> item : batch) {
-            if (generation.get() != gen) return;
-            try {
-                item.get(CALL_MS + 100L, TimeUnit.MILLISECONDS);
-            } catch (Exception ignored) {
-            }
+            synchronized (gate) { if (generation != gen) return; }
+            try { item.get(CALL_MS + 100L, TimeUnit.MILLISECONDS); }
+            catch (Exception ignored) { item.cancel(true); }
         }
-        finish(gen);
-    }
-
-    private void finish(int gen) {
-        if (generation.get() != gen) return;
         App.post(() -> {
-            if (generation.get() != gen || listener == null) return;
-            listener.onFinished();
+            synchronized (gate) {
+                if (generation == gen && listener != null) listener.onFinished();
+            }
         });
     }
 
     private List<String> getUrl() {
         String local = Server.get().getAddress();
-        String base = local.substring(0, local.lastIndexOf(".") + 1);
+        String base = local.substring(0, local.lastIndexOf('.') + 1);
         return IntStream.range(1, 256).mapToObj(i -> base + i + ":9978").toList();
     }
 
-    private void findDevice(String url) {
+    private void findDevice(String url, int gen) {
         if (url.equals(Server.get().getAddress())) return;
-        try (Response res = OkHttp.newCall(client, url.concat("/device"), "scan").execute()) {
-            Device device = Device.objectFrom(res.body().string());
+        synchronized (gate) { if (generation != gen || listener == null) return; }
+        try (Response response = OkHttp.newCall(client, url.concat("/device"), callTag).execute()) {
+            if (!response.isSuccessful() || response.body() == null) return;
+            Device device = Device.objectFrom(response.body().string());
             if (device != null) App.post(() -> {
-                if (listener != null) listener.onFind(device.save());
+                synchronized (gate) {
+                    if (generation == gen && listener != null) listener.onFind(device.save());
+                }
             });
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) { }
     }
 
     public interface Listener {
-
         void onFind(Device device);
-
-        default void onFinished() {
-        }
+        default void onFinished() { }
     }
 }

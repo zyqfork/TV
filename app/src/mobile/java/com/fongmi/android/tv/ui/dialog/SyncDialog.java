@@ -23,6 +23,8 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.db.SyncSnapshot;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.Setting;
@@ -36,6 +38,7 @@ import com.github.catvod.net.OkHttp;
 
 import java.io.IOException;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import okhttp3.Call;
 import okhttp3.FormBody;
@@ -142,6 +145,8 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     }
 
     private boolean found;
+    private final AtomicInteger requestGeneration = new AtomicInteger();
+    private Call syncCall;
 
     private void onRefresh() {
         found = false;
@@ -176,40 +181,78 @@ public class SyncDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
 
     @Override
     public void onItemClick(Device item) {
-        OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s", item.getIp(), binding.mode.getTag().toString(), type), body.build()).enqueue(getCallback());
+        send(item, binding.mode.getTag().toString(), false);
     }
 
     @Override
     public boolean onLongClick(Device item) {
         String mode = binding.mode.getTag().toString();
         if (mode.equals("0")) return false;
-        if (mode.equals("2")) deleteLocal();
-        String force = mode.equals("1") ? "&force=true" : "";
-        OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s%s", item.getIp(), mode, type, force), body.build()).enqueue(getCallback());
+        send(item, mode, true);
         return true;
     }
 
-    private void deleteLocal() {
-        if (type.equals("keep")) Keep.deleteAll();
-        if (type.equals("history")) History.delete(VodConfig.getCid());
+    private void send(Device item, String mode, boolean force) {
+        int gen = requestGeneration.incrementAndGet();
+        if (syncCall != null) syncCall.cancel();
+        boolean replace = force && mode.equals("2");
+        int cid = VodConfig.getCid();
+        String sourceUrl = VodConfig.getUrl();
+        String url = replace
+                ? item.getIp() + "/action?do=syncSnapshot&type=" + type
+                : String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s%s",
+                        item.getIp(), mode, type, force ? "&force=true" : "");
+        FormBody requestBody = replace
+                ? new FormBody.Builder().add("config", App.gson().toJson(VodConfig.get().getConfig())).build()
+                : body.build();
+        syncCall = OkHttp.newCall(client, url, requestBody);
+        syncCall.enqueue(getCallback(gen, replace, cid, sourceUrl));
     }
 
-    private Callback getCallback() {
+    private Callback getCallback(int gen, boolean replace, int cid, String sourceUrl) {
         return new Callback() {
+            private boolean active(Call call) {
+                return gen == requestGeneration.get() && !call.isCanceled();
+            }
+
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                App.post(() -> onSuccess());
+                try (response) {
+                    if (!active(call)) return;
+                    if (replace) SyncSnapshot.receive(response, type, cid, sourceUrl, () -> active(call));
+                    else if (!response.isSuccessful()) throw new IOException("Sync HTTP " + response.code());
+                    App.post(() -> {
+                        if (!active(call)) return;
+                        if (replace) {
+                            if (type.equals("history")) RefreshEvent.history();
+                            else RefreshEvent.keep();
+                        }
+                        onSuccess();
+                    });
+                } catch (IOException | RuntimeException e) {
+                    showFailure(call, e);
+                }
+            }
+
+            private void showFailure(Call call, Exception e) {
+                App.post(() -> {
+                    if (!active(call)) return;
+                    if (e instanceof SyncSnapshot.ProtocolException) Notify.show(R.string.error_sync_snapshot);
+                    else Notify.show(e.getMessage());
+                });
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                App.post(() -> Notify.show(e.getMessage()));
+                showFailure(call, e);
             }
         };
     }
 
     @Override
     public void onDestroyView() {
+        requestGeneration.incrementAndGet();
+        if (syncCall != null) syncCall.cancel();
         super.onDestroyView();
         scanTask.stop();
     }

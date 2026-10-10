@@ -155,6 +155,11 @@ public class VodPlaybackController {
     }
 
     private boolean canPreloadNext() {
+        Result quality = state.getQuality();
+        // These station plugins publish one loopback /proxy URL and keep the real download
+        // address in a single field. playerContent for the next episode clears that field,
+        // so the current open reads null and fails before decode. Direct URLs can still preload.
+        if (quality != null && (usesSharedLocalProxy(quality.getUrl().v()) || usesSharedLocalProxy(quality.getRealUrl()))) return false;
         return PreloadSetting.isPreload()
                 && !Setting.isIncognito()
                 && state.hasEpisode()
@@ -162,6 +167,33 @@ public class VodPlaybackController {
                 && state.getPendingRequest() == null
                 && state.getPlayingRequest() != null
                 && !host.isHostFinishing();
+    }
+
+    static boolean usesSharedLocalProxy(String url) {
+        if (url == null) return false;
+        String value = url.trim();
+        int scheme = value.indexOf("://");
+        if (scheme <= 0 || scheme > 8) return false;
+        int hostStart = scheme + 3;
+        int pathStart = value.indexOf('/', hostStart);
+        int hostEnd = pathStart < 0 ? value.length() : pathStart;
+        int user = value.lastIndexOf('@', hostEnd - 1);
+        if (user >= hostStart) hostStart = user + 1;
+        String host = value.substring(hostStart, hostEnd);
+        if (host.startsWith("[")) {
+            int end = host.indexOf(']');
+            host = end > 1 ? host.substring(1, end) : "";
+        } else {
+            int colon = host.indexOf(':');
+            if (colon >= 0) host = host.substring(0, colon);
+        }
+        if (!"127.0.0.1".equals(host) && !"localhost".equalsIgnoreCase(host) && !"::1".equals(host)) return false;
+        String path = pathStart < 0 ? "" : value.substring(pathStart);
+        int query = path.indexOf('?');
+        int fragment = path.indexOf('#');
+        int cut = query < 0 ? fragment : fragment < 0 ? query : Math.min(query, fragment);
+        if (cut >= 0) path = path.substring(0, cut);
+        return path.startsWith("/proxy") || path.startsWith("/play");
     }
 
     private void applyPlayerResult(Result result, VodPlayRequest request) {

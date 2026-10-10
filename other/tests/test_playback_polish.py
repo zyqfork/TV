@@ -68,10 +68,16 @@ def main():
     assert "pendingSeekMs = this.positionMs" in mpv
     assert 'live ? "absolute"' in mpv
     assert "level <= 20" in mpv
+    # The container-side decoder deadlock is fixed in libcodec2_rk_component.so, so the
+    # in-app dead-codec rebuild loop must not come back.
+    assert "recoverDeadHardwareDecoder" not in mpv
+    assert "isDeadHardwareDecoder" not in mpv
     assert "video output stuck without first frame" not in mpv
     assert "isEmbedVo()" in mpv
     util = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/mpv/MpvUtil.java").read_text(encoding="utf-8")
-    assert 'addPreInitStringOption("hwdec-software-fallback", "no")' in util
+    fallback = util.split("void addApplicationOptions", 1)[1].split("void addStreamOptions", 1)[0]
+    assert "decode != 0 && !userOptions.containsKey(\"hwdec-software-fallback\")" in fallback
+    assert 'addPreInitStringOption("hwdec-software-fallback", "no")' in fallback
     preload = util.split("void addPreloadOptions", 1)[1].split("void addSubtitleStyleOptions", 1)[0]
     assert 'addPreInitStringOption("cache-secs"' not in preload
     assert "getPreloadTimeSeconds" not in util
