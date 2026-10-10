@@ -50,9 +50,11 @@ import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -167,6 +169,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background - a flat near-black that had
+        // nothing to do with the wallpaper. Paint the colour the wallpaper-backed pages resolve to.
+        // On the root, not just the list container: the container starts below the video, so the
+        // strip behind a collapsed video would otherwise stay on the theme background.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         mKeyDown = CustomKeyDown.create(this, mBinding.player);
         setPadding(mBinding.control.getRoot());
         setPadding(mBinding.recycler, true);

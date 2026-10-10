@@ -67,11 +67,13 @@ import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.adapter.QuickAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -309,6 +311,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background - a flat near-black that had
+        // nothing to do with the wallpaper. Paint the colour the wallpaper-backed pages resolve to.
+        // On the root, not just the list container: the container starts below the video, so the
+        // strip behind a collapsed video would otherwise stay on the theme background.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (v, insets) -> setStatusBar(insets));
         mKeyDown = CustomKeyDown.create(this, mBinding.player);
         mFrameParams = mBinding.video.getLayoutParams();

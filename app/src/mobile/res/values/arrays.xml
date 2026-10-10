@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Representative colour of the brighter half of each built-in wallpaper shipped in THIS
+         source set. The mobile and leanback sets ship different images under the same
+         wallpaper_N name, so each flavour carries its own table; sampling the art at runtime
+         instead would decode a bitmap on every activity enter. -->
+    <integer-array name="wall_art">
+        <item>0x00000000</item>
+        <item>0xFF7AC9BA</item>
+        <item>0xFF586CE6</item>
+        <item>0xFFA0B6CA</item>
+        <item>0xFF424242</item>
+    </integer-array>
+
+</resources>

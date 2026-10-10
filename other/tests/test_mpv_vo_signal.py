@@ -45,18 +45,22 @@ assert 'MpvFirstFrameWatchdog' in s
 
 patch=(root/'media3compat/scripts/apply_subtitle_overlay.py').read_text(encoding='utf-8')
 assert 'FONGMI_VO_FRAME_PTS' in patch and 'f->params.force_window || f->pts == MP_NOPTS_VALUE' in patch
-assert 'FONGMI_IMAGE_LIFETIME' in patch and 'return (displayed_egl || p->copy_valid) ? 0 : -1' in patch
-# Release is fence-based: no bounded CPU wait whose timeout is ignored.
-assert 'AImage_deleteAsync(p->image, fence)' in patch and 'eglDupNativeFenceFDANDROID' in patch
-assert 'eglClientWaitSyncKHR' not in patch and '8 * 1000000' not in patch
-# Diagnostics that only served the container-side investigation must not come back.
+# The top-edge crop origin and the real texture storage size are independent fixes.
+assert 'FONGMI_MEDIACODEC_FRAME_CROP' in patch
+assert 'FONGMI_IMAGE_STORAGE_SIZE' in patch
+# Everything the stall investigation added to the native tree must be gone: the
+# container-side C2/MPP defect is fixed in libcodec2_rk_component.so, so an app-side
+# copy/fence/pool workaround would only cost quality or hide real errors.
 for gone in ('FONGMI_IMAGE_FENCE_LEDGER', 'FONGMI_IMAGE_SUBMIT', 'FONGMI_IMAGE_ACQUIRE',
-             'FONGMI_IMAGE_BUFFER_DIAGNOSTIC', 'FONGMI_HEVC_SPS_DIAGNOSTIC', 'FONGMI_HEVC_DPB'):
-    assert gone not in patch, f'stale diagnostic {gone}'
-copy=patch[patch.index('static bool copy_external_frame'):patch.index('static void free_frame_copy')]
-assert 'Finish' not in copy and 'GL_CURRENT_PROGRAM' in copy and 'gl->Viewport(vp[0]' in copy
-assert 'disable_frame_copy(mapper' in patch and 'GL_RGB10_A2' in patch
-assert 'FONGMI_IMAGE_SLOTS' not in patch and '12, &p->reader' not in patch
+             'FONGMI_IMAGE_BUFFER_DIAGNOSTIC', 'FONGMI_HEVC_SPS_DIAGNOSTIC', 'FONGMI_HEVC_DPB',
+             'FONGMI_IMAGE_COPY', 'FONGMI_IMAGE_LIFETIME', 'FONGMI_IMAGE_UNMAP_HOLDS',
+             'AImage_deleteAsync', 'AImage_getCropRect', 'buffer_format_logged',
+             'copy_prog', 'copy_valid', 'native_fence', 'FONGMI_IMAGE_RELEASE',
+             'disable_frame_copy', 'copy_external_frame', 'FONGMI_IMAGE_SLOTS'):
+    assert gone not in patch, f'stale stall workaround {gone}'
+# Only the pinned mpv/ffmpeg files this project still needs are patched. Count call
+# sites at line start so the helper definition does not inflate the number.
+assert sum(1 for line in patch.splitlines() if line.startswith('patch(')) == 8
 util=(root/'app/src/main/java/com/fongmi/android/tv/player/mpv/MpvUtil.java').read_text(encoding='utf-8')
 assert 'vd-queue' not in util  # mpv's decoder queue is off by default; enabling it only holds more codec buffers
 assert 'FONGMI_EXTERNAL_CROP_CLAMP' not in patch # rejected prototype did not improve actual hardware pixels

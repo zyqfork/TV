@@ -9,11 +9,12 @@
         android:layout_height="match_parent"
         android:scaleType="centerCrop" />
 
-    <!-- Fixed dark overlay for white text, shared by image/GIF/video wallpapers.
-         No image sampling or wallpaper-derived theme colour is needed. -->
+    <!-- Darkened just enough for white text, shared by image/GIF/video wallpapers. The alpha is
+         derived from the art's own brightness by CustomWallView, so it stays out of the way for
+         dark art instead of flattening every wallpaper to the same near-black. -->
     <View
         android:id="@+id/scrim"
-        android:background="@color/black_70"
+        android:background="@color/transparent"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

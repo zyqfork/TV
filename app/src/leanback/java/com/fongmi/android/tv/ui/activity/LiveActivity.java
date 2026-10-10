@@ -53,9 +53,11 @@ import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownLive;
 import com.fongmi.android.tv.ui.custom.CustomLiveListView;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -161,6 +163,12 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background - a flat near-black that had
+        // nothing to do with the wallpaper. Paint the colour the wallpaper-backed pages resolve to.
+        // On the root, not just the list container: the container starts below the video, so the
+        // strip behind a collapsed video would otherwise stay on the theme background.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownLive.create(this);
         mObserveUrl = this::onUrlObserved;
