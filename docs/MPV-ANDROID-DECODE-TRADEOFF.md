@@ -81,14 +81,76 @@ Rockchip 上游在 2024-08-22 的提交 `b79cd040a292` 已修（`+ 1`），本�
   每文件最多 3 次、每次需 30 秒稳定窗口"来把卡死变成一次短暂停顿。真因修好后这只会让
   慢解码器被中途拆掉，所以移除。
 - native 侧只为定位这个问题加的一次性诊断：`FONGMI_IMAGE_FENCE_LEDGER` 及其 fence 轮询、
-  `FONGMI_IMAGE_SUBMIT` / `ACQUIRE` / `BUFFER_DIAGNOSTIC`、`FONGMI_HEVC_SPS` / `DPB`。
+  `FONGMI_IMAGE_SUBMIT` / `ACQUIRE` / `BUFFER_DIAGNOSTIC`、`FONGMI_HEVC_SPS` / `DPB`，
+  以及只读的 buffer 格式 / `AImage_getCropRect` 记录。
+- native 侧为缓解这个问题加的缓冲所有权绕过，**同样移除**：
+  `FONGMI_IMAGE_COPY`（额外一份 10-bit 中间纹理，目的只是拷完就归还 codec buffer、
+  少钉住解码槽）、`FONGMI_IMAGE_LIFETIME` / `FONGMI_IMAGE_UNMAP_HOLDS`，以及配套的
+  `eglCreateSyncKHR` / `eglDupNativeFenceFDANDROID` 释放 fence 与 `AImage_deleteAsync`。
+  现在 `mapper_unmap` 回到上游的 `AImage_delete`，每帧不再多走一次 FBO 拷贝。
+  核验方式：对 pristine 固定版本源码跑补丁脚本，可干净应用且幂等；构建出的
+  `libmpv.so` 里上述标记已全部消失。
 
 **保留的**（都是独立问题，与卡死无关）：顶部白线的裁剪修复
-（`FONGMI_MEDIACODEC_FRAME_CROP` + `FONGMI_IMAGE_STORAGE_SIZE`）、10-bit 中间纹理
-（`FONGMI_IMAGE_COPY`）、GPU 释放 fence（`FONGMI_IMAGE_LIFETIME`）、VO 帧信号
-（`FONGMI_VO_FRAME_PTS`）、字幕取消（`FONGMI_SUBTITLE_ABORT_PUBLISH`）、以及
-`MpvFirstFrameWatchdog`——它把无界挂起变成有界错误，本身不掩盖故障。
+（`FONGMI_MEDIACODEC_FRAME_CROP` + `FONGMI_IMAGE_STORAGE_SIZE`）、VO 帧信号
+（`FONGMI_VO_FRAME_PTS`）、异步命令 JNI 与 `FONGMI_SUBTITLE_ABORT_PUBLISH`
+（打开后取消不得发布旧请求）、以及 `MpvFirstFrameWatchdog`——它把无界挂起变成有界错误，
+本身不掩盖故障。
 
 实测（同一份之前 100% 复现的 596 帧原始码流）：独立解码从"13 帧后超时"变为
 596/596 帧到达 EOS；MPV 内嵌/全屏/12 次连续 seek 均为 1 次硬解初始化、0 超时、0 软解、
 0 次时间戳倒退。
+
+## 后续：2026-10-10 壁纸配色回归，以及两端解码矩阵
+
+### 壁纸配色被上一次"简化背景"改动抹平
+
+`5e68d17c2`（简化壁纸背景）为了让背景固定，去掉了从壁纸取色，把 scrim 写死成
+`black_70`（70% 黑）、窗口背景固定 `#141218`，并删掉了两个详情页根视图上的
+`readableBackdrop()` 调用。结果是**任何壁纸都被压成同一层近黑**：电视首页实测背景从
+`(46,71,26)` 掉到 `(24,37,13)`。同屏对照旧截图还能反推出当时用的 scrim 约 108/255，
+而写死的是 179/255。
+
+现在恢复成按画面亮度算 scrim：目标仍是白字 6:1 对比度、上限 204，算法与原实现一致
+（`TARGET_CONTRAST` / `MAX_SCRIM`）。两点与旧实现不同，都是为了避免当初那个 bug：
+
+- **不再用 Palette 取色**，改成把 WallConfig 已经写好的壁纸快照按 `inSampleSize=8`
+  解码后取"较亮一半"的均值。整图均值会被暗角拉低，算出的 scrim 对白字所在的高光区
+  不够；同时也不重新引入 `androidx.palette` 依赖。
+- **内置壁纸的颜色表按 flavour 分开**放在各自的 `res/values/arrays.xml`。两个 source set
+  在同一个 `wallpaper_N` 名字下是**不同的图**，这正是旧代码用硬编码表会漂色的原因。
+  播放页仍然跳过壁纸层（不解码、不在视频后面再放视频），所以 `readableBackdrop()` 的
+  调用在 `VideoActivity` / `LiveActivity` 的根视图上恢复。
+
+实测：电视首页背景回到 `(46,71,26)`，与回归前截图逐像素一致；详情页背景变成壁纸绿
+`(36,110,83)`，不再是主题的平灰；手机（Redmi Note 8）首页同样跟随壁纸。
+
+### 两端解码矩阵（EXO + MPV）
+
+`other/tools/codec_matrix.py` 在电视（RK3588）和手机（Redmi Note 8，Android 16）上跑
+AVC 与 HEVC 各引擎组合，除"能播"之外还看资源侧：每个分配的 MediaCodec 是否都释放、
+连续播放后活跃 codec 数是否增长、切引擎是否留下上一个实例。
+
+结果 `problems=0`：全部走各自平台硬解（电视 `c2.rk.*`、手机 `c2.qti.*`），无泄漏。
+同一份 596 帧 4K HEVC Main10 片段在电视上 MPV 播完：1 次硬解初始化、0 次
+`queue exceeded timeout`、0 次 `Failed to dequeue output buffer`、0 次软解回退；
+10 次连续 seek 后仍是 1 次硬解初始化、0 超时，`crop=3840x2160+0+4` 白线修复保持不变。
+
+### 构建侧：手机包曾装进损坏的 libavcodec.so
+
+一次并发构建（两个 Gradle 进程同时写同一个 strip 输出目录）产出的
+`app/build/intermediates/stripped_native_libs/.../libavcodec.so` 节头被清零，
+`.dynamic` 不可读。Android 16 的 linker 直接拒绝加载，报
+`dlopen failed: ...libavcodec.so .dynamic section header was not found`，
+于是 MPV 静默回退到 EXO——**表现是"手机上 MPV 不生效"而不是报错**。
+
+判定与处理：同一 APK 里 leanback 的 `libavcodec.so` 哈希正常、mobile 的不同，且
+`readelf -S` 显示该文件全部节头为空；删掉 `stripped_native_libs` / `merged_native_libs`
+与旧 APK 后重建，两端 `libavcodec.so` 哈希恢复一致（`921e39e6...`），手机 MPV 正常。
+**不要并发跑两个 Gradle 构建**；换 APK 后可用
+`readelf -d <lib>.so | grep NEEDED` 快速确认 `.dynamic` 可读。
+
+### 回归
+
+33 个脚本中 32 个通过。唯一失败的 `test_airplay_decoder_start` 需要 `kotlinc`，本机没有；
+它在**未修改的基线上同样失败**，与本轮改动无关。
