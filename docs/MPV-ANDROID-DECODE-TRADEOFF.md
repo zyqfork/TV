@@ -5,7 +5,7 @@ This describes the pinned mpv dependency `8c67647b50059406c5c0444903597281b81516
 - `hwdec=mediacodec` with `vo=gpu` uses an `AImageReader` surface and imports its `AHardwareBuffer` as an `EGLImage` / external GL texture. It does **not** copy decoded video into CPU RAM. See `video/out/hwdec/hwdec_aimagereader.c`: `AIMAGE_FORMAT_PRIVATE`, `AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE`, `AImage_getHardwareBuffer`, `eglCreateImageKHR`, `glEGLImageTargetTexture2DOES`.
 - That mpv GPU mapper advertises `IMGFMT_RGB0` and a four-channel UNORM texture. The pinned `DOCS/man/options.rst` explicitly warns that Android `mediacodec` forces RGB conversion and reduces 10-bit output to 8-bit when 10-bit is supported. This is a **GPU path limitation**, not evidence of CPU copy-back.
 - `vo=mediacodec_embed` bypasses that GPU mapper and hands the Surface to MediaCodec. It may avoid mpv's RGB0 limitation, but **does not prove end-to-end 10-bit or HDR**: the codec, Android compositor, Surface format and display must each support it. Real measurements remain required.
-- `mediacodec-copy` is a separate explicit hardware decoder mode that copies frames to system RAM; `mediacodec` does not silently become `mediacodec-copy` when the VO changes. Hard and direct modes set `--hwdec-software-fallback=no` unless `mpv.conf` already sets it, so a failed hardware decoder does not silently become software. Soft mode must leave that option unset: `hwdec=no` together with fallback `no` makes this libmpv force-EOF the video track. Verify `Using hardware decoding` or `Using software decoding` in the log, not the configured option alone.
+- `mediacodec-copy` is a separate explicit hardware decoder mode that copies frames to system RAM; `mediacodec` does not silently become `mediacodec-copy` when the VO changes. Hard and direct modes now leave `hwdec-software-fallback` at its libmpv default, so a hardware decoder the device cannot use falls back to software and keeps playing; the app no longer writes that key at all (see the 2026-10-10 follow-up below). Verify `Using hardware decoding` or `Using software decoding` in the log, not the configured option alone.
 - Copy-back green/glitchy frames have been reported on **both** an RK3588 box and non-Rockchip Formuler Z10 / Amlogic S905W2 devices ([mpv-android #853](https://github.com/mpv-android/mpv-android/issues/853), [#1088](https://github.com/mpv-android/mpv-android/issues/1088)). These reports do not establish a Rockchip decoder's stride, tiling or crop metadata as the root cause; the previous Rockchip-specific explanation in `MpvPlayer` was too strong. No controlled copy-back vs GPU vs embed run with the same owned 10-bit file and pixel/bit-depth capture exists for our two devices. Do not enable copy-back automatically on that assumption.
 
 Policy: hard VOD uses MediaCodec + GPU for subtitle/effect composition; eligible subtitle-free live may use embed. Explicit conflicting `mpv.conf` hwdec/VO/GPU settings disable automatic embed, without deleting the user's override. A user who intentionally opts into `mediacodec-copy` remains able to do so via `mpv.conf`, at their own compatibility risk. Soft remains an explicit user mode. No model-specific AV1 blacklist or automatic AV1 software override is shipped. See `Release/device-test/mpv_decode_tests.py` for **passive**, per-session native-log criteria; historical multi-source logs do not establish a specific session's output or display bit depth.
@@ -30,7 +30,7 @@ Policy: hard VOD uses MediaCodec + GPU for subtitle/effect composition; eligible
 
 软解会把 `hwdec` 设成 `no`。硬解为了避免悄悄变成软解，原先无条件写入 `hwdec-software-fallback=no`。这版 libmpv 在「没有使用硬解」并且 fallback 为 `no`（内部值 `INT_MAX`）时，把视频轨标成结束：日志是 `No hardware decoding requested`、`Software decoding fallback is disabled`，然后 `playback restart ... video=eof`。声音继续，Surface 保持黑的，视频包堆在 demuxer 里。大约 30 秒首帧超时后，看起来像播放失败。
 
-`MpvUtil.addApplicationOptions` 只在 `decode != 0` 且 `mpv.conf` 没有自己写这个键时才加 `hwdec-software-fallback=no`。软解沿用 libmpv 默认，日志变为 `Using software decoding`。
+`MpvUtil.addApplicationOptions` 当时在 `decode != 0` 且 `mpv.conf` 没有自己写这个键时加 `hwdec-software-fallback=no`。软解沿用 libmpv 默认，日志变为 `Using software decoding`。**这个写法已在 2026-10-10 移除**，原因见下一节：它不只是关掉回退，而是让 libmpv 把视频轨直接判为结束。
 
 手机和电视都用本地 `fongmi_soft.mp4` 看过：MPV 软解有画面；手机 EXO 软解是 `c2.android.avc.decoder`，也有画面；电视 EXO 软解同样有画面。
 
@@ -169,3 +169,74 @@ AVC 与 HEVC 各引擎组合，除"能播"之外还看资源侧：每个分配�
 
 结论与上文第 13 节一致：这是该设备 AV1 硬解输出路径的问题，不是应用层能修的；需要时
 用户可对这类内容显式选择软解。本次没有加入机型黑名单或自动软解。
+
+## 后续：2026-10-10 硬解不可用时自动回退软解
+
+### 问题：硬解不支持时不是回退，而是黑屏
+
+期望的行为是「尽量硬解，设备不支持这个格式就回退软解」。EXO 一直是这样（
+`DefaultRenderersFactory.setEnableDecoderFallback(true)` 内部自己换软解），但 **MPV 不是**。
+
+根因在 `MpvUtil` 写的那一行 `hwdec-software-fallback=no`。这个选项在 libmpv 里不是「
+关闭回退」这么简单，`video/decode/vd_lavc.c` 写得很明确：
+
+```c
+// If software fallback is disabled and we get here, all hwdec must
+// have failed. Tell the ctx to always force an eof.
+if (ctx->hwdec_opts->software_fallback == INT_MAX) {
+    MP_WARN(ctx, "Software decoding fallback is disabled.\n");
+    ctx->force_eof = true;
+}
+```
+
+于是**所有硬件解码器都被视为失败，视频轨直接判为结束**：声音继续、Surface 永久黑屏、
+没有任何错误上报，看门狗超时后应用层的兜底又把它归成了 RETRY（重试同一个解码模式），
+所以一直空转。
+
+实测（电视，H.264 High 4:4:4 —— RK3588 没有这个 profile 的硬解）：
+
+```
+Trying hardware decoding via h264_mediacodec-mediacodec.
+MediaCodec 0x0 failed to start
+Could not open codec.
+Attempting next decoding method after failure of h264_mediacodec-mediacodec.
+Software decoding fallback is disabled.      <- 本该在这里回退
+```
+
+播放位置一直停在 0，60 秒无画面。
+
+### 修复：把回退交还给 libmpv
+
+libmpv 本来就自带硬解→软解回退（`software_fallback` 默认 `3`，即连续失败 3 次后换软解）。
+应用层不该关掉它，所以**不再写这个键**（`mpv.conf` 里用户自己写的仍然生效，因为应用现在
+完全不碰它）。硬解模式的含义回归字面意思：设备能硬解就硬解，不能就软解。
+
+软解模式不受影响：它用 `hwdec=no`，根本不走这条路径。
+
+### 提示：两个引擎统一成同一条通知
+
+回退本身是静默的，所以两个引擎都上报一次，由 `PlayerManager` 在首帧时弹提示：
+
+| 引擎 | 检测方式 |
+|---|---|
+| EXO | Media3 在自己的 renderer 内部换解码器，只有 `VideoRendererEventListener.onVideoDecoderInitialized` 能看到实际打开的编解码器名；软件名（`c2.android.*` / `OMX.google.*`）即回退 |
+| MPV | 读 `hwdec-current`（libmpv 实际选中的解码器）。它在 `video-reconfig` 时发布，首帧时也从事件缓存再读一次，因为 reconfig 可能已经过去；**不用阻塞式属性查询**，这个播放器一直避免那种调用 |
+
+每部片只提示一次，避免每次重配都弹。
+
+### 顺带修正：首帧超时的归类
+
+MPV 首帧超时（`ERROR_CODE_TIMEOUT`）原先映射成 RETRY，重试同一个解码模式没有意义。硬解
+模式下这正说明「没有硬解能出画面」，现在改为 DECODE（切软解）；软解模式下软解已是最后
+手段，保持 RETRY。
+
+**看门狗保留**：它把无界挂起变成有界错误，而且现在也是触发这次解码切换的那条路径；删掉它
+会让「一直不出画面的流」彻底没有恢复手段。
+
+### 实测
+
+- 电视 + MPV 硬解播 H.264 4:4:4：`Using software decoding`、播放到 EOF、提示
+  「硬解失败，已切换软解」出现（日志 `showBar=true activity=VideoActivity`）。
+- 电视 + MPV 硬解播 4K HEVC Main10：仍然 `c2.rk.hevc.decoder`，没有误判为回退。
+- 手机 + MPV 硬解播 MPEG-2（无硬解）：软解播放正常。
+- 两端 EXO/MPV 解码矩阵 `problems=0`，无解码器泄漏。
