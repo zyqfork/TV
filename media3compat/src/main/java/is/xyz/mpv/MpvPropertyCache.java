@@ -23,6 +23,9 @@ public final class MpvPropertyCache {
                 || name.startsWith("edition-list/") || name.startsWith("audio-params/")
                 || name.startsWith("video-params/") || name.startsWith("video-out-params/")
                 || name.startsWith("video-frame-info/") || name.equals("duration") || name.equals("time-pos")
-                || name.equals("sid") || name.equals("secondary-sid") || name.equals("current-vo"));
+                || name.equals("sid") || name.equals("secondary-sid") || name.equals("current-vo")
+                // The selected decoder belongs to the item that is being replaced; keeping it
+                // would report the previous item's software fallback for the next one.
+                || name.equals("hwdec-current"));
     }
 }

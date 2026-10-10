@@ -73,6 +73,15 @@ public interface PlayerEngine {
     default void setSubtitleStyle() {
     }
 
+    /**
+     * Whether this engine had to replace a requested hardware decoder with software for the
+     * current item, consuming the notice. EXO reports its own renderer fallback; MPV reports the
+     * decoder libmpv actually selected. At most one notice per item.
+     */
+    default boolean consumeSoftwareFallbackNotice() {
+        return false;
+    }
+
     default void setVolumeGain(float gain) {
         if (getPlayer().isCommandAvailable(Player.COMMAND_SET_VOLUME)) getPlayer().setVolume(Math.clamp(gain, 0f, 1f));
     }

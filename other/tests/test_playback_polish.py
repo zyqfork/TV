@@ -76,8 +76,10 @@ def main():
     assert "isEmbedVo()" in mpv
     util = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/mpv/MpvUtil.java").read_text(encoding="utf-8")
     fallback = util.split("void addApplicationOptions", 1)[1].split("void addStreamOptions", 1)[0]
-    assert "decode != 0 && !userOptions.containsKey(\"hwdec-software-fallback\")" in fallback
-    assert 'addPreInitStringOption("hwdec-software-fallback", "no")' in fallback
+    # Hard mode must keep libmpv's own software fallback. Writing "no" disables it and libmpv then
+    # force-EOFs the video track, which shows up as audio over a black surface with no error.
+    assert 'addPreInitStringOption("hwdec-software-fallback"' not in fallback
+    assert 'addPreInitStringOption("hwdec-software-fallback", "no")' not in util
     preload = util.split("void addPreloadOptions", 1)[1].split("void addSubtitleStyleOptions", 1)[0]
     assert 'addPreInitStringOption("cache-secs"' not in preload
     assert "getPreloadTimeSeconds" not in util

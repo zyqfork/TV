@@ -97,6 +97,11 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public boolean consumeSoftwareFallbackNotice() {
+        return player.consumeSoftwareFallbackNotice();
+    }
+
+    @Override
     public void setVolumeGain(float gain) {
         // Must not go through Player.setVolume: Media3 caps volume at 1 and rejects a 1.5x gain
         // with an IllegalArgumentException, which previously crashed PlaybackService on startup
@@ -196,9 +201,14 @@ public class MpvPlayerEngine implements PlayerEngine {
         return switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;
             case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> retryHls(e);
+            // A first-frame timeout in hard mode means no hardware decoder produced a picture for
+            // this stream (unsupported profile, or a decoder that never came up). Retrying the same
+            // mode cannot help, so switch to software once - the same outcome EXO reaches through
+            // its own renderer fallback. Soft mode already is the last resort, so it keeps retrying.
+            case PlaybackException.ERROR_CODE_TIMEOUT -> decode != PlayerEngine.SOFT
+                    ? ErrorAction.DECODE : ErrorAction.RETRY;
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-                 PlaybackException.ERROR_CODE_TIMEOUT -> ErrorAction.RETRY;
+                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> ErrorAction.RETRY;
             default -> ErrorAction.FATAL;
         };
     }

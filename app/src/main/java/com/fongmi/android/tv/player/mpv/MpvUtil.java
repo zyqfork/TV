@@ -166,12 +166,13 @@ public final class MpvUtil {
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
-        // Hard decode must not silently become software. Do not apply this to soft mode:
-        // libmpv treats hwdec=no plus hwdec-software-fallback=no as "every hardware decoder
-        // failed" and force-EOFs the video track. Audio keeps playing and the surface stays black.
-        if (decode != 0 && !userOptions.containsKey("hwdec-software-fallback")) {
-            builder.addPreInitStringOption("hwdec-software-fallback", "no");
-        }
+        // Hard decode prefers the hardware decoder but must still fall back to software when the
+        // device has no usable one for this stream (e.g. H.264 High 4:4:4, MPEG-2 on a phone).
+        // libmpv does this itself: after `hwdec-software-fallback` failed attempts it drops to
+        // software and keeps playing. Writing "no" here (INT_MAX) disables that, and libmpv then
+        // force-EOFs the video track: audio continues over a black surface with no error at all.
+        // Leave the option at its default so the fallback stays available; the explicit soft mode
+        // still uses hwdec=no, which never enters this path.
         if (decode == 2) {
             builder.addPreInitStringOption("vo", MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED)
                     .addPreInitStringOption("hwdec", MpvAutomaticOutputPolicy.HWDEC_MEDIACODEC);

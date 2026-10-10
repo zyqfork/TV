@@ -12,6 +12,9 @@ import java.util.*;
 public class Probe {
  static final int STATE_READY=3;
  boolean firstFrameReported,surfaceReady=true,fileLoaded=true,videoFrameSeen,playbackRestartSeen,video=true,released,surfaceRecovering;
+ boolean softwareFallbackReported,softwareFallbackSeen;
+ void noteActiveHwdec(String v){}
+ static class MPVLib {static String getCachedString(String n){return null;}}
  Object blackScreenWatchdog=new Object();
  int published;long positionMs,firstFrameStartPositionMs;
  String lastNativeError,activeVideoOutput;

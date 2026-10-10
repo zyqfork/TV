@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.Handler;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -48,15 +49,24 @@ public class ExoUtil {
     }
 
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener, AudioProcessor audioProcessor) {
-        return buildPlayer(decode, listener, audioProcessor, false);
+        return buildPlayer(decode, listener, audioProcessor, false, null);
     }
 
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener, AudioProcessor audioProcessor, boolean live) {
+        return buildPlayer(decode, listener, audioProcessor, live, null);
+    }
+
+    /**
+     * @param onVideoDecoderInitialized receives the video decoder Media3 actually opened, so the
+     *     caller can notice a software decoder where hardware was requested. Null to ignore.
+     */
+    public static ExoPlayer buildPlayer(int decode, Player.Listener listener, AudioProcessor audioProcessor,
+                                        boolean live, @Nullable java.util.function.Consumer<String> onVideoDecoderInitialized) {
         decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
         ExoPlayer player = new ExoPlayer.Builder(App.get())
                 .setTrackSelector(buildTrackSelector(decode))
                 .setLoadControl(buildLoadControl(live))
-                .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioProcessor))
+                .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioProcessor, onVideoDecoderInitialized))
                 .setMediaSourceFactory(buildMediaSourceFactory())
                 .build();
         if (BuildConfig.DEBUG) player.addAnalyticsListener(new EventLogger());
@@ -146,14 +156,25 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode, AudioProcessor audioProcessor) {
-        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor);
+        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor, null);
+    }
+
+    private static RenderersFactory buildPlaybackRenderersFactory(int decode, AudioProcessor audioProcessor,
+                                                                 @Nullable java.util.function.Consumer<String> onVideoDecoderInitialized) {
+        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor, onVideoDecoderInitialized);
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerEngine.HARD, null);
+        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerEngine.HARD, null, null);
     }
 
     private static RenderersFactory buildRenderersFactory(boolean audioPrefer, boolean videoPrefer, int decode, AudioProcessor audioProcessor) {
+        return buildRenderersFactory(audioPrefer, videoPrefer, decode, audioProcessor, null);
+    }
+
+    private static RenderersFactory buildRenderersFactory(boolean audioPrefer, boolean videoPrefer, int decode,
+                                                          AudioProcessor audioProcessor,
+                                                          @Nullable java.util.function.Consumer<String> onVideoDecoderInitialized) {
         boolean softwareDecode = decode == PlayerEngine.SOFT;
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
@@ -171,10 +192,22 @@ public class ExoUtil {
                 // FFmpeg in this project is audio-only, so extension mode never changes the video
                 // codec. Scene soft decode and 「视频软解」 both have to select PREFER_SOFTWARE.
                 boolean videoSoftware = softwareDecode || videoPrefer;
+                VideoRendererEventListener observer = eventListener;
+                if (onVideoDecoderInitialized != null) {
+                    // Media3 reports the decoder it actually opened here, including the one chosen
+                    // by its own renderer fallback. Nothing else exposes that choice.
+                    observer = new VideoRendererEventListener() {
+                        @Override
+                        public void onVideoDecoderInitialized(@NonNull String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                            onVideoDecoderInitialized.accept(decoderName);
+                            eventListener.onVideoDecoderInitialized(decoderName, initializedTimestampMs, initializationDurationMs);
+                        }
+                    };
+                }
                 super.buildVideoRenderers(context,
                         videoSoftware ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON,
                         videoSoftware ? MediaCodecSelector.PREFER_SOFTWARE : mediaCodecSelector,
-                        enableDecoderFallback, eventHandler, eventListener,
+                        enableDecoderFallback, eventHandler, observer,
                         allowedVideoJoiningTimeMs, out);
             }
 

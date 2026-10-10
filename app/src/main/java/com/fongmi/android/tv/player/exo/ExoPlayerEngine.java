@@ -74,6 +74,11 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public boolean consumeSoftwareFallbackNotice() {
+        return session.consumeSoftwareFallbackNotice();
+    }
+
+    @Override
     public boolean setDecode(int decode) {
         this.decode = normalizeDecode(decode);
         return true;

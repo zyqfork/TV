@@ -1141,6 +1141,14 @@ public class PlayerManager implements ParseCallback {
         }
 
         @Override
+        public void onRenderedFirstFrame() {
+            // The decoder is only known once frames flow, so this is the first point where a
+            // hardware request that ended in software is visible. EXO and MPV both report it
+            // through the same engine call; the notice is consumed once per item.
+            if (engine != null && engine.consumeSoftwareFallbackNotice()) Notify.show(R.string.error_decode_fallback);
+        }
+
+        @Override
         public void onVideoSizeChanged(@NonNull VideoSize size) {
             videoSize = size;
         }

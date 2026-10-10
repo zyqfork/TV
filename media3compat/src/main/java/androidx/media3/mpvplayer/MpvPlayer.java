@@ -160,6 +160,13 @@ public final class MpvPlayer extends SimpleBasePlayer
     @Nullable private String lastNativeError;
     // Observed read-only mpv current-vo, not the requested/pre-init vo option.
     private volatile String activeVideoOutput = "";
+    /**
+     * Set once when a hardware decoder was requested but libmpv had to fall back to software for
+     * the current item. Drives the one-shot "switched to software" notice, mirroring EXO's
+     * built-in renderer fallback. Cleared for every new item so the notice can appear again.
+     */
+    private boolean softwareFallbackReported;
+    private boolean softwareFallbackSeen;
     @Nullable private Runnable pendingEndFileError;
 
     private final SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
@@ -329,6 +336,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         MPVLib.observeProperty("sid", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("secondary-sid", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("current-vo", MPVLib.MpvFormat.STRING);
+        MPVLib.observeProperty("hwdec-current", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("sub-visibility", MPVLib.MpvFormat.FLAG);
         MPVLib.observeProperty("track-list/count", MPVLib.MpvFormat.INT64);
     }
@@ -394,6 +402,42 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private void applyDecodeOption() {
         MPVLib.setOptionString("hwdec", getDecodeOption());
+    }
+
+    /**
+     * Records the decoder libmpv actually selected for the current item.
+     *
+     * A hardware request that ends in "no" means libmpv dropped to software for this stream, the
+     * same outcome EXO reaches through its own renderer fallback. The requested option cannot be
+     * used for this: it stays at the requested value even after the fallback happens.
+     */
+    private void noteActiveHwdec(@Nullable String value) {
+        if (value == null || value.isBlank()) return;
+        boolean software = "no".equals(value);
+        if (software) {
+            // Only a request for hardware that ended in software is a fallback. A user mpv.conf
+            // that explicitly asks for hwdec=no is a choice, not a fallback.
+            if (wantsHardware()) softwareFallbackSeen = true;
+        } else {
+            softwareFallbackSeen = false;
+        }
+    }
+
+    private boolean wantsHardware() {
+        // decode 0 is the explicit soft mode; 1 and the internal 2 both asked for hardware.
+        // An explicit hwdec=no in mpv.conf also means the user asked for software.
+        if (decode == 0) return false;
+        return !HWDEC_SOFT.equals(getDecodeOption());
+    }
+
+    /**
+     * Consumes the "hardware decoder was unavailable, software is in use" notice for this item.
+     * Returns true at most once per item so the UI does not repeat itself on every reconfig.
+     */
+    public boolean consumeSoftwareFallbackNotice() {
+        if (!softwareFallbackSeen || softwareFallbackReported) return false;
+        softwareFallbackReported = true;
+        return true;
     }
 
     private String getDecodeOption() {
@@ -590,6 +634,8 @@ public final class MpvPlayer extends SimpleBasePlayer
         editions = List.of();
         lastNativeError = null;
         activeVideoOutput = "";
+        softwareFallbackReported = false;
+        softwareFallbackSeen = false;
         fileLoaded = false;
         embedSurfaceRetries = 0;
         embedVoDisabled = false;
@@ -1402,6 +1448,10 @@ public final class MpvPlayer extends SimpleBasePlayer
                 if (!activeVideoOutput.isEmpty())
                     Log.i("MpvPlayer", "Active video output: " + activeVideoOutput);
             });
+        } else if ("hwdec-current".equals(property)) {
+            // The decoder libmpv actually selected. Also read from the cache at first frame, since
+            // mpv publishes this on video-reconfig and that may already have passed.
+            onApplicationThread(() -> noteActiveHwdec(value));
         } else if ("sid".equals(property) || "secondary-sid".equals(property)) {
             onApplicationThread(() -> {
                 if (!fileLoaded) return;
@@ -1757,6 +1807,10 @@ public final class MpvPlayer extends SimpleBasePlayer
         surfaceRecovering = false;
         firstFrameWatchdog.reset();
         applicationHandler.removeCallbacks(blackScreenWatchdog);
+        // The decoder is settled once a real frame exists, so this is the point to find out which
+        // one libmpv actually used. Read it from the event-fed cache, never a blocking query: mpv
+        // publishes hwdec-current on video-reconfig, which precedes the first frame.
+        noteActiveHwdec(MPVLib.getCachedString("hwdec-current"));
         state = buildState(STATE_READY, state.playWhenReady, null).buildUpon()
                 .setNewlyRenderedFirstFrame(true)
                 .build();
