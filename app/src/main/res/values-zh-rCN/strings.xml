@@ -483,6 +483,8 @@
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
     <string name="subtitle_close">关闭字幕</string>
+    <string name="setting_net_iface">网络接口</string>
+    <string name="setting_net_iface_none">无可用网卡</string>
     <string name="setting_other">其他设置</string>
     <string name="setting_other_privacy">隐私与更新</string>
     <string name="setting_other_maintenance">维护</string>

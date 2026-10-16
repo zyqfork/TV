@@ -496,6 +496,8 @@
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
     <string name="subtitle_close">Turn off subtitles</string>
+    <string name="setting_net_iface">Network interface</string>
+    <string name="setting_net_iface_none">No interface</string>
     <string name="setting_other">Other settings</string>
     <string name="setting_other_privacy">Privacy &amp; updates</string>
     <string name="setting_other_maintenance">Maintenance</string>

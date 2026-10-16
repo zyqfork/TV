@@ -7,6 +7,7 @@ import android.net.Network;
 import android.text.TextUtils;
 
 import com.github.catvod.Init;
+import com.github.catvod.utils.NetIface;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -89,13 +90,9 @@ public class DlnaNetwork {
 
     static boolean isCandidate(NetworkInterface nif) throws Exception {
         if (nif == null || !nif.isUp() || nif.isLoopback() || nif.isPointToPoint() || nif.isVirtual()) return false;
-        String name = nif.getName().toLowerCase(Locale.US);
+        if (!NetIface.isLanReachable(nif.getName())) return false;
         String display = nif.getDisplayName() == null ? "" : nif.getDisplayName().toLowerCase(Locale.US);
-        if (name.startsWith("lo") || name.startsWith("dummy") || name.startsWith("docker") || name.startsWith("br-")) return false;
-        if (name.startsWith("veth") || name.startsWith("tun") || name.startsWith("tap") || name.startsWith("p2p")) return false;
-        if (name.startsWith("rmnet") || name.startsWith("tailscale") || name.startsWith("wg") || name.startsWith("vpn")) return false;
-        if (name.startsWith("vmnet") || name.startsWith("vnic") || display.contains("vmnet")) return false;
-        return true;
+        return !display.contains("vmnet");
     }
 
     static String firstIpv4(NetworkInterface nif) {

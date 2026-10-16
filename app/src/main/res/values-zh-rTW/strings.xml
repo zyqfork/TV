@@ -482,6 +482,8 @@
     <string name="home_history">最近觀看</string>
     <string name="home_recommend">更新推薦</string>
     <string name="subtitle_close">關閉字幕</string>
+    <string name="setting_net_iface">網路介面</string>
+    <string name="setting_net_iface_none">無可用網卡</string>
     <string name="setting_other">其他設定</string>
     <string name="setting_other_privacy">隱私與更新</string>
     <string name="setting_other_maintenance">維護</string>

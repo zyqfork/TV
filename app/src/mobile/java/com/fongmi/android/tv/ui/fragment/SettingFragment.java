@@ -26,6 +26,7 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.github.catvod.utils.NetIface;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -37,6 +38,7 @@ import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
+import com.fongmi.android.tv.ui.dialog.NetIfaceDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
@@ -85,6 +87,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.castText.setText(getCastText());
         setStorageText();
+        setNetIfaceText();
     }
 
     /**
@@ -101,6 +104,15 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.networkStorageText.setText(home == null ? "" : home.displayTitle());
     }
 
+    private void setNetIface(View view) {
+        NetIfaceDialog.show(requireContext(), this::setNetIfaceText);
+    }
+
+    private void setNetIfaceText() {
+        String name = NetIface.resolveName();
+        mBinding.netIfaceText.setText(name.isEmpty() ? getString(R.string.setting_net_iface_none) : name + " (" + NetIface.resolve() + ")");
+    }
+
     /** Which cast receivers are on, so the single 投屏设置 row still says something useful. */
     private String getCastText() {
         List<String> on = new ArrayList<>();
@@ -113,6 +125,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     protected void initEvent() {
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
+        mBinding.netIface.setOnClickListener(this::setNetIface);
         mBinding.dlnaLibrary.setOnClickListener(this::setDlnaLibrary);
         mBinding.cast.setOnClickListener(this::onCast);
         mBinding.live.setOnClickListener(this::onLive);
@@ -299,6 +312,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         if (mBinding != null) {
             mBinding.castText.setText(getCastText());
             setStorageText();
+            setNetIfaceText();
         }
     }
 
