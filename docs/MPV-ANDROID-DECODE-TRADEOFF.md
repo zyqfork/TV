@@ -230,7 +230,7 @@ libmpv 本来就自带硬解→软解回退，而且分两条路径，`software_
 
 | 引擎 | 检测方式 |
 |---|---|
-| EXO | Media3 在自己的 renderer 内部换解码器，只有 `VideoRendererEventListener.onVideoDecoderInitialized` 能看到实际打开的编解码器名；软件名（`c2.android.*` / `OMX.google.*`）即回退 |
+| EXO | 用 `AnalyticsListener.onVideoDecoderInitialized` 旁路观察 Media3 实际打开的解码器；软件名（`c2.android.*` / `OMX.google.*`）即回退。不替换 renderer 自己的事件监听器 |
 | MPV | 读 `hwdec-current`（libmpv 实际选中的解码器）。它在 `video-reconfig` 时发布，首帧时也从事件缓存再读一次，因为 reconfig 可能已经过去；**不用阻塞式属性查询**，这个播放器一直避免那种调用 |
 
 每部片只提示一次，避免每次重配都弹。
@@ -250,4 +250,28 @@ MPV 首帧超时（`ERROR_CODE_TIMEOUT`）原先映射成 RETRY，重试同一�
   「硬解失败，已切换软解」出现（日志 `showBar=true activity=VideoActivity`）。
 - 电视 + MPV 硬解播 4K HEVC Main10：仍然 `c2.rk.hevc.decoder`，没有误判为回退。
 - 手机 + MPV 硬解播 MPEG-2（无硬解）：软解播放正常。
-- 两端 EXO/MPV 解码矩阵 `problems=0`，无解码器泄漏。
+- 两端 EXO/MPV 解码矩阵 `problems=0`，无解码器泄漏。该矩阵只检查引擎、解码器和资源释放，**不能证明画面可见**；下述回归必须额外检查截图。
+
+### EXO 黑屏回归：恢复完整的视频事件链
+
+`ddc4f66a0` 为检测软解回退，替换了 renderer 的 `VideoRendererEventListener`，却只转发
+`onVideoDecoderInitialized`。其余接口方法有默认空实现，导致首帧、视频尺寸等事件丢失。
+解码器即使正常出帧，`PlayerView` 也收不到首帧事件，黑色遮罩一直不撤。这是应用回归，不是
+新容器需要补系统库。
+
+修复把 decoder 观察移到 `AnalyticsListener`，renderer 的原监听器不再被替换；渲染器配置
+与 `ddc4f66a0` 之前完全一致，保留硬解优先、平台软解回退和提示。
+`test_playback_polish.py` 增加了回归守卫，能拒绝原来的错误包装实现。
+
+在 home-rk 新容器上安装重建包并核对 APK SHA-256 后实测：
+
+- EXO/MPV：H.264 硬解、显式软解均有运动画面，播放位置推进。
+- 两引擎：暂停/恢复、预览转全屏、快进/快退、倍速、同进程切换视频通过。
+- 两引擎：中英字幕实际显示，4K HEVC Main10 使用 `c2.rk.hevc.decoder` 并播放到结尾。
+- 同批 mobile 包在 Redmi Note 8 上：EXO/MPV 的 H.264 硬解和软解均有运动画面。
+
+上述检查使用 `/media` 的实际播放状态与视频区域截图，不再把「分配了解码器」当成「画面正常」。
+没有改容器、固件或系统解码库，也没有放宽 profile/level 检查。
+
+EXO 仍受平台视频解码器支持范围限制：手机上的 H.264 High 4:4:4 在修改前后的包都报
+`Decoding Failed`；MPV 可用 libavcodec 软解。这不是本次遮罩回归，也不应把它当成测试通过。

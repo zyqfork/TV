@@ -19,6 +19,17 @@ def hls_references(text: str):
     return refs
 
 
+def check_exo_video_events(exo):
+    renderer = exo.split("protected void buildVideoRenderers(", 1)[1].split("@Override", 1)[0]
+    # Replacing this listener with a partial wrapper swallows first-frame/size events and keeps the shutter black.
+    assert "enableDecoderFallback, eventHandler, eventListener," in renderer
+    assert "new VideoRendererEventListener()" not in renderer
+    assert "onVideoDecoderInitialized" not in renderer
+    assert "player.addAnalyticsListener(new AnalyticsListener()" in exo
+    assert "onVideoDecoderInitialized(EventTime eventTime" in exo
+    assert "onVideoDecoderInitialized.accept(decoderName)" in exo
+
+
 def main():
     transport = (ROOT / "app/src/main/java/com/fongmi/android/tv/dlna/DLNAAvTransportImpl.java").read_text(encoding="utf-8")
     assert "else pendingSeekMs = ms;" in transport or "pendingSeekMs = ms;" in transport
@@ -87,6 +98,7 @@ def main():
     assert 'Prefers.put("mpv_vulkan", false)' in setting
     assert 'Prefers.put("mpv_gpu_next", false)' in setting
     exo = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java").read_text(encoding="utf-8")
+    check_exo_video_events(exo)
     assert "Math.max(bufferMs, live ? 3000 : 5000)" not in exo
     assert "playbackConfig" in exo
     assert "PcmOnlyAudioOutputProvider" in exo
