@@ -18,6 +18,13 @@ listener = listener[:listener.index('}', listener.index('{'))]
 assert 'updateRepeatButton()' in listener, listener
 assert 'setMediaButtonPreferences' not in listener
 
+# The repeat button must use a standard player command: a custom session command makes Media3
+# build its PendingIntent with a random request code, so every notification rebuild leaks one.
+button = SERVICE[SERVICE.index('private CommandButton buildRepeatButton'):]
+button = button[:button.index('\n    }')]
+assert 'setPlayerCommand(Player.COMMAND_SET_REPEAT_MODE, target)' in button, button
+assert 'setSessionCommand' not in button, button
+
 helper = SERVICE[SERVICE.index('private void updateRepeatButton'):]
 helper = helper[:helper.index('\n    }')]
 assert 'repeatOne == lastRepeatOne' in helper, helper

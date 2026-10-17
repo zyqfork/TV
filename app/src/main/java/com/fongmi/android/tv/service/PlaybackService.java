@@ -123,8 +123,22 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         return new CommandButton.Builder(CommandButton.ICON_STOP).setPlayerCommand(Player.COMMAND_STOP).setDisplayName(getString(R.string.play_stop)).build();
     }
 
+    /**
+     * The repeat button targets a concrete repeat mode instead of a custom command.
+     *
+     * <p>Media3 builds a custom-command action with a random PendingIntent request code
+     * ({@code CustomCommandPendingIntentBuilder.build} uses {@code ThreadLocalRandom.nextInt()}),
+     * so every notification rebuild leaks a pending intent that can never be reused. A standard
+     * player command uses a fixed request code ({@code PlaybackPendingIntentBuilder} keys on the
+     * key code) and reuses one pending intent, so the button survives rebuilds for free.
+     */
     private CommandButton buildRepeatButton() {
-        return new CommandButton.Builder(player.isRepeatOne() ? CommandButton.ICON_REPEAT_ONE : CommandButton.ICON_REPEAT_OFF).setSessionCommand(COMMAND_REPEAT).setDisplayName(getString(R.string.play_repeat)).build();
+        boolean repeatOne = player.isRepeatOne();
+        int target = repeatOne ? Player.REPEAT_MODE_OFF : Player.REPEAT_MODE_ONE;
+        return new CommandButton.Builder(repeatOne ? CommandButton.ICON_REPEAT_ONE : CommandButton.ICON_REPEAT_OFF)
+                .setPlayerCommand(Player.COMMAND_SET_REPEAT_MODE, target)
+                .setDisplayName(getString(R.string.play_repeat))
+                .build();
     }
 
     /**
