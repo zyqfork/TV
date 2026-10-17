@@ -68,6 +68,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private NavigationCallback navigationCallback;
     private MediaLibrarySession session;
+    private boolean lastRepeatOne;
     private Runnable onNewBinding;
     private PlayerManager player;
     private String navigationKey;
@@ -112,6 +113,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private void setupNotification() {
         DefaultMediaNotificationProvider provider = new DefaultMediaNotificationProvider.Builder(this).build();
+        lastRepeatOne = player.isRepeatOne();
         session.setMediaButtonPreferences(ImmutableList.of(buildRepeatButton(), buildStopButton()));
         provider.setSmallIcon(R.drawable.ic_notification);
         setMediaNotificationProvider(provider);
@@ -123,6 +125,20 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private CommandButton buildRepeatButton() {
         return new CommandButton.Builder(player.isRepeatOne() ? CommandButton.ICON_REPEAT_ONE : CommandButton.ICON_REPEAT_OFF).setSessionCommand(COMMAND_REPEAT).setDisplayName(getString(R.string.play_repeat)).build();
+    }
+
+    /**
+     * Rebuilds the media-button row only when the repeat icon actually changes.
+     *
+     * <p>Media3 creates a fresh {@link PendingIntent} for every {@code setMediaButtonPreferences}
+     * call, so rebuilding on each repeat callback piles up pending intents until the platform
+     * rate-limits the app's notifications ({@code Too many PendingIntent created for uid}).
+     */
+    private void updateRepeatButton() {
+        boolean repeatOne = player.isRepeatOne();
+        if (session == null || repeatOne == lastRepeatOne) return;
+        lastRepeatOne = repeatOne;
+        session.setMediaButtonPreferences(ImmutableList.of(buildRepeatButton(), buildStopButton()));
     }
 
     @Override
@@ -598,7 +614,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
         @Override
         public void onRepeatModeChanged(int repeatMode) {
-            if (session != null) session.setMediaButtonPreferences(ImmutableList.of(buildRepeatButton(), buildStopButton()));
+            updateRepeatButton();
         }
     };
 
