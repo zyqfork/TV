@@ -275,3 +275,20 @@ MPV 首帧超时（`ERROR_CODE_TIMEOUT`）原先映射成 RETRY，重试同一�
 
 EXO 仍受平台视频解码器支持范围限制：手机上的 H.264 High 4:4:4 在修改前后的包都报
 `Decoding Failed`；MPV 可用 libavcodec 软解。这不是本次遮罩回归，也不应把它当成测试通过。
+
+## 后续：2026-10-17 通知泄漏、日志洪水、退出报 4003
+
+退出播放后首页弹出 4003（`ERROR_CODE_DECODING_FAILED`），根因不在解码器：`VideoActivity.onBackInvoked()`
+先启动首页再 finish，而 `PlaybackActivity.onDestroy()` 里停播放器的 `releasePlaybackService()`
+排在 `super.onDestroy()` 之后，于是 mpv 在 Surface 已消失时处理 `video-reconfig`，报
+`Missing surface pointer` / `Error opening/initializing the VO window` 并被映射成解码错误。
+
+修复是调整顺序（启动首页前先 `suspend()`；`releasePlaybackService()` 移到 `super.onDestroy()` 之前）。
+**不要**在这条路径上调用 `detachSurface()`：`setPlayer(null)` 本身就销毁 Surface，会直接触发同一个错误。
+
+同批还修了两个问题：通知的「循环」按钮从自定义命令改为 `COMMAND_SET_REPEAT_MODE`（Media3 的
+`CustomCommandPendingIntentBuilder` 用随机 requestCode，每次通知重建都泄漏一个 PendingIntent）；
+第三方爬虫的重复日志按消息去重。
+
+详见 [PLAYBACK-LOG-AND-EXIT-FIXES-2026-10-17](PLAYBACK-LOG-AND-EXIT-FIXES-2026-10-17.md)；
+解码矩阵与退出后资源释放见 [DECODE-MATRIX-AND-RESOURCE-RELEASE-2026-10-17](DECODE-MATRIX-AND-RESOURCE-RELEASE-2026-10-17.md)。
