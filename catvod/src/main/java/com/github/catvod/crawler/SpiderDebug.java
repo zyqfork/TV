@@ -10,14 +10,17 @@ public class SpiderDebug {
     private static final String TAG = SpiderDebug.class.getSimpleName();
 
     /**
-     * A spider can log the same line on every frame of a playback session. Third-party jars do
+     * A spider can log the same line on every poll of a playback session. Third-party jars do
      * exactly that, which floods logcat and hides real errors, so a repeated message is logged
      * once and then suppressed until the message changes.
+     *
+     * <p>The window must stay well above the caller's own repeat interval: an observed spider
+     * polled every five to six seconds, so a five-second window let every line through.
      *
      * <p>Only this overload is throttled: the {@code log(tag, msg, args)} overload formats
      * caller-supplied arguments, so identical format strings can carry different data.
      */
-    private static final long REPEAT_WINDOW_MS = 5000L;
+    private static final long REPEAT_WINDOW_MS = 60_000L;
     private static String lastMessage;
     private static long lastLogAt;
 

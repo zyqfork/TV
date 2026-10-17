@@ -41,7 +41,7 @@ formatted = formatted[:formatted.index('\n    }')]
 assert 'accept' not in formatted, formatted
 
 # Behavioural check of the throttle itself, mirroring the Java logic.
-WINDOW = 5000
+WINDOW = int(DEBUG.split('REPEAT_WINDOW_MS = ')[1].split('L')[0].replace('_', ''))
 state = {'msg': None, 'at': -WINDOW}
 
 def accept(msg, now):
@@ -50,9 +50,11 @@ def accept(msg, now):
     state['msg'], state['at'] = msg, now
     return True
 
-# 1968 identical frames over 16 minutes: only the first survives inside each 5s window.
-kept = sum(accept('VideoActivity', t) for t in range(0, 960_000, 500))
-assert kept == 192, kept
+# An observed spider logged the same line every five to six seconds, so the window has to clear
+# that interval or every line gets through. 960k ms of that polling keeps only one line per window.
+kept = sum(accept('VideoActivity', t) for t in range(0, 960_000, 5_500))
+assert kept <= 960_000 // WINDOW + 1, (kept, WINDOW)
+assert WINDOW >= 10_000, WINDOW
 # A changing message is never suppressed.
 state.update(msg=None, at=-WINDOW)
 assert all(accept(f'line {i}', i * 1000) for i in range(20))
