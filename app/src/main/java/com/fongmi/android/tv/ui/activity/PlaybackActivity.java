@@ -687,12 +687,16 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     protected void onDestroy() {
         clearForeverObservers();
+        // Stop the native decoder while its render target is still valid. Do not detach the view
+        // here: setPlayer(null) tears the Surface down under mpv, which answers with a
+        // video-reconfig that has no window to attach and fails with "Missing surface pointer".
+        // The normal SurfaceHolder.surfaceDestroyed callback handles the detach in the right order.
+        releasePlaybackService();
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.release();
         secondarySubtitleOverlay = null;
         if (subtitleResourceBinding != null) subtitleResourceBinding.release();
         subtitleResourceBinding = null;
         super.onDestroy();
-        releasePlaybackService();
     }
 
     private final class ServiceReadyObserver<T> implements Observer<T> {

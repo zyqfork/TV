@@ -1635,6 +1635,10 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
         } else {
             // Direct file play stays fullscreen-only; back finishes the activity.
             mViewModel.stopSearch();
+            // Stop the decoder before the home screen replaces this window. Once the Surface is
+            // gone mpv answers the window change with a video-reconfig it cannot satisfy and
+            // fails with "Missing surface pointer", which surfaced as a decoding error (4003).
+            if (service() != null) service().suspend();
             if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
             super.onBackInvoked();
         }
