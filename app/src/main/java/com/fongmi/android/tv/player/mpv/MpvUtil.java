@@ -233,6 +233,12 @@ public final class MpvUtil {
         if (!userOptions.containsKey("stream-lavf-o")) {
             builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
         }
+        // mpv closes the file at EOF by default, which clears the rendered frame and leaves the
+        // player page black with no way back. Keep the last frame on screen instead; mpv still
+        // reports END_FILE(EOF), so auto-advance and STATE_ENDED keep working.
+        if (!userOptions.containsKey("keep-open")) {
+            builder.addPreInitStringOption("keep-open", "yes");
+        }
     }
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
