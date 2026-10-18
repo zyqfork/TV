@@ -97,6 +97,18 @@ public class VodHistoryPolicy {
     }
 
     public long startPositionMs(History history) {
-        return history == null ? C.TIME_UNSET : Math.max(history.getOpening(), history.getPosition());
+        if (history == null) return C.TIME_UNSET;
+        // Compare against C.TIME_UNSET explicitly instead of relying on Math.max: stored rows can
+        // hold TIME_UNSET+1 (older builds wrote that), and Math.max would then return a sentinel
+        // that no longer equals C.TIME_UNSET. PlayerManager.replay only checks equality, so such a
+        // value went to seekTo() and mpv read it as a huge position and jumped to the very end.
+        long opening = history.getOpening();
+        long position = history.getPosition();
+        boolean hasOpening = opening != C.TIME_UNSET && opening > 0;
+        boolean hasPosition = position != C.TIME_UNSET && position > 0;
+        if (hasOpening && hasPosition) return Math.max(opening, position);
+        if (hasOpening) return opening;
+        if (hasPosition) return position;
+        return C.TIME_UNSET;
     }
 }

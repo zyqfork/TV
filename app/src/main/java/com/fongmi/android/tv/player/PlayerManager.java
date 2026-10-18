@@ -679,8 +679,10 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void replay(long positionMs) {
-        if (positionMs == C.TIME_UNSET) player.seekToDefaultPosition();
-        else player.seekTo(positionMs);
+        // Replay means "start this item again". seekToDefaultPosition() is not that: Media3
+        // leaves it to the player, and mpv resolves it to the end of the file, so the replay
+        // button appeared to do nothing. Seek to the opening offset explicitly instead.
+        player.seekTo(positionMs == C.TIME_UNSET || positionMs < 0 ? 0 : positionMs);
         player.play();
     }
 
