@@ -69,7 +69,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "demuxer-cache-time", "video-frame-info/pts"};
-    private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "seekable"};
+    private static final String[] OBSERVED_FLAG = {"pause", "paused-for-cache", "seekable", "eof-reached"};
     private static final String[] OBSERVED_INT = {"video-params/w", "video-params/h", "video-params/crop-w", "video-params/crop-h", "video-out-params/w", "video-out-params/h"};
     private static final long END_FILE_ERROR_DEBOUNCE_MS = 500;
 
@@ -1434,6 +1434,13 @@ public final class MpvPlayer extends SimpleBasePlayer
                 case "seekable" -> {
                     seekable = value;
                     updateState(state.playbackState, state.playWhenReady, state.playerError);
+                }
+                // keep-open keeps the file loaded at EOF, so mpv never sends END_FILE and the
+                // player would sit on PLAYING forever with no auto-advance and no replay.
+                // eof-reached is the signal that survives keep-open; map it back onto the
+                // END_FILE(EOF) path so the state machine behaves as if the file had closed.
+                case "eof-reached" -> {
+                    if (value && fileLoaded) handleEndFile(MPVLib.MpvEndFileReason.EOF, 0, null);
                 }
             }
         });

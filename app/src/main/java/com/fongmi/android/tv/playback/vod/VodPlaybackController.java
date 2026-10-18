@@ -340,6 +340,7 @@ public class VodPlaybackController {
     private void nextEpisode(boolean notify, boolean reversed) {
         if (!state.hasEpisode()) return;
         Episode item = getRelativeEpisode(1);
+        if (item == null) return;
         if (!item.isSelected()) selectEpisode(item);
         else if (notify) host.showNoNext(reversed);
     }
@@ -347,6 +348,7 @@ public class VodPlaybackController {
     private void prevEpisode(boolean notify, boolean reversed) {
         if (!state.hasEpisode()) return;
         Episode item = getRelativeEpisode(-1);
+        if (item == null) return;
         if (!item.isSelected()) selectEpisode(item);
         else if (notify) host.showNoPrev(reversed);
     }
@@ -500,8 +502,14 @@ public class VodPlaybackController {
     }
 
     private Episode getRelativeEpisode(int offset) {
-        List<Episode> episodes = state.getFlag().getEpisodes();
-        int current = state.getFlag().getPosition();
+        Flag flag = state.getFlag();
+        if (flag == null) return null;
+        List<Episode> episodes = flag.getEpisodes();
+        // Math.clamp throws when the range is inverted, so an empty list would crash here instead
+        // of simply having no neighbour. Callers all guard with hasEpisode() today; keep this
+        // local so a future caller cannot turn an empty list into a crash.
+        if (episodes == null || episodes.isEmpty()) return null;
+        int current = flag.getPosition();
         int position = Math.clamp(current + offset, 0, episodes.size() - 1);
         return episodes.get(position);
     }
