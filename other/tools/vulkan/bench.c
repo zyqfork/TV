@@ -23,7 +23,7 @@ static double now_ms(void) {
 #define TRI_FRAMES 200
 #define TRIS_PER_FRAME 5000
 #define FILL_FRAMES 100
-#define FILL_DRAWS 20
+static int g_fill_draws = 20;
 #define TEX_FRAMES 100
 #define TEX_DRAWS 20
 
@@ -85,6 +85,24 @@ static int run_gles(void) {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
+    /* Render into an FBO with a GL_RGBA8 texture attachment, matching the Vulkan
+       VK_FORMAT_R8G8B8A8_UNORM optimal-tiled image. A pbuffer target is usually
+       linear, which would penalise GLES on a tiling GPU and inflate the VK gap. */
+    GLuint fboTex, fbo;
+    glGenTextures(1, &fboTex);
+    glBindTexture(GL_TEXTURE_2D, fboTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTex, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        puts("GLES: FBO incomplete, using pbuffer target");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     unsigned char *px = malloc(256 * 256 * 4);
     for (int i = 0; i < 256 * 256; i++) {
         px[i * 4 + 0] = i & 0xff; px[i * 4 + 1] = (i >> 3) & 0xff;
@@ -136,19 +154,19 @@ static int run_gles(void) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     for (int f = 0; f < 5; f++) {
         glClear(GL_COLOR_BUFFER_BIT);
-        for (int i = 0; i < FILL_DRAWS; i++) glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        for (int i = 0; i < g_fill_draws; i++) glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glFinish();
     }
     t0 = now_ms();
     for (int f = 0; f < FILL_FRAMES; f++) {
         glClear(GL_COLOR_BUFFER_BIT);
-        for (int i = 0; i < FILL_DRAWS; i++) glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        for (int i = 0; i < g_fill_draws; i++) glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glFinish();
     }
     ms = now_ms() - t0;
-    double gpx = (double)FILL_FRAMES * FILL_DRAWS * W * H / 1e9;
+    double gpx = (double)FILL_FRAMES * g_fill_draws * W * H / 1e9;
     printf("GLES_FILL frames=%d draws_per_frame=%d ms=%.1f fps=%.1f gpx_per_sec=%.2f\n",
-           FILL_FRAMES, FILL_DRAWS, ms, FILL_FRAMES * 1000.0 / ms, gpx * 1000.0 / ms);
+           FILL_FRAMES, g_fill_draws, ms, FILL_FRAMES * 1000.0 / ms, gpx * 1000.0 / ms);
 
     /* tex: fullscreen quad sampling */
     GLuint ptex = mk_program(VS_SRC, FS_TEX);
@@ -555,13 +573,15 @@ static int run_vk(void) {
     /* Same primitive counts and topology as the GLES side: 3-vertex triangles,
        4-vertex fullscreen strips, identical draw counts and per-frame sync. */
     run_batch(pTri, g_vbo_tri, TRI_FRAMES, TRIS_PER_FRAME, 3, "TRIS", 0);
-    run_batch(pFill, g_vbo_quad, FILL_FRAMES, FILL_DRAWS, 4, "FILL", 0);
+    run_batch(pFill, g_vbo_quad, FILL_FRAMES, g_fill_draws, 4, "FILL", 0);
     run_batch(pTex, g_vbo_quad, TEX_FRAMES, TEX_DRAWS, 4, "TEX", 1);
     return 0;
 }
 
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "both";
+    const char *fillEnv = getenv("FILL_DRAWS");
+    if (fillEnv) { int v = atoi(fillEnv); if (v > 0) g_fill_draws = v; }
     if (!strcmp(mode, "gles") || !strcmp(mode, "both")) run_gles();
     if (!strcmp(mode, "vk") || !strcmp(mode, "both")) run_vk();
     return 0;
