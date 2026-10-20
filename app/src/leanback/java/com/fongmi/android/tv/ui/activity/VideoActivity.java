@@ -496,6 +496,11 @@ public class VideoActivity extends PlaybackActivity implements VodPlaybackHost, 
     }
 
     @Override
+    protected boolean showPlaybackStats() {
+        return isFullscreen();
+    }
+
+    @Override
     public boolean isLivePlayback() {
         return service() != null && isOwner() && player().isLive();
     }

@@ -54,7 +54,7 @@ public final class PreloadPolicy {
         }
         File cacheDir = Path.exoCache();
         long freeBytes = Math.max(0, Path.available(cacheDir));
-        return evaluate(connected, validated, metered, backgroundRestricted, freeBytes, PreloadSetting.isPreloadOnMetered(), testBypass);
+        return evaluate(connected, validated, metered, backgroundRestricted, freeBytes, false, testBypass);
     }
 
     static Decision evaluate(boolean connected, boolean validated, boolean metered, boolean backgroundRestricted, long freeBytes) {

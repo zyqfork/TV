@@ -66,6 +66,8 @@ public final class MpvPlayer extends SimpleBasePlayer
      * disqualifies automatic embed rather than being silently overwritten.
      */
     private static final String HWDEC_HARD = "mediacodec";
+    /** GPU output: zero-copy first; copy-back only if the AHardwareBuffer import fails. */
+    private static final String HWDEC_GPU_HARD = "mediacodec,mediacodec-copy";
     private static final String HWDEC_SOFT = "no";
     private static final String VO_DEFAULT = "gpu";
     private static final String[] OBSERVED_DOUBLE = {"time-pos", "duration", "demuxer-cache-time", "video-frame-info/pts"};
@@ -444,7 +446,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         // mediacodec_embed requires a live Android Surface; after Surface-unavailable we stay on
         // direct gpu output so audio-only / black-screen sessions can recover without a rebuild.
         if (decode == 2) return HWDEC_HARD;
-        if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD);
+        if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_GPU_HARD);
         return HWDEC_SOFT;
     }
 

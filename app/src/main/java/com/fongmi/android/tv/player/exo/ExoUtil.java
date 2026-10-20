@@ -65,9 +65,9 @@ public class ExoUtil {
                                         boolean live, @Nullable java.util.function.Consumer<String> onVideoDecoderInitialized) {
         decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
         ExoPlayer player = new ExoPlayer.Builder(App.get())
-                .setTrackSelector(buildTrackSelector(decode))
+                .setTrackSelector(buildTrackSelector())
                 .setLoadControl(buildLoadControl(live))
-                .setRenderersFactory(buildPlaybackRenderersFactory(decode, audioProcessor))
+                .setRenderersFactory(buildRenderersFactory(decode, audioProcessor))
                 .setMediaSourceFactory(buildMediaSourceFactory())
                 .build();
         if (BuildConfig.DEBUG) player.addAnalyticsListener(new EventLogger());
@@ -116,7 +116,7 @@ public class ExoUtil {
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
                 .setTargetBufferBytes(targetBufferBytes)
                 .setBackBuffer(backBufferMs, backBufferMs > 0)
-                .setPrioritizeTimeOverSizeThresholds(true)
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build();
     }
 
@@ -126,11 +126,7 @@ public class ExoUtil {
         value = value * 31 + (live ? 1 : 0);
         value = value * 31 + PlayerSetting.getBuffer();
         value = value * 31 + PlayerSetting.getLiveLatency();
-        value = value * 31 + (PlayerSetting.isTunnelingEnabled() ? 1 : 0);
-        value = value * 31 + (PlayerSetting.isAudioPassThrough() ? 1 : 0);
-        value = value * 31 + (PlayerSetting.isAudioPrefer() ? 1 : 0);
-        value = value * 31 + (PlayerSetting.isVideoPrefer() ? 1 : 0);
-        value = value * 31 + (PlayerSetting.isPreferAAC() ? 1 : 0);
+        value = value * 31 + (isAudioPassThroughEnabled() ? 1 : 0);
         return value;
     }
 
@@ -150,28 +146,24 @@ public class ExoUtil {
         return extras.keySet().stream().filter(key -> extras.getString(key) != null).collect(Collectors.toMap(key -> key, extras::getString));
     }
 
-    private static TrackSelector buildTrackSelector(int decode) {
+    private static TrackSelector buildTrackSelector() {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
-        if (PlayerSetting.isPreferAAC()) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
         builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
-        // Tunneling needs a hardware video and audio decoder. Soft video, 「视频软解」 or
-        // 「音频软解」 makes Media3 fail the track instead of playing.
-        boolean software = decode == PlayerEngine.SOFT || PlayerSetting.isVideoPrefer() || PlayerSetting.isAudioPrefer();
-        builder.setTunnelingEnabled(PlayerSetting.isTunnelingEnabled() && !software);
+        String[] audioLanguages = LangUtil.getPreferredAudioLanguages();
+        if (audioLanguages.length > 0) builder.setPreferredAudioLanguages(audioLanguages);
+        int maxHeight = PlayerSetting.getMaxVideoHeight();
+        if (maxHeight > 0) builder.setMaxVideoSize(3840, maxHeight);
+        builder.setTunnelingEnabled(false);
         trackSelector.setParameters(builder.build());
         return trackSelector;
     }
 
-    private static RenderersFactory buildPlaybackRenderersFactory(int decode, AudioProcessor audioProcessor) {
-        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), decode, audioProcessor);
-    }
-
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer(), PlayerEngine.HARD, null);
+        return buildRenderersFactory(PlayerEngine.HARD, null);
     }
 
-    private static RenderersFactory buildRenderersFactory(boolean audioPrefer, boolean videoPrefer, int decode, AudioProcessor audioProcessor) {
+    private static RenderersFactory buildRenderersFactory(int decode, AudioProcessor audioProcessor) {
         boolean softwareDecode = decode == PlayerEngine.SOFT;
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
@@ -186,9 +178,7 @@ public class ExoUtil {
                                                VideoRendererEventListener eventListener,
                                                long allowedVideoJoiningTimeMs,
                                                ArrayList<Renderer> out) {
-                // FFmpeg in this project is audio-only, so extension mode never changes the video
-                // codec. Scene soft decode and 「视频软解」 both have to select PREFER_SOFTWARE.
-                boolean videoSoftware = softwareDecode || videoPrefer;
+                boolean videoSoftware = softwareDecode;
                 super.buildVideoRenderers(context,
                         videoSoftware ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON,
                         videoSoftware ? MediaCodecSelector.PREFER_SOFTWARE : mediaCodecSelector,
@@ -203,7 +193,7 @@ public class ExoUtil {
                                                Handler eventHandler,
                                                AudioRendererEventListener eventListener,
                                                ArrayList<Renderer> out) {
-                boolean audioSoftware = softwareDecode || audioPrefer;
+                boolean audioSoftware = softwareDecode;
                 MediaCodecSelector audioSelector = audioSoftware
                         ? MediaCodecSelector.PREFER_SOFTWARE
                         : mediaCodecSelector;
@@ -219,9 +209,14 @@ public class ExoUtil {
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
     }
 
+    /** Effects require PCM without permanently changing the automatic-output preference. */
+    public static boolean isAudioPassThroughEnabled() {
+        return PlayerSetting.isAudioPassThrough() && !com.fongmi.android.tv.setting.AudioSetting.hasEffect(8);
+    }
+
     private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, AudioProcessor audioProcessor) {
         DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
-        if (!PlayerSetting.isAudioPassThrough()) {
+        if (!isAudioPassThroughEnabled()) {
             // The default provider already is AudioTrack and still accepts AC3/DTS/E-AC3 directly.
             // Rejecting non-PCM is what actually turns passthrough off.
             AudioOutputProvider output = new AudioTrackAudioOutputProvider.Builder(context).build();

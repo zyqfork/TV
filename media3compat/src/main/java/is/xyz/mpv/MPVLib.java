@@ -63,6 +63,7 @@ public final class MPVLib {
 
     private static native String nativeGetFeatures();
 
+
     public static boolean acquireInstance() {
         // Never time out this lock: the native bridge is process-global. Forcing it open while a
         // slow destroy is still running permits two Java players to control the same mpv handle.

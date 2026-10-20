@@ -58,6 +58,12 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public String getVideoDecoderDescription() {
+        String value = is.xyz.mpv.MPVLib.getCachedString("hwdec-current");
+        return value == null ? "" : value;
+    }
+
+    @Override
     public PlayerEffect getEffect() {
         return effect;
     }

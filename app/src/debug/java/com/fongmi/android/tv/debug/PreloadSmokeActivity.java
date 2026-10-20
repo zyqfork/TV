@@ -52,7 +52,6 @@ public final class PreloadSmokeActivity extends Activity implements Player.Liste
     private int ticks;
     // Captured so the harness can hand the device back exactly as it found it.
     private boolean originalPreload;
-    private int originalTimeSeconds;
     private boolean restored;
 
     @Override
@@ -62,10 +61,7 @@ public final class PreloadSmokeActivity extends Activity implements Player.Liste
         // with preload forced on. `--ez resetDefaults true` puts the shipped defaults back.
         if (getIntent().getBooleanExtra("resetDefaults", false)) {
             PreloadSetting.putPreload(false);
-            PreloadSetting.putPreloadTimeSeconds(PreloadSetting.MAX_TIME_SECONDS);
-            Log.i(TAG, "RESET preload=" + PreloadSetting.isPreload()
-                    + " timeSeconds=" + PreloadSetting.getPreloadTimeSeconds()
-                    + " metered=" + PreloadSetting.isPreloadOnMetered());
+            Log.i(TAG, "RESET preload=" + PreloadSetting.isPreload());
             finish();
             return;
         }
@@ -79,11 +75,7 @@ public final class PreloadSmokeActivity extends Activity implements Player.Liste
         // Preload is off by default and the lab network is often metered, so opt in explicitly.
         // Snapshot first: this harness must not leave the device reconfigured.
         originalPreload = PreloadSetting.isPreload();
-        originalTimeSeconds = PreloadSetting.getPreloadTimeSeconds();
         PreloadSetting.putPreload(true);
-        if (getIntent().hasExtra("durationMs")) {
-            PreloadSetting.putPreloadTimeSeconds((int) Math.max(PreloadSetting.MIN_TIME_SECONDS, getIntent().getLongExtra("durationMs", 60_000L) / 1000L));
-        }
         PreloadPolicy.setTestBypass(true);
         PreloadDiagnostics.reset();
         first = MediaItem.fromUri(url1);
@@ -165,8 +157,7 @@ public final class PreloadSmokeActivity extends Activity implements Player.Liste
         if (restored) return;
         restored = true;
         PreloadSetting.putPreload(originalPreload);
-        PreloadSetting.putPreloadTimeSeconds(originalTimeSeconds);
-        Log.i(TAG, "RESTORED preload=" + originalPreload + " timeSeconds=" + originalTimeSeconds);
+        Log.i(TAG, "RESTORED preload=" + originalPreload);
     }
 
     @Override

@@ -34,6 +34,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.subtitle.SecondarySubtitleOverlay;
+import com.fongmi.android.tv.ui.playback.PlaybackStatsOverlay;
 import com.fongmi.android.tv.player.media.PlaySpec;
 import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -60,8 +61,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private MediaController mController;
     private PlaybackService mService;
     private SecondarySubtitleOverlay secondarySubtitleOverlay;
+    private PlaybackStatsOverlay statsOverlay;
     private com.fongmi.android.tv.ui.playback.SubtitleResourceBinding subtitleResourceBinding;
-    private int appliedRender = -1;
     private boolean initialized;
     private boolean audioOnly;
     private boolean scrubbing;
@@ -166,16 +167,6 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         ServiceReadyObserver<T> serviceObserver = new ServiceReadyObserver<>(observer);
         serviceReadyObservers.add(serviceObserver);
         observeForever(liveData, serviceObserver);
-    }
-
-    public boolean isDebugViewVisible() {
-        return false;
-    }
-
-    public void toggleDebugView() {
-    }
-
-    public void hideDebugView() {
     }
 
     public void chooseOtherPlayer(CharSequence title) {
@@ -394,10 +385,6 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void attachSurface() {
-        if (appliedRender != PlayerSetting.getRender()) {
-            setRender();
-            return;
-        }
         if (mService != null) {
             boolean mpv = player().getEngine() == PlayerSetting.ENGINE_MPV;
             // MPV renders directly to the Surface. An artwork/EPG logo left by PlayerView can
@@ -433,20 +420,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         getPlayerView().setPlayer(null);
     }
 
-    private void setRender() {
-        appliedRender = PlayerSetting.getRender();
-        getPlayerView().setRender(appliedRender);
-        detachSurface();
-        attachSurface();
-    }
-
     private void configurePlayerView() {
         PlayerView playerView = getPlayerView();
         // App overlay owns pause/transport UI; Media3 PlayerView must stay chrome-free.
         playerView.setUseController(false);
         playerView.setControllerAutoShow(false);
-        appliedRender = PlayerSetting.getRender();
-        playerView.setRender(appliedRender);
+        playerView.setRender(0);
         playerView.getSubtitleView().setStyle(getCaptionStyle());
         playerView.getSubtitleView().setApplyEmbeddedStyles(true);
         playerView.getSubtitleView().setApplyEmbeddedFontSizes(false);
@@ -548,7 +527,9 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         public void onPlayerRebuild(Player player) {
             if (!isOwner()) return;
             traffic.reset();
-            setRender();
+            getPlayerView().setRender(0);
+            detachSurface();
+            attachSurface();
         }
 
         @Override
@@ -586,6 +567,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
         configurePlayerView();
+        addStatsOverlay();
         bindPlaybackService();
         addSeekListener();
     }
@@ -641,9 +623,26 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         mService = null;
     }
 
+    /** Detail/preview layouts embed a small player window; stats belong to fullscreen playback. */
+    protected boolean showPlaybackStats() {
+        return true;
+    }
+
+    private void addStatsOverlay() {
+        statsOverlay = new PlaybackStatsOverlay(this, () -> mService == null ? null : player(),
+                () -> !isInPictureInPictureMode() && showPlaybackStats());
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.TOP | android.view.Gravity.END);
+        int margin = Math.round(16 * getResources().getDisplayMetrics().density);
+        params.setMargins(0, margin, margin, 0);
+        ((ViewGroup) findViewById(android.R.id.content)).addView(statsOverlay, params);
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
+        if (statsOverlay != null) statsOverlay.start();
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.setActive(true);
         activateService();
     }
@@ -668,6 +667,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     @Override
     protected void onStop() {
+        if (statsOverlay != null) statsOverlay.stop();
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.setActive(false);
         super.onStop();
         if (!isOwner() || mService == null) return;
@@ -677,7 +677,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             // can tear down gpu-next with "Missing surface pointer" and poison the next playback.
             mService.suspend();
             detachSurface();
-        } else if (isFinishing() || PlayerSetting.isBackgroundOff()) {
+        } else if (isFinishing()) {
+            // Leaving for good: stop while the Surface still exists, then detach. Pausing here
+            // left mpv decoding into a destroyed window and produced a late VO error/retry.
+            mService.suspend();
+            detachSurface();
+        } else if (PlayerSetting.isBackgroundOff()) {
             // The service/player can be ready before the asynchronous MediaController connects.
             // Never leave audio running just because the activity stopped during that window.
             pausePlayback();
@@ -694,6 +699,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         releasePlaybackService();
         if (secondarySubtitleOverlay != null) secondarySubtitleOverlay.release();
         secondarySubtitleOverlay = null;
+        statsOverlay = null;
         if (subtitleResourceBinding != null) subtitleResourceBinding.release();
         subtitleResourceBinding = null;
         super.onDestroy();

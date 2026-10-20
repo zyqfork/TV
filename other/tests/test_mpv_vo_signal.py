@@ -61,9 +61,8 @@ for gone in ('FONGMI_IMAGE_FENCE_LEDGER', 'FONGMI_IMAGE_SUBMIT', 'FONGMI_IMAGE_A
              'copy_prog', 'copy_valid', 'native_fence', 'FONGMI_IMAGE_RELEASE',
              'disable_frame_copy', 'copy_external_frame', 'FONGMI_IMAGE_SLOTS'):
     assert gone not in patch, f'stale stall workaround {gone}'
-# Only the pinned mpv/ffmpeg files this project still needs are patched. Count call
-# sites at line start so the helper definition does not inflate the number.
-assert sum(1 for line in patch.splitlines() if line.startswith('patch(')) == 8
+# The Android audio clock fix is independent of the retired decoder-stall workarounds.
+assert 'FONGMI_ANDROID_MONOTONIC' in patch
 util=(root/'app/src/main/java/com/fongmi/android/tv/player/mpv/MpvUtil.java').read_text(encoding='utf-8')
 assert 'vd-queue' not in util  # mpv's decoder queue is off by default; enabling it only holds more codec buffers
 assert 'FONGMI_EXTERNAL_CROP_CLAMP' not in patch # rejected prototype did not improve actual hardware pixels

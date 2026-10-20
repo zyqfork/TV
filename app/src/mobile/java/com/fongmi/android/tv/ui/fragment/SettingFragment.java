@@ -273,12 +273,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void setSize(View view) {
-        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
-            mBinding.sizeText.setText(size[which]);
-            PlayerSetting.putSize(which);
-            RefreshEvent.size();
-            dialog.dismiss();
-        }).show();
+        int next = (PlayerSetting.getSize() + 1) % size.length;
+        PlayerSetting.putSize(next);
+        mBinding.sizeText.setText(size[next]);
+        RefreshEvent.size();
     }
 
     private void onNetworkStorage(View view) {

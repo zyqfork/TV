@@ -98,7 +98,7 @@ public class PreCache {
         return DiskPreloadManager.Options.builder()
                 .setStartPositionMs(startPositionMs)
                 .setDurationMs(PreloadSetting.getPreloadDurationMs())
-                .setMaxThreads(PreloadSetting.getPreloadThreads())
+                .setMaxThreads(1)
                 .build();
     }
 

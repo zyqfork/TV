@@ -88,6 +88,8 @@ public class PlayerManager implements ParseCallback {
     /** One MPV container/manifest retry per URL before the EXO fallback is considered. */
     private boolean parseRetryUsed;
     private int retry;
+    /** True only between starting an item and stop(); late engine callbacks are ignored. */
+    private boolean active;
     private int sourceRetry;
     private int firstFrameExtendCount;
     private long firstFrameDeadlineMs;
@@ -289,10 +291,11 @@ public class PlayerManager implements ParseCallback {
 
     public String getDecodeText() {
         int shown = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
-        if (shown == PlayerEngine.HARD && engine != null && engine.getType() == PlayerEngine.Type.EXO && PlayerSetting.isVideoPrefer()) {
-            shown = PlayerEngine.SOFT;
-        }
         return ResUtil.getStringArray(R.array.select_decode)[shown];
+    }
+
+    public String getVideoDecoderDescription() {
+        return engine == null ? "" : engine.getVideoDecoderDescription();
     }
 
     public int getEngine() {
@@ -324,7 +327,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void refreshAudioSetting() {
-        if (engine != null && engine.requiresAudioEffectRebuild() && AudioSetting.hasEffect(8)) {
+        if (engine != null && engine.requiresAudioEffectRebuild()) {
             long position = Math.max(0, getPosition());
             boolean playWhenReady = player.getPlayWhenReady();
             setPlayer(engine.rebuild());
@@ -658,7 +661,9 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void stop() {
-        // Neither a watchdog nor a scheduled transport retry may restart a stopped item.
+        // Neither a watchdog nor a scheduled transport retry may restart a stopped item, and a
+        // late engine error (mpv loses its Surface on exit) must not raise UI or retry work.
+        active = false;
         App.removeCallbacks(runnable, firstFrameRunnable, sourceRetryRunnable);
         engine.stop();
         stopParse();
@@ -746,14 +751,7 @@ public class PlayerManager implements ParseCallback {
         long position = Math.max(0, getPosition());
         boolean playWhenReady = player.getPlayWhenReady();
         if (persist) {
-            // 「视频软解」forces the video codec even when the scene decode is still hard, so the
-            // control that says 软解 must be able to turn that force off and return to hardware.
-            if (engine.getType() == PlayerEngine.Type.EXO && PlayerSetting.isVideoPrefer()) {
-                decode = PlayerEngine.HARD;
-                PlayerSetting.putVideoPrefer(false);
-            } else {
-                decode = nextDecode(decode);
-            }
+            decode = nextDecode(decode);
         } else {
             decodeTriedMask |= 1 << decode;
             int next = nextUnusedDecode(decode);
@@ -822,7 +820,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void onSourceRetry() {
-        if (spec == null || isReleased()) return;
+        if (!active || spec == null || isReleased()) return;
         // Keep sourceRetry across the restart so retries cannot run forever.
         startCurrent(Math.max(0, getPosition()));
     }
@@ -850,12 +848,13 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void onPlayTimeout() {
+        if (!active) return;
         stop();
         handleFatalError(null);
     }
 
     private void onFirstFrameTimeout() {
-        if (openReported || spec == null || isReleased()) return;
+        if (!active || openReported || spec == null || isReleased()) return;
         // MPV only reports STATE_READY once its file is loaded, and an HLS master with many
         // renditions can take longer than a single timeout to get there. Position is not evidence
         // of progress here (a resumed item already starts at position > 0) and MPV publishes no
@@ -1003,6 +1002,7 @@ public class PlayerManager implements ParseCallback {
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitlesDisabled).build());
         pendingPreload = null;
         openReported = false;
+        active = true;
         firstFrameExtendCount = 0;
         if (firstFrameDeadlineMs == 0) {
             firstFrameDeadlineMs = SystemClock.elapsedRealtime() + firstFrameTimeoutMs();
@@ -1131,6 +1131,7 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onPlaybackStateChanged(int state) {
+            if (!active) return;
             if (state == Player.STATE_READY || state == Player.STATE_ENDED) App.removeCallbacks(runnable, firstFrameRunnable);
             if (state == Player.STATE_READY) {
                 engine.resetErrorBudget();
@@ -1144,6 +1145,7 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onRenderedFirstFrame() {
+            if (!active) return;
             // The decoder is only known once frames flow, so this is the first point where a
             // hardware request that ended in software is visible. EXO and MPV both report it
             // through the same engine call; the notice is consumed once per item.
@@ -1157,7 +1159,7 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
-            if (tracks.isEmpty()) return;
+            if (!active || tracks.isEmpty()) return;
             effects.refreshAudioSetting();
             effects.refreshVideoSetting();
             // Network subtitles arrive incrementally. Restore A/V once, but defer saved TEXT
@@ -1190,7 +1192,7 @@ public class PlayerManager implements ParseCallback {
 
         @Override
         public void onPlayerError(@NonNull PlaybackException e) {
-            if (spec == null) return;
+            if (!active || spec == null) return;
             PlayerEngine.ErrorAction action = engine.handleError(e);
             if (action != PlayerEngine.ErrorAction.RECOVERED) App.removeCallbacks(runnable, firstFrameRunnable);
             switch (action) {

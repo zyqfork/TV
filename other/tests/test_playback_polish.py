@@ -91,29 +91,27 @@ def main():
     # force-EOFs the video track, which shows up as audio over a black surface with no error.
     assert 'addPreInitStringOption("hwdec-software-fallback"' not in fallback
     assert 'addPreInitStringOption("hwdec-software-fallback", "no")' not in util
-    preload = util.split("void addPreloadOptions", 1)[1].split("void addSubtitleStyleOptions", 1)[0]
-    assert 'addPreInitStringOption("cache-secs"' not in preload
+    assert "addPreloadOptions" not in util
     assert "getPreloadTimeSeconds" not in util
     setting = (ROOT / "app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java").read_text(encoding="utf-8")
-    assert 'Prefers.put("mpv_vulkan", false)' in setting
-    assert 'Prefers.put("mpv_gpu_next", false)' in setting
+    assert "isMpvGpuNext" not in setting and "isMpvVulkan" not in setting
     exo = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java").read_text(encoding="utf-8")
     check_exo_video_events(exo)
     assert "Math.max(bufferMs, live ? 3000 : 5000)" not in exo
     assert "playbackConfig" in exo
     assert "PcmOnlyAudioOutputProvider" in exo
     assert "videoSoftware ? MediaCodecSelector.PREFER_SOFTWARE" in exo
-    assert "boolean audioSoftware = softwareDecode || audioPrefer" in exo
-    assert "setTunnelingEnabled(PlayerSetting.isTunnelingEnabled() && !software)" in exo
+    assert "boolean audioSoftware = softwareDecode" in exo
+    assert "setTunnelingEnabled(false)" in exo
     assert "live && PlayerSetting.isLiveLowLatency()" in util
     mpv_player = (ROOT / "media3compat/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java").read_text(encoding="utf-8")
     assert "could not open codec" in mpv_player
     assert "ERROR_CODE_DECODER_INIT_FAILED" in mpv_player
     manager = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java").read_text(encoding="utf-8")
     assert "engine.refreshConfig()" in manager
-    assert "PlayerSetting.putVideoPrefer(false)" in manager
+    assert "PlayerSetting.putVideoPrefer" not in manager
     activity = (ROOT / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8")
-    assert "appliedRender != PlayerSetting.getRender()" in activity
+    assert "playerView.setRender(0)" in activity
     font = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/subtitle/ExternalFont.java").read_text(encoding="utf-8")
     assert ":style=" in font
     playlist = """#EXTM3U

@@ -1,6 +1,4 @@
 package com.fongmi.android.tv.player.mpv;
-
-import android.content.pm.PackageManager;
 import android.text.TextUtils;
 
 import androidx.media3.common.Player;
@@ -39,16 +37,13 @@ public final class MpvUtil {
     private static final String OPT_OPENGL_ES = "opengl-es";
     private static final String OPT_SUB_LANG = "slang";
     private static final String VALUE_ANDROID = "android";
-    private static final String VALUE_ANDROID_VK = "androidvk";
     private static final String VALUE_GPU = "gpu";
     private static final String VALUE_OPENGL = "opengl";
-    private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
     private static final String OPT_PROXY_URL = "proxy-url";
-    private static final int VULKAN_1_2 = 0x00402000;
 
     public static List<String> getManagedOptionNames() {
-        return List.of("vo", "hwdec");
+        return List.of("gpu-api", "gpu-context", "opengl-es", "slang", "sub-font");
     }
 
     public static boolean isAvailable() {
@@ -65,14 +60,14 @@ public final class MpvUtil {
         config.put("decode", decode);
         config.put("live", live);
         config.put("user-options", Map.copyOf(MpvConfigFiles.readGlobalOptions()));
-        config.put("user-config", MpvConfigFiles.read()); // include edits inside named profiles
-        config.put("video-prefer", VideoSetting.isEnabled());
-        config.put("render", PlayerSetting.getRender());
+        config.put("user-config-enabled", MpvConfigFiles.isEnabled());
+        config.put("user-config", MpvConfigFiles.isEnabled() ? MpvConfigFiles.read() : "");
+        config.put("video-effects", VideoSetting.isEnabled());
         config.put("gpu-next", PlayerSetting.isMpvGpuNext());
-        config.put("vulkan", PlayerSetting.isMpvVulkan());
+        config.put("deband", PlayerSetting.isMpvDeband());
+        config.put("audio-language", PlayerSetting.getAudioLanguage());
         config.put("buffer", PlayerSetting.getBuffer());
         config.put("low-latency", PlayerSetting.isLiveLowLatency());
-        config.put("preload", PreloadSetting.isPreload());
         config.put("ua", getDefaultUserAgent());
         config.put("languages", LangUtil.getPreferredTextLanguageList());
         return Map.copyOf(config);
@@ -85,25 +80,20 @@ public final class MpvUtil {
     /** 2 is an internal live zero-copy candidate, never a persisted/user-selected decode mode. */
     public static int internalDecode(int decode, boolean live) {
         if (!isAutomaticCandidate(decode, live)) return decode;
-        return MpvAutomaticOutputPolicy.acceptsUserOptions(MpvConfigFiles.readGlobalOptions(),
-                PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+        return 2;
     }
 
     private static boolean isAutomaticCandidate(int decode, boolean live) {
-        return MpvAutomaticOutputPolicy.direct(live, decode == 1, VideoSetting.isEnabled(),
-                false, false, PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE);
-    }
-
-    private static int internalDecode(int decode, boolean live, Map<String, String> userOptions) {
-        return isAutomaticCandidate(decode, live)
-                && MpvAutomaticOutputPolicy.acceptsUserOptions(userOptions,
-                        PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+        // gpu-next needs its own VO; never route a live item through mediacodec_embed then.
+        return !PlayerSetting.isMpvGpuNext() && !PlayerSetting.isMpvDeband() && !MpvConfigFiles.isEnabled()
+                && MpvAutomaticOutputPolicy.direct(
+                live, decode == 1, VideoSetting.isEnabled(), false, false, true);
     }
 
     public static MpvPlayer buildPlayer(int decode, boolean live, Player.Listener listener) {
         // The eligibility check and config builder must see the same parsed mpv.conf snapshot.
         Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
-        int internal = internalDecode(decode, live, userOptions);
+        int internal = internalDecode(decode, live);
         MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(internal).setLive(live)
                 .setConfig(buildConfig(internal, live, userOptions)).build();
         player.addListener(listener);
@@ -142,7 +132,9 @@ public final class MpvUtil {
         MpvConfigFiles.ensureAndroidFontsConfig(cacheDir);
         builder.addConfigDirectory(configDir)
                 .addAndroidFontConfig(configDir, cacheDir)
-                .addAndroidDefaults(getVideoOutputDriver(userOptions, decode), cacheDir);
+                .addAndroidDefaults(getVideoOutputDriver(userOptions, decode), cacheDir)
+                .addPreInitStringOption("config", MpvConfigFiles.isEnabled() ? "yes" : "no")
+                .addPreInitStringOption("load-scripts", MpvConfigFiles.isEnabled() ? "yes" : "no");
     }
 
     private static void addTlsCaFile(MpvPlayerConfig.Builder builder) {
@@ -182,7 +174,6 @@ public final class MpvUtil {
             addVideoOutputOptions(builder, userOptions);
         }
         addStreamOptions(builder, userOptions, live);
-        addPreloadOptions(builder, userOptions, live);
     }
 
     private static void addStreamOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
@@ -230,6 +221,13 @@ public final class MpvUtil {
                 builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
             }
         }
+        if (PlayerSetting.isMpvDeband() && !userOptions.containsKey("deband")) {
+            builder.addPreInitStringOption("deband", "yes");
+        }
+        String audioLanguages = LangUtil.getPreferredAudioLanguageList();
+        if (!audioLanguages.isEmpty() && !userOptions.containsKey("alang")) {
+            builder.addPreInitStringOption("alang", audioLanguages);
+        }
         if (!userOptions.containsKey("stream-lavf-o")) {
             builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
         }
@@ -242,52 +240,17 @@ public final class MpvUtil {
     }
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
-        if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
-        // Vulkan and gpu-next are alternate choices. Vulkan keeps vo=gpu with an androidvk context.
-        if (PlayerSetting.isMpvVulkan() && isVulkanAvailable()) {
-            return userOptions.containsKey("vo") ? null : VALUE_GPU;
-        }
         if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
+        if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
         return userOptions.containsKey("vo") ? null : VALUE_GPU;
     }
 
     private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
-        // Match mpv-android: Android GLES context is required for vo=gpu, otherwise audio-only.
-        if (PlayerSetting.isMpvVulkan() && isVulkanAvailable()) {
-            builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN)
-                    .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
-            return;
-        }
-        if (VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))) {
-            if (isVulkanAvailable()) {
-                if (!userOptions.containsKey(OPT_GPU_CONTEXT)) builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
-            } else {
-                // A copied mpv.conf must not bypass the build/device capability guard.
-                builder.addPreInitStringOption(OPT_GPU_API, VALUE_OPENGL)
-                        .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
-                        .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
-            }
-            return;
-        }
-        if (!userOptions.containsKey(OPT_GPU_CONTEXT)) {
-            builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID);
-        }
-        if (!userOptions.containsKey(OPT_OPENGL_ES)
-                && !VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))) {
-            builder.addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
-        }
-    }
-
-    private static void addPreloadOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
-        // Persisting a moving live window wastes flash and can contend with decoder I/O.
-        if (live || !PreloadSetting.isPreload()) return;
-        File mediaCache = new File(Path.mpvCache(), "media");
-        if (!userOptions.containsKey("cache")) builder.addPreInitStringOption("cache", "yes");
-        if (!userOptions.containsKey("cache-on-disk")) builder.addPreInitStringOption("cache-on-disk", "yes");
-        if (!userOptions.containsKey("demuxer-cache-dir")) {
-            builder.addPreInitStringOption("demuxer-cache-dir", mediaCache.getAbsolutePath());
-        }
-        // cache-secs and demuxer-max-bytes stay on the playback buffer. Preload only places the disk cache.
+        // GLES is the only supported output: it keeps MediaCodec zero-copy and avoids the
+        // experimental Vulkan path, which cannot use the AImageReader hardware decoder.
+        builder.addPreInitStringOption(OPT_GPU_API, VALUE_OPENGL)
+                .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
+                .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {
@@ -310,15 +273,6 @@ public final class MpvUtil {
         return Util.constrainValue(DEFAULT_SUB_POS - position * 100.0, MIN_SUB_POS, MAX_SUB_POS);
     }
 
-    public static boolean isVulkanSupported() {
-        return isVulkanAvailable();
-    }
-
-    private static boolean isVulkanAvailable() {
-        PackageManager manager = App.get().getPackageManager();
-        return com.fongmi.media3.compat.BuildConfig.LIBMPV_VULKAN
-                && manager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_2);
-    }
 
     private static double getSubtitleScale() {
         float textSize = PlayerSetting.getSubtitleTextSize();

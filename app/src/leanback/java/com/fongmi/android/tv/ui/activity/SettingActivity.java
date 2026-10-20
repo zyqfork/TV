@@ -278,12 +278,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void setSize(View view) {
-        new MaterialAlertDialogBuilder(this).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
-            mBinding.sizeText.setText(size[which]);
-            PlayerSetting.putSize(which);
-            RefreshEvent.size();
-            dialog.dismiss();
-        }).show();
+        int next = (PlayerSetting.getSize() + 1) % size.length;
+        PlayerSetting.putSize(next);
+        mBinding.sizeText.setText(size[next]);
+        RefreshEvent.size();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

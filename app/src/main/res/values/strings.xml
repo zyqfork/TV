@@ -179,13 +179,12 @@
     <string name="player_preload_diagnostics_allowed">Ready</string>
     <string name="player_preload_diagnostics_blocked">Blocked</string>
     <string name="player_preload_diagnostics_reset">Reset</string>
-    <string name="player_mpv_conf">mpv.conf</string>
-    <string name="player_mpv_gpu_next">gpu-next</string>
-    <string name="player_mpv_vulkan">vulkan</string>
+    <string name="player_mpv_conf">Edit mpv.conf</string>
+    <string name="player_mpv_gpu_next">gpu-next renderer</string>
     <string name="player_mpv_conf_import_success">Imported mpv.conf</string>
     <string name="player_mpv_conf_import_failed">Failed to import mpv.conf</string>
     <string name="player_mpv_conf_save_failed">Failed to save mpv.conf</string>
-    <string name="player_mpv_conf_conflict">These options are managed by the playback mode and will be overridden: %1$s</string>
+    <string name="player_mpv_conf_conflict">These options remain managed by the Android playback or subtitle settings: %1$s</string>
     <string name="player_ua">UA</string>
 
     <!-- Danmaku -->
@@ -209,7 +208,7 @@
     <string name="subtitle_search_token_hint">Token</string>
     <string name="player_subtitle_assrt">Subtitle search token</string>
     <string name="player_subtitle_font">Subtitle font</string>
-    <string name="player_mpv_conf_precedence">User options override Android defaults. Playback mode still owns vo/hwdec. Subtitle language (slang) and sub-font follow the in-app subtitle settings. gpu-next and Vulkan override vo/gpu-api while enabled.</string>
+    <string name="player_mpv_conf_precedence">Custom options are read only when enabled in Advanced playback. Editing does not enable them. Android uses OpenGL/EGL; subtitle language and font follow the app. Custom filters can increase load or affect synchronization.</string>
     <string name="player_volume_gain_on">Volume gain 1.5x</string>
     <string name="player_volume_gain_off">Volume gain off</string>
     <string name="subtitle_font_default">System default</string>
@@ -524,4 +523,32 @@
     <string name="error_update_apk">Downloaded update is invalid. Please download it again.</string>
     <string name="error_update_permission">Allow installation from this app before installing the update.</string>
     <string name="error_update_installer">Cannot open the system installer. The app has not been closed.</string>
+    <string name="player_advanced">Advanced playback</string>
+    <string name="player_decode_mode">Decoder preference</string>
+    <string name="player_decode_auto">Automatic (hardware first)</string>
+    <string name="player_decode_software">Prefer software decoding</string>
+    <string name="player_decode_mixed">Separate live / VOD choices</string>
+    <string name="player_buffer_standard">Standard (5-second target)</string>
+    <string name="player_buffer_large">Larger (10-second target)</string>
+    <string name="player_audio_output">Audio output (Exo)</string>
+    <string name="player_audio_auto">Automatic (PCM while effects are active)</string>
+    <string name="player_audio_pcm">Compatible PCM</string>
+    <string name="player_custom_config">Use custom mpv configuration</string>
+    <string name="player_next_preload">Preload next episode (unmetered only)</string>
+    <string name="player_playback_info">Video stats overlay</string>
+    <string name="player_restore_defaults">Restore recommended playback settings</string>
+    <string name="player_restore_scope">Applies to the next playback. Restores Exo, automatic decoding, standard buffering and automatic audio output; disables preload and custom mpv configuration. Does not delete history, subscriptions, accounts, subtitle settings, personal effects or mpv.conf.</string>
+    <string name="player_info_empty">No active playback</string>
+    <string name="player_info_drops">Dropped frames</string>
+    <string name="player_info_drops_short">dropped</string>
+    <string name="player_audio_language">Audio language</string>
+    <string name="player_audio_lang_follow">Follow source</string>
+    <string name="player_audio_lang_mandarin">Mandarin</string>
+    <string name="player_audio_lang_cantonese">Cantonese</string>
+    <string name="player_audio_lang_english">English</string>
+    <string name="player_max_quality">Max quality (Exo)</string>
+    <string name="player_quality_auto">Automatic</string>
+    <string name="player_quality_1080">1080p</string>
+    <string name="player_quality_4k">4K</string>
+    <string name="player_mpv_deband">Deband (MPV)</string>
 </resources>

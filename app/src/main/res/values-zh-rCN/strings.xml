@@ -180,13 +180,12 @@
     <string name="player_preload_diagnostics_allowed">可用</string>
     <string name="player_preload_diagnostics_blocked">已阻止</string>
     <string name="player_preload_diagnostics_reset">重置</string>
-    <string name="player_mpv_conf">mpv.conf</string>
-    <string name="player_mpv_gpu_next">gpu-next</string>
-    <string name="player_mpv_vulkan">vulkan</string>
+    <string name="player_mpv_conf">编辑 mpv.conf</string>
+    <string name="player_mpv_gpu_next">gpu-next 渲染</string>
     <string name="player_mpv_conf_import_success">已导入 mpv.conf</string>
     <string name="player_mpv_conf_import_failed">导入 mpv.conf 失败</string>
     <string name="player_mpv_conf_save_failed">保存 mpv.conf 失败</string>
-    <string name="player_mpv_conf_conflict">以下选项由播放模式管理并会被覆盖：%1$s</string>
+    <string name="player_mpv_conf_conflict">以下选项仍由 Android 播放或字幕设置管理：%1$s</string>
     <string name="player_ua">UA</string>
 
     <!-- Danmaku -->
@@ -210,7 +209,7 @@
     <string name="subtitle_search_token_hint">Token</string>
     <string name="player_subtitle_assrt">字幕搜索 Token</string>
     <string name="player_subtitle_font">字幕字体</string>
-    <string name="player_mpv_conf_precedence">mpv.conf 的用户选项优先于应用默认值。播放模式仍决定 vo/hwdec。字幕语言 slang 和字体 sub-font 以应用内字幕设置为准。打开 gpu-next 或 Vulkan 时会覆盖对应的 vo/gpu-api。</string>
+    <string name="player_mpv_conf_precedence">仅在高级播放设置中启用后读取；编辑不会自动开启。Android 固定使用 OpenGL/EGL，字幕语言与字体以应用设置为准。自定义滤镜可能增加负载或影响同步。</string>
     <string name="player_volume_gain_on">音量增益 1.5x</string>
     <string name="player_volume_gain_off">音量增益已关闭</string>
     <string name="subtitle_font_default">系统默认</string>
@@ -511,4 +510,32 @@
     <string name="error_update_apk">更新安装包无效，请重新下载</string>
     <string name="error_update_permission">请允许此应用安装未知来源应用后再安装更新</string>
     <string name="error_update_installer">无法打开系统安装器，当前应用未退出</string>
+    <string name="player_advanced">高级播放设置</string>
+    <string name="player_decode_mode">解码偏好</string>
+    <string name="player_decode_auto">自动（硬解优先）</string>
+    <string name="player_decode_software">软解优先</string>
+    <string name="player_decode_mixed">直播／点播分别设置</string>
+    <string name="player_buffer_standard">标准（目标 5 秒）</string>
+    <string name="player_buffer_large">较大（目标 10 秒）</string>
+    <string name="player_audio_output">音频输出（Exo）</string>
+    <string name="player_audio_auto">自动（使用音效时为 PCM）</string>
+    <string name="player_audio_pcm">兼容 PCM</string>
+    <string name="player_custom_config">使用自定义 MPV 配置</string>
+    <string name="player_next_preload">下一集预加载（仅非计费网络）</string>
+    <string name="player_playback_info">视频信息浮层</string>
+    <string name="player_restore_defaults">恢复推荐播放配置</string>
+    <string name="player_restore_scope">下次播放生效：恢复 Exo、自动解码、标准缓冲及自动音频输出，关闭预加载和自定义 MPV 配置。不删除历史、订阅、账号、字幕设置、个人音画调节或 mpv.conf 文件。</string>
+    <string name="player_info_empty">当前没有播放内容</string>
+    <string name="player_info_drops">丢帧</string>
+    <string name="player_info_drops_short">丢帧</string>
+    <string name="player_audio_language">音轨语言</string>
+    <string name="player_audio_lang_follow">跟随片源</string>
+    <string name="player_audio_lang_mandarin">国语</string>
+    <string name="player_audio_lang_cantonese">粤语</string>
+    <string name="player_audio_lang_english">英语</string>
+    <string name="player_max_quality">清晰度上限（Exo）</string>
+    <string name="player_quality_auto">自动</string>
+    <string name="player_quality_1080">1080p</string>
+    <string name="player_quality_4k">4K</string>
+    <string name="player_mpv_deband">去色带（MPV）</string>
 </resources>

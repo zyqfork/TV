@@ -66,11 +66,8 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
     }
 
     private void selectDebug(View view) {
-        PlaybackActivity activity = getPlaybackActivity();
-        if (activity == null) return;
-        activity.toggleDebugView();
-        view.setSelected(activity.isDebugViewVisible());
         dismiss();
+        PlayerSetting.putPlaybackStatsVisible(!PlayerSetting.isPlaybackStatsVisible());
     }
 
     private void selectOther(View view) {
@@ -81,8 +78,6 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
 
     private void selectEngine(int engine) {
         PlaybackActivity activity = getPlaybackActivity();
-        boolean changed = engine != getCurrentEngine(player);
-        if (changed && activity != null) activity.hideDebugView();
         // Always persist so settings + live/vod paths stay aligned.
         PlayerSetting.putEngine(engine);
         if (player != null) player.setEngine(engine);
@@ -95,7 +90,6 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
         PlaybackActivity activity = getPlaybackActivity();
         binding.exo.setSelected(engine == PlayerSetting.ENGINE_EXO);
         binding.mpv.setSelected(engine == PlayerSetting.ENGINE_MPV);
-        binding.debug.setSelected(activity != null && activity.isDebugViewVisible());
     }
 
     private View getSelectedView() {

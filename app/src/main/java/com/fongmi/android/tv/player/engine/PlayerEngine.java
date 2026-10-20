@@ -18,6 +18,8 @@ public interface PlayerEngine {
 
     Player getPlayer();
 
+    default String getVideoDecoderDescription() { return ""; }
+
     default PlayerEffect getEffect() {
         return PlayerEffect.NONE;
     }

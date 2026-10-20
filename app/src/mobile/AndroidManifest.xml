@@ -130,6 +130,10 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout" />
 
         <activity
+            android:name=".ui.activity.AdvancedPlaybackActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
             android:name=".ui.activity.NetworkStorageActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout" />
 

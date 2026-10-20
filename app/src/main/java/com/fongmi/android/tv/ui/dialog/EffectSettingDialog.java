@@ -219,7 +219,6 @@ public final class EffectSettingDialog {
 
         @Override
         void apply() {
-            if (AudioSetting.hasEffect(2)) PlayerSetting.putAudioPassThrough(false);
             if (player != null) player.refreshAudioSetting();
         }
     }

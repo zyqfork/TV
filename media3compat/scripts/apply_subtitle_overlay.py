@@ -6,7 +6,7 @@ subtitle bitmap/JNI and VO redraw patches are intentionally no longer installed:
 automatic direct output is restricted to subtitle-free live playback, and mpv's
 normal GPU/libass path handles every selected subtitle.
 
-Four independent patches remain. None of them is a workaround for the RK3588
+The following independent patches remain. None of them is a workaround for the RK3588
 C2/MPP buffer-supply stall; that defect lives in the container's
 /vendor/lib/libcodec2_rk_component.so and is fixed there:
 
@@ -15,6 +15,7 @@ C2/MPP buffer-supply stall; that defect lives in the container's
   3. video-frame-info/pts                - a real VO frame signal for first-frame
   4. MediaCodec inclusive crop origin    - top-edge padding row fix (white line)
   5. real texture storage dimensions     - GPU sampling must use the imported size
+  6. Android monotonic clock             - match AudioTimestamp.nanoTime's clock
 """
 import argparse
 import shutil
@@ -62,6 +63,8 @@ patch(mpv / 'player/loadfile.c',
         goto err_out;''', 'FONGMI_SUBTITLE_ABORT_PUBLISH')
 patch(jni / 'Android.mk', '\tthumbnail.cpp',
       '\tthumbnail.cpp \\\n\tandroid_command_jni.cpp', 'android_command_jni.cpp')
+patch(jni / 'Android.mk', 'LOCAL_LDLIBS    := -llog -latomic',
+      'LOCAL_LDLIBS    := -llog -latomic -ldl', '-latomic -ldl')
 # Expose the VO's actual current frame timestamp, not audio-led time-pos or an
 # unchanged width/height. This is a native VO-frame signal, not a physical display measurement.
 patch(mpv / 'player/command.c',
@@ -102,6 +105,14 @@ patch(ffmpeg / 'libavcodec/mediacodecdec_common.c',
         frame->crop_top = s->crop_top;
     }
     frame->format = avctx->pix_fmt;''', 'FONGMI_MEDIACODEC_FRAME_CROP')
+patch(mpv / 'video/out/hwdec/hwdec_aimagereader.c',
+      '''    if (!ra_is_gl(hw->ra_ctx->ra))
+        return -1;''',
+      '''    if (!ra_is_gl(hw->ra_ctx->ra)) {
+        // FONGMI_IMAGE_READER_GL_ONLY: fail before any AHB/Vulkan import.
+        MP_VERBOSE(hw, "AImageReader interop requires OpenGL/EGL; Vulkan is not implemented.\\n");
+        return -1;
+    }''', 'FONGMI_IMAGE_READER_GL_ONLY')
 # The EGLImage covers the whole imported AHardwareBuffer, which is usually taller or
 # wider than the decoder's visible rectangle. Normalize texture coordinates against
 # that real storage size; mpv applies AVFrame params.crop on top of it.
@@ -122,4 +133,10 @@ patch(mpv / 'video/out/hwdec/hwdec_aimagereader.c',
 
     return 0;
 }''', 'FONGMI_IMAGE_STORAGE_SIZE')
-print('PASS pinned async JNI, cancellation, VO-frame signal, crop origin and real texture storage; no bitmap bridge')
+# AudioTimestamp.nanoTime uses MONOTONIC; RAW's different epoch/rate skews AO latency.
+patch(mpv / 'osdep/timer-linux.c',
+      '#ifdef CLOCK_MONOTONIC_RAW',
+      '''// FONGMI_ANDROID_MONOTONIC: AudioTrack timestamps must share our clock domain.
+#if defined(CLOCK_MONOTONIC_RAW) && !defined(__ANDROID__)''',
+      'FONGMI_ANDROID_MONOTONIC')
+print('PASS pinned async JNI, cancellation, VO-frame signal, crop origin, real texture storage and Android monotonic clock; no bitmap bridge')

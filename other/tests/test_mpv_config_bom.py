@@ -8,6 +8,12 @@ ROOT = Path(__file__).resolve().parents[2]
 STUBS = {
     'android/content/Context.java': 'package android.content; public class Context {}',
     'android/net/Uri.java': 'package android.net; public class Uri {}',
+    'com/github/catvod/utils/Prefers.java': '''package com.github.catvod.utils;
+import java.util.*;
+public class Prefers { static Map<String,Boolean> values = new HashMap<>();
+ public static boolean getBoolean(String k) {return values.getOrDefault(k,false);}
+ public static void put(String k, Object v) {values.put(k,(Boolean)v);}
+}''',
     'com/fongmi/android/tv/utils/FileUtil.java': '''package com.fongmi.android.tv.utils;
 import android.content.Context; import android.net.Uri; import java.io.*;
 public class FileUtil {
@@ -24,7 +30,7 @@ public class Path {
 }''',
     'com/fongmi/android/tv/player/mpv/MpvUtil.java': '''package com.fongmi.android.tv.player.mpv;
 import java.util.*;
-public class MpvUtil { public static List<String> getManagedOptionNames() { return List.of("vo", "hwdec"); } }''',
+public class MpvUtil { public static List<String> getManagedOptionNames() { return List.of("gpu-api", "gpu-context", "opengl-es", "slang", "sub-font"); } }''',
     'ConfigProbe.java': r'''import com.fongmi.android.tv.player.mpv.MpvConfigFiles;
 import androidx.media3.mpvplayer.MpvAutomaticOutputPolicy;
 import java.nio.file.*; import java.util.*;
@@ -35,13 +41,16 @@ public class ConfigProbe {
   Files.writeString(MpvConfigFiles.file().toPath(), content);
   Map<String,String> actual = MpvConfigFiles.readGlobalOptions();
   check("gpu".equals(actual.get("vo")), "UTF-8 BOM before first vo ignored");
-  check(!MpvAutomaticOutputPolicy.acceptsUserOptions(actual, false, false),
-      "BOM-prefixed vo=gpu silently bypassed automatic-output veto");
+  check(MpvConfigFiles.isEnabled(), "legacy custom configuration must be preserved");
+  MpvConfigFiles.setEnabled(false);
+  check(MpvConfigFiles.readGlobalOptions().isEmpty(), "disabled configuration leaked Java options");
+  check(Files.readString(MpvConfigFiles.file().toPath()).equals(content), "disabling deleted the file");
+  MpvConfigFiles.setEnabled(true);
   check("no".equals(actual.get("hwdec")), "[default] no-hwdec normalization");
   check("Foo#Bar".equals(actual.get("user-agent")), "quoted # consumed as comment");
   check(actual.size() == 3, "profile leaked into global options: " + actual);
-  check(MpvConfigFiles.findInterfaceManagedOptions(content).equals(List.of("vo", "hwdec")),
-      "warning disagrees with applied options");
+  check(MpvConfigFiles.findInterfaceManagedOptions(content).isEmpty(), "vo/hwdec are expert options");
+  check(MpvConfigFiles.findInterfaceManagedOptions("[default]\ngpu-api=vulkan").equals(List.of("gpu-api")), "platform-owned option warning");
   Files.writeString(MpvConfigFiles.file().toPath(), "vo=mediacodec_embed\nhwdec=mediacodec\n");
   check("mediacodec_embed".equals(MpvConfigFiles.readGlobalOptions().get("vo")), "plain config");
   System.out.println("PASS production mpv.conf BOM / quoted comments / profiles / no- and warning parity");

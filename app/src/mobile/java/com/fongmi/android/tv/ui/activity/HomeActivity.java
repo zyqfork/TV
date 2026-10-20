@@ -128,8 +128,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             case 1 -> SettingFragment.newInstance();
             case 2 -> SettingPlayerFragment.newInstance();
             case 3 -> SettingDanmakuFragment.newInstance();
-            case 4 -> SettingPreloadFragment.newInstance();
-            case 5 -> SettingDecodeFragment.newInstance();
+            case 4, 5 -> SettingPlayerFragment.newInstance(); // old navigation positions
             default -> null;
         });
         if (savedInstanceState == null) change(0);

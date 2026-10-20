@@ -82,7 +82,7 @@ public final class ExoPlayerEffect implements PlayerEffect {
 
     private boolean isVideoEffectUnsupported() {
         MediaItem item = player == null ? null : player.getCurrentMediaItem();
-        return PlayerSetting.isTunnel() || (item != null && item.localConfiguration != null
+        return (item != null && item.localConfiguration != null
                 && item.localConfiguration.drmConfiguration != null) || isHdr();
     }
 
@@ -104,7 +104,7 @@ public final class ExoPlayerEffect implements PlayerEffect {
 
     @Override
     public boolean supportsAudioEffect() {
-        return player != null && audioProcessorInstalled && !PlayerSetting.isAudioPassThrough() && !audioFailed;
+        return player != null && !audioFailed;
     }
 
     @Override
@@ -114,13 +114,12 @@ public final class ExoPlayerEffect implements PlayerEffect {
 
     @Override
     public int getAudioEffectError() {
-        if (PlayerSetting.isAudioPassThrough() || !audioProcessorInstalled) return R.string.error_audio_effect_passthrough;
         return audioFailed ? R.string.error_audio_effect_apply : 0;
     }
 
     @Override
     public void applyAudioEffect() {
-        if (player == null || !audioProcessorInstalled || PlayerSetting.isAudioPassThrough()) {
+        if (player == null || !audioProcessorInstalled) {
             audioController.release();
             return;
         }

@@ -530,6 +530,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     @Override
+    protected boolean showPlaybackStats() {
+        return isFullscreen();
+    }
+
+    @Override
     public boolean isLivePlayback() {
         return service() != null && isOwner() && player().isLive();
     }

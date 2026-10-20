@@ -46,10 +46,8 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
     private DecimalFormat format;
     private String[] background;
     private String[] caption;
-    private String[] render;
     private String[] scale;
     private String[] engine;
-    private String[] http;
     private String[] latency;
 
     private final ActivityResultLauncher<Intent> fontLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> FileChooser.getUri(result, this::importFont));
@@ -70,13 +68,9 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
         format = new DecimalFormat("0.#");
         mBinding.speedText.setText(format.format(PlayerSetting.getSpeed()));
         mBinding.adblockText.setText(Setting.getSwitch(Setting.isAdblock()));
-        mBinding.mpvVulkanText.setText(Setting.getSwitch(PlayerSetting.isMpvVulkan()));
-        mBinding.mpvGpuNextText.setText(Setting.getSwitch(PlayerSetting.isMpvGpuNext()));
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         mBinding.backgroundText.setText((background = ResUtil.getStringArray(R.array.select_background))[PlayerSetting.getBackground()]);
-        mBinding.bufferText.setText(getString(R.string.player_buffer_value, PlayerSetting.getBuffer()));
-        mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[PlayerSetting.getHttp()]);
         mBinding.liveLatencyText.setText((latency = ResUtil.getStringArray(R.array.select_live_latency))[PlayerSetting.getLiveLatency()]);
         bindSubtitleLabels();
     }
@@ -102,10 +96,6 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
     @Override
     protected void initEvent() {
         mBinding.engine.setOnClickListener(this::setEngine);
-        mBinding.mpvConf.setOnClickListener(this::onMpvConf);
-        mBinding.mpvGpuNext.setOnClickListener(this::setMpvGpuNext);
-        mBinding.mpvVulkan.setOnClickListener(this::setMpvVulkan);
-        mBinding.render.setOnClickListener(this::setRender);
         mBinding.scale.setOnClickListener(this::onScale);
         mBinding.caption.setOnClickListener(this::setCaption);
         mBinding.caption.setOnLongClickListener(this::onCaption);
@@ -114,10 +104,7 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
         mBinding.videoEffect.setOnClickListener(view -> EffectSettingDialog.showVideo(requireActivity()));
         mBinding.background.setOnClickListener(this::onBackground);
         mBinding.adblock.setOnClickListener(this::setAdblock);
-        mBinding.buffer.setOnClickListener(this::setBuffer);
-        mBinding.http.setOnClickListener(this::setHttp);
         mBinding.liveLatency.setOnClickListener(this::setLiveLatency);
-        mBinding.preload.setOnClickListener(this::onPreload);
         mBinding.decode.setOnClickListener(this::onDecode);
         mBinding.subtitleAssrt.setOnClickListener(this::onSubtitleAssrt);
         mBinding.subtitleFont.setOnClickListener(this::onSubtitleFont);
@@ -135,30 +122,13 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
     private void setVisible() {
         boolean mpv = PlayerSetting.isMpv();
         boolean exo = !mpv;
-        boolean vulkan = mpv && MpvUtil.isVulkanSupported();
-        mBinding.mpvConf.setVisibility(mpv ? View.VISIBLE : View.GONE);
-        mBinding.mpvVulkan.setVisibility(vulkan ? View.VISIBLE : View.GONE);
-        mBinding.mpvGpuNext.setVisibility(mpv ? View.VISIBLE : View.GONE);
         mBinding.decode.setVisibility(View.VISIBLE);
-        mBinding.decodeText.setVisibility(mpv ? View.VISIBLE : View.GONE);
-        if (mpv) bindMpvDecodeText();
+        mBinding.decodeText.setVisibility(View.GONE);
         mBinding.adblock.setVisibility(exo ? View.VISIBLE : View.GONE);
-        mBinding.buffer.setVisibility(View.VISIBLE);
-        mBinding.http.setVisibility(exo ? View.VISIBLE : View.GONE);
         mBinding.caption.setVisibility(PlayerSetting.hasCaption() ? View.VISIBLE : View.GONE);
     }
 
-    private void setBuffer(View view) {
-        int next = PlayerSetting.getBuffer() >= 15 ? 1 : PlayerSetting.getBuffer() + 1;
-        PlayerSetting.putBuffer(next);
-        mBinding.bufferText.setText(getString(R.string.player_buffer_value, next));
-    }
 
-    private void setHttp(View view) {
-        int index = (PlayerSetting.getHttp() + 1) % http.length;
-        PlayerSetting.putHttp(index);
-        mBinding.httpText.setText(http[index]);
-    }
 
     private void setLiveLatency(View view) {
         int index = (PlayerSetting.getLiveLatency() + 1) % latency.length;
@@ -213,40 +183,14 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
         MpvConfDialog.show(this);
     }
 
-    private void setMpvGpuNext(View view) {
-        PlayerSetting.putMpvGpuNext(!PlayerSetting.isMpvGpuNext());
-        bindMpvOutputSwitches();
-    }
 
-    private void setMpvVulkan(View view) {
-        PlayerSetting.putMpvVulkan(!PlayerSetting.isMpvVulkan());
-        bindMpvOutputSwitches();
-    }
 
-    private void bindMpvOutputSwitches() {
-        mBinding.mpvGpuNextText.setText(Setting.getSwitch(PlayerSetting.isMpvGpuNext()));
-        mBinding.mpvVulkanText.setText(Setting.getSwitch(PlayerSetting.isMpvVulkan()));
-    }
 
-    private void bindMpvDecodeText() {
-        int decode = PlayerSetting.getDecode(false, PlayerSetting.ENGINE_MPV);
-        mBinding.decodeText.setText(decode == 0 ? R.string.decode_soft : R.string.decode_hard);
-    }
 
-    private void setRender(View view) {
-        int index = (PlayerSetting.getRender() + 1) % render.length;
-        if (!PlayerSetting.putRender(index)) {
-            com.fongmi.android.tv.utils.Notify.show(R.string.error_tunnel_requires_surface);
-            return;
-        }
-        setPlaybackModeText();
-    }
 
     private void setPlaybackModeText() {
         engine = ResUtil.getStringArray(R.array.select_engine);
-        render = ResUtil.getStringArray(R.array.select_render);
         mBinding.engineText.setText(engine[PlayerSetting.getEngine()]);
-        mBinding.renderText.setText(render[PlayerSetting.getRender()]);
     }
 
     private void onScale(View view) {
@@ -290,19 +234,9 @@ public class SettingPlayerFragment extends BaseFragment implements SpeedListener
         mBinding.adblockText.setText(Setting.getSwitch(Setting.isAdblock()));
     }
 
-    private void onPreload(View view) {
-        ((HomeActivity) requireActivity()).change(4);
-    }
 
     private void onDecode(View view) {
-        if (PlayerSetting.isMpv()) {
-            int next = PlayerSetting.getDecode(false, PlayerSetting.ENGINE_MPV) == 0 ? 1 : 0;
-            PlayerSetting.putDecode(false, PlayerSetting.ENGINE_MPV, next);
-            PlayerSetting.putDecode(true, PlayerSetting.ENGINE_MPV, next);
-            bindMpvDecodeText();
-            return;
-        }
-        ((HomeActivity) requireActivity()).change(5);
+        com.fongmi.android.tv.ui.activity.AdvancedPlaybackActivity.start(requireActivity());
     }
 
     @Override

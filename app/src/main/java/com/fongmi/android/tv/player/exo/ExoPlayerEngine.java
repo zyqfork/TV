@@ -41,13 +41,16 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public String getVideoDecoderDescription() { return session.videoDecoderDescription(); }
+
+    @Override
     public PlayerEffect getEffect() {
         return session.effect();
     }
 
     @Override
     public boolean requiresAudioEffectRebuild() {
-        return !session.effect().isAudioProcessorInstalled();
+        return session.effect().isAudioProcessorInstalled() == ExoUtil.isAudioPassThroughEnabled();
     }
 
     @Override

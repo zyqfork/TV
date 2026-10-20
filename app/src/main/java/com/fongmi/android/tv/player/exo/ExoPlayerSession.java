@@ -49,8 +49,7 @@ final class ExoPlayerSession {
     ExoPlayerSession(int decode, boolean live, Player.Listener listener) {
         this.decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
         this.live = live;
-        if (AudioSetting.hasEffect(8)) PlayerSetting.putAudioPassThrough(false);
-        this.effect = new ExoPlayerEffect(!PlayerSetting.isAudioPassThrough());
+        this.effect = new ExoPlayerEffect(!ExoUtil.isAudioPassThroughEnabled());
         this.player = ExoUtil.buildPlayer(this.decode, listener, effect.getAudioProcessor(), live, this::onVideoDecoderInitialized);
         this.effect.setPlayer(player);
         this.player.addListener(effectListener);
@@ -61,6 +60,10 @@ final class ExoPlayerSession {
 
     ExoPlayer player() {
         return player;
+    }
+
+    String videoDecoderDescription() {
+        return player.getVideoFormat() == null || activeVideoDecoder == null ? "" : activeVideoDecoder;
     }
 
     /**
