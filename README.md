@@ -24,6 +24,32 @@
 
 ---
 
+## 从源码构建
+
+需要 JDK 21、Android SDK（compileSdk 37、NDK `29.0.14206865`、CMake `3.22.1`）、Docker、git 和 Python 3.8+。
+首次构建会用 Docker 从固定源码编译 libmpv/FFmpeg，并把锁定版本的 FongMi/media 发布到 mavenLocal，耗时会比较久。
+
+```bash
+git clone --recursive https://github.com/zyqfork/TV
+cd TV
+export ANDROID_HOME=/path/to/Android/Sdk
+./other/tools/build-apk.sh
+```
+
+产物：
+- `app/build/outputs/apk/leanbackArm64_v8a/release/`
+- `app/build/outputs/apk/mobileArm64_v8a/release/`
+
+说明：
+- `local.properties` 不提交。脚本会在缺失时自动生成，SDK 路径取自 `ANDROID_HOME`，
+  签名默认用本地 debug keystore（首次会自动创建）。要发布可分发 APK，请用
+  `SIGN_STORE`、`SIGN_ALIAS`、`SIGN_STORE_PASSWORD`、`SIGN_KEY_PASSWORD` 指定自己的密钥。
+- `ABI=armeabi-v7a ./other/tools/build-apk.sh` 构建 32 位版本。
+- 也可以直接用 Android Studio 打开；仓库自带的 CI（`.github/workflows/source-build.yml`）
+  会完成同样的准备步骤。
+
+---
+
 ## 專案架構
 
 | 項目      | 值                             |
