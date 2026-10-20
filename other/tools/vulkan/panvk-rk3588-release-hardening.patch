@@ -1,0 +1,103 @@
+--- a/src/panfrost/vulkan/panvk_instance.c
++++ b/src/panfrost/vulkan/panvk_instance.c
+@@ -113,7 +113,8 @@
+ #ifdef VK_USE_PLATFORM_DISPLAY_KHR
+    .KHR_get_display_properties2 = true,
+ #endif
+-#ifdef PANVK_USE_WSI_PLATFORM
++/* Android's system loader owns surfaces and swapchains, not this ICD. */
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+    .KHR_get_surface_capabilities2 = true,
+    .KHR_surface = true,
+    .KHR_surface_maintenance1 = true,
+@@ -135,7 +136,7 @@
+ #ifdef VK_USE_PLATFORM_XLIB_KHR
+    .KHR_xlib_surface = true,
+ #endif
+-#ifdef VK_USE_PLATFORM_ANDROID_KHR
++#if defined(VK_USE_PLATFORM_ANDROID_KHR) && !defined(HAVE_ANDROID_PLATFORM)
+    .KHR_android_surface = true,
+ #endif
+ #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+--- a/src/panfrost/vulkan/panvk_vX_physical_device.c
++++ b/src/panfrost/vulkan/panvk_vX_physical_device.c
+@@ -122,7 +122,7 @@
+       .KHR_shader_untyped_pointers = PAN_ARCH >= 9,
+       .KHR_spirv_1_4 = true,
+       .KHR_storage_buffer_storage_class = true,
+-#ifdef PANVK_USE_WSI_PLATFORM
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+       .KHR_incremental_present = true,
+       .KHR_present_id = true,
+       .KHR_present_id2 = true,
+@@ -205,7 +205,7 @@
+       .EXT_pipeline_creation_cache_control = true,
+       .EXT_pipeline_creation_feedback = true,
+       .EXT_pipeline_robustness = true,
+-#ifdef PANVK_USE_WSI_PLATFORM
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+ 	  .EXT_present_timing =
+          device->kmod.dev->props.gpu_can_query_timestamp,
+ #endif
+@@ -248,7 +248,7 @@
+       .ANDROID_external_memory_android_hardware_buffer = has_gralloc,
+       .ANDROID_native_buffer = has_gralloc,
+       .GOOGLE_decorate_string = true,
+-#ifdef PANVK_USE_WSI_PLATFORM
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+       .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
+ #endif
+       .GOOGLE_hlsl_functionality1 = true,
+@@ -767,7 +767,7 @@
+       .shaderFmaFloat32 = true,
+       .shaderFmaFloat64 = false,
+ 
+-#ifdef PANVK_USE_WSI_PLATFORM
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+       /* VK_KHR_present_id */
+       .presentId = true,
+ 
+@@ -801,7 +801,7 @@
+       /* VK_EXT_multisampled_render_to_single_sampled */
+       .multisampledRenderToSingleSampled = true,
+ 
+-#ifdef PANVK_USE_WSI_PLATFORM
++#if defined(PANVK_USE_WSI_PLATFORM) && !defined(HAVE_ANDROID_PLATFORM)
+       /* VK_EXT_present_timing */
+       .presentTiming = true,
+       .presentAtRelativeTime = true,
+@@ -830,8 +830,13 @@
+ }
+ 
+ static VkConformanceVersion
+-get_conformance_version()
++get_conformance_version(UNUSED const struct panvk_physical_device *device)
+ {
++#ifdef HAVE_PAN_KMOD_KBASE
++   /* Upstream Panthor CTS results do not certify this kbase port. */
++   if (device->kbase_node_path[0])
++      return (VkConformanceVersion){0, 0, 0, 0};
++#endif
+    if (PAN_ARCH == 10)
+       return (VkConformanceVersion){1, 4, 1, 2};
+ 
+@@ -1101,7 +1106,7 @@
+       .independentResolve = true,
+       /* VK_KHR_driver_properties */
+       .driverID = VK_DRIVER_ID_MESA_PANVK,
+-      .conformanceVersion = get_conformance_version(),
++      .conformanceVersion = get_conformance_version(device),
+       .denormBehaviorIndependence =
+          PAN_ARCH >= 9 ? VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE
+                        : VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
+--- a/src/util/u_gralloc/u_gralloc_fallback.c
++++ b/src/util/u_gralloc/u_gralloc_fallback.c
+@@ -38,7 +38,7 @@
+ static unsigned
+ get_native_buffer_fds(const native_handle_t *handle, int fds[3])
+ {
+-   if (!handle)
++   if (!handle || handle->numFds < 1 || handle->numFds > 3)
+       return 0;
+ 
+    /*

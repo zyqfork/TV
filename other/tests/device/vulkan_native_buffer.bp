@@ -1,0 +1,8 @@
+cc_binary {
+    name: "aic-vk-native-buffer",
+    srcs: ["vulkan_native_buffer.cpp"],
+    shared_libs: ["libvulkan", "libnativewindow", "libgui", "libui", "libutils", "libbinder"],
+    header_libs: ["libarect_headers", "libcutils_headers"],
+    include_dirs: ["frameworks/native/vulkan/include"],
+    cflags: ["-Wall", "-Werror"],
+}
