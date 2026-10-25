@@ -204,15 +204,27 @@ public class AirPlayCastActivity extends BaseActivity {
         mBinding.widget.top.setVisibility(View.GONE);
     }
 
-    /** Letterbox / pillarbox the Surface inside the black root instead of stretching. */
+    /**
+     * Letterbox / pillarbox the video Surface instead of stretching. The mirrored Surface stays
+     * full-screen on purpose: resizing a SurfaceView that a decoder already feeds makes the EGL
+     * window churn (BufferQueue abandoned) and a portrait stream then stays black. VideoPipeline
+     * letterboxes mirroring itself, so the surface never has to change size.
+     */
     private void updateSurfaceBestFit(boolean video, boolean mirroring) {
         if (video) {
             Float aspect = mService.getVideoPlaybackAspect().getValue();
             applyBestFit(mBinding.videoSurface, aspect == null || aspect <= 0f ? 16f / 9f : aspect, true);
         } else if (mirroring) {
-            Float aspect = mService.getVideoAspect().getValue();
-            applyBestFit(mBinding.mirrorSurface, aspect == null || aspect <= 0f ? 16f / 9f : aspect, false);
+            resetMirrorSurface();
         }
+    }
+
+    private void resetMirrorSurface() {
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) mBinding.mirrorSurface.getLayoutParams();
+        if (lp.width == FrameLayout.LayoutParams.MATCH_PARENT && lp.height == FrameLayout.LayoutParams.MATCH_PARENT) return;
+        lp.width = FrameLayout.LayoutParams.MATCH_PARENT;
+        lp.height = FrameLayout.LayoutParams.MATCH_PARENT;
+        mBinding.mirrorSurface.setLayoutParams(lp);
     }
 
     private void applyBestFit(View surface, float aspect, boolean videoSurface) {
@@ -679,6 +691,11 @@ public class AirPlayCastActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        // Leaving the cast UI ends the local session (mirroring audio included); otherwise the
+        // service keeps playing with no picture once this activity is gone.
+        if (mService != null && isFinishing() && !isChangingConfigurations()) {
+            mService.stopLocalSession("ui");
+        }
         mHandler.removeCallbacks(mPoll);
         App.removeCallbacks(mHideControl);
         App.removeCallbacks(mIdleFinish);

@@ -114,7 +114,8 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|uiMode|orientation"
             android:exported="true"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="sensorLandscape"
+            android:supportsPictureInPicture="true">
             <intent-filter>
                 <action android:name="${applicationId}.airplay" />
                 <category android:name="android.intent.category.DEFAULT" />

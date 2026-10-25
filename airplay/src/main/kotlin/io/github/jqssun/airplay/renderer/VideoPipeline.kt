@@ -152,6 +152,20 @@ class VideoPipeline {
     private fun _render() {
         GLES20.glViewport(0, 0, winW, winH)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        // pillarbox/letterbox here so the display surface can stay one fixed size
+        var vw = winW
+        var vh = winH
+        if (videoW > 0 && videoH > 0 && winW > 0 && winH > 0) {
+            val videoAspect = videoW.toFloat() / videoH
+            if (winW.toFloat() / winH > videoAspect) {
+                vh = winH
+                vw = Math.round(winH * videoAspect)
+            } else {
+                vw = winW
+                vh = Math.round(winW / videoAspect)
+            }
+        }
+        GLES20.glViewport((winW - vw) / 2, (winH - vh) / 2, vw, vh)
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTex)

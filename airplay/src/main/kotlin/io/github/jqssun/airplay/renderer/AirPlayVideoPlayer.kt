@@ -12,6 +12,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 
 // rate is 0 while buffering; speed is the configured rate regardless of pause state
@@ -68,10 +69,18 @@ class AirPlayVideoPlayer(private val context: Context) {
         }
     }
 
+    // AirPlay video is fetched over the LAN, so the stock 2.5s start cushion only adds latency.
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     fun play(location: String, startPositionSeconds: Float) = mainHandler.post {
         // recycling must not report the stopped sentinel: senders poll right after /play
         _stopInternal(reportStopped = false)
-        val p = ExoPlayer.Builder(context).build().also {
+        val p = ExoPlayer.Builder(context)
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15_000, 30_000, 800, 1_500)
+                    .build()
+            )
+            .build().also {
             it.addListener(_listener)
             pendingSurface?.let { s -> it.setVideoSurface(s) }
         }
