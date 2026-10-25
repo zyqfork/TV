@@ -283,14 +283,21 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         mediaReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 when (intent.action) {
-                    ACTION_PLAY_PAUSE -> togglePlayPause()
-                    ACTION_NEXT -> dacpController?.nextItem()
-                    ACTION_PREV -> dacpController?.prevItem()
+                    ACTION_PLAY -> setPlaybackPlaying(true)
+                    ACTION_PAUSE -> setPlaybackPlaying(false)
+                    ACTION_PLAY_PAUSE -> {
+                        if (_videoPlaybackActive.value) setVideoPlaying(!_videoPlaybackInfo.value.playing)
+                        else if (_audioOnly.value && dacpController?.isAvailable() == true) togglePlayPause()
+                    }
+                    ACTION_NEXT -> if (_audioOnly.value && !_videoPlaybackActive.value && dacpController?.isAvailable() == true) dacpController?.nextItem()
+                    ACTION_PREV -> if (_audioOnly.value && !_videoPlaybackActive.value && dacpController?.isAvailable() == true) dacpController?.prevItem()
                 }
             }
         }
         val filter = IntentFilter().apply {
             addAction(ACTION_PLAY_PAUSE)
+            addAction(ACTION_PLAY)
+            addAction(ACTION_PAUSE)
             addAction(ACTION_NEXT)
             addAction(ACTION_PREV)
         }
@@ -565,6 +572,14 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
 
     fun clearVideoPlaybackSurface(surface: Surface) {
         airPlayVideoPlayer.clearSurface(surface)
+    }
+
+    private fun setPlaybackPlaying(playing: Boolean) {
+        if (_videoPlaybackActive.value) setVideoPlaying(playing)
+        else if (_audioOnly.value && dacpController?.isAvailable() == true) {
+            _setPlaying(playing)
+            if (playing) dacpController?.play() else dacpController?.pause()
+        }
     }
 
     fun setVideoPlaying(playing: Boolean) {
@@ -1143,6 +1158,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         private const val TAG = "AirPlayService"
         private const val CHANNEL_ID = "airplay_service"
         private const val NOTIFICATION_ID = 1
+        const val ACTION_PLAY = "io.github.jqssun.airplay.PLAY"
+        const val ACTION_PAUSE = "io.github.jqssun.airplay.PAUSE"
         const val ACTION_PLAY_PAUSE = "io.github.jqssun.airplay.PLAY_PAUSE"
         const val ACTION_NEXT = "io.github.jqssun.airplay.NEXT"
         const val ACTION_PREV = "io.github.jqssun.airplay.PREV"

@@ -121,7 +121,9 @@ public class SubtitleSetting {
         view.setStyle(captionStyle(view.getContext()));
         float position = PlayerSetting.getSubtitlePosition();
         float textSize = PlayerSetting.getSubtitleTextSize();
-        if (position != 0f) view.setBottomPosition(position);
-        if (textSize != 0f) view.setFractionalTextSize(textSize);
+        // Keep authored ASS/SSA sizes unless the user explicitly overrides them.
+        view.setApplyEmbeddedFontSizes(textSize == 0f && !PlayerSetting.isCaption());
+        view.setBottomPosition(position);
+        view.setFractionalTextSize(textSize != 0f ? textSize : SubtitleView.DEFAULT_TEXT_SIZE_FRACTION);
     }
 }

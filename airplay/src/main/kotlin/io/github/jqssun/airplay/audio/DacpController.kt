@@ -31,6 +31,8 @@ class DacpController(ctx: Context) {
         _resolve()
     }
 
+    fun isAvailable(): Boolean = host.isNotEmpty() && port in 1..65535 && activeRemote.isNotEmpty() && dacpId.isNotEmpty()
+
     fun play() = _send("/ctrl-int/1/play")
     fun pause() = _send("/ctrl-int/1/pause")
     fun nextItem() = _send("/ctrl-int/1/nextitem")

@@ -13,6 +13,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivityPushBinding;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
@@ -45,6 +46,9 @@ public class PushActivity extends BaseActivity {
     protected void initView(Bundle savedInstanceState) {
         mBinding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(getTab()), 250, 1));
         mBinding.info.setText(ResUtil.getString(R.string.push_info, Server.get().getAddress()));
+        // Without MANAGE_EXTERNAL_STORAGE the remote file manager can only list an empty root.
+        PermissionUtil.requestFile(this, granted -> {
+        });
     }
 
     @Override

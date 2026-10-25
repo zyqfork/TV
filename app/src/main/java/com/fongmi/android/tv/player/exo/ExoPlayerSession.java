@@ -21,6 +21,7 @@ import com.fongmi.android.tv.utils.Task;
 /** Owns one ExoPlayer instance and all resources whose lifecycle must match that instance. */
 final class ExoPlayerSession {
 
+    private final FrameRateEstimator frameRate = new FrameRateEstimator();
     private final ExoVolumeGain volumeGain;
     private final ExoPlayerEffect effect;
     private final PreCache preCache;
@@ -34,6 +35,13 @@ final class ExoPlayerSession {
     private int startGeneration;
     private boolean pngProbeAttempted;
     private boolean released;
+    /**
+     * Set when Media3 opened a software video decoder even though hardware was requested, i.e.
+     * its own renderer fallback fired. Consumed once per item by the UI notice.
+     */
+    private volatile boolean softwareFallbackSeen;
+    private boolean softwareFallbackReported;
+    private volatile String activeVideoDecoder;
 
     ExoPlayerSession(int decode, Player.Listener listener) {
         this(decode, false, listener);
@@ -42,9 +50,9 @@ final class ExoPlayerSession {
     ExoPlayerSession(int decode, boolean live, Player.Listener listener) {
         this.decode = decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
         this.live = live;
-        if (AudioSetting.hasEffect(8)) PlayerSetting.putAudioPassThrough(false);
-        this.effect = new ExoPlayerEffect(!PlayerSetting.isAudioPassThrough());
-        this.player = ExoUtil.buildPlayer(this.decode, listener, effect.getAudioProcessor(), live);
+        this.effect = new ExoPlayerEffect(!ExoUtil.isAudioPassThroughEnabled());
+        this.player = ExoUtil.buildPlayer(this.decode, listener, effect.getAudioProcessor(), live, this::onVideoDecoderInitialized);
+        this.player.setVideoFrameMetadataListener((ptsUs, releaseNs, format, mediaFormat) -> frameRate.addFrame(ptsUs));
         this.effect.setPlayer(player);
         this.player.addListener(effectListener);
         this.preCache = new PreCache();
@@ -54,6 +62,40 @@ final class ExoPlayerSession {
 
     ExoPlayer player() {
         return player;
+    }
+
+    float estimatedVideoFrameRate() { return frameRate.getFrameRate(); }
+
+    String videoDecoderDescription() {
+        return player.getVideoFormat() == null || activeVideoDecoder == null ? "" : activeVideoDecoder;
+    }
+
+    /**
+     * Consumes the "hardware decoder unavailable, software in use" notice for this item.
+     * Returns true at most once per item so the UI does not repeat itself.
+     */
+    boolean consumeSoftwareFallbackNotice() {
+        if (!softwareFallbackSeen || softwareFallbackReported) return false;
+        softwareFallbackReported = true;
+        return true;
+    }
+
+    /**
+     * Records the video decoder Media3 actually opened. A software decoder name while hardware was
+     * requested means the renderer fell back, which is otherwise invisible: playback simply works.
+     * Decoder names follow MediaCodec: vendor hardware is `c2.<vendor>.*`/`OMX.<vendor>.*`, while
+     * AOSP software decoders are `c2.android.*`/`OMX.google.*`.
+     */
+    void onVideoDecoderInitialized(String decoderName) {
+        activeVideoDecoder = decoderName;
+        if (decode == PlayerEngine.SOFT || decoderName == null || decoderName.isEmpty()) return;
+        softwareFallbackSeen = isSoftwareDecoder(decoderName);
+    }
+
+    private static boolean isSoftwareDecoder(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.startsWith("c2.android.") || lower.startsWith("omx.google.")
+                || lower.contains(".sw.") || lower.contains("software");
     }
 
     ExoPlayerEffect effect() {
@@ -192,6 +234,16 @@ final class ExoPlayerSession {
     }
 
     private final Player.Listener effectListener = new Player.Listener() {
+        @Override
+        public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+            frameRate.reset();
+        }
+
+        @Override
+        public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+            frameRate.reset();
+        }
+
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
             effect.applyAudioEffect();

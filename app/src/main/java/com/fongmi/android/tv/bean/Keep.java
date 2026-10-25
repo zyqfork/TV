@@ -15,6 +15,8 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 @Entity
@@ -76,9 +78,16 @@ public class Keep implements Diffable<Keep> {
     }
 
     public static void sync(List<Config> configs, List<Keep> targets) {
-        targets.forEach(target -> configs.stream()
-                .filter(config -> target.getCid() == config.getId()).findFirst()
-                .ifPresent(config -> target.save(Config.find(config).getId())));
+        Map<Integer, Config> byId = new HashMap<>();
+        Map<Integer, Integer> destinations = new HashMap<>();
+        configs.forEach(config -> byId.putIfAbsent(config.getId(), config));
+        targets.forEach(target -> {
+            Config config = byId.get(target.getCid());
+            if (config != null) {
+                int cid = destinations.computeIfAbsent(config.getId(), ignored -> Config.find(config).getId());
+                target.save(cid);
+            }
+        });
     }
 
     public static void replace(String oldKey, String newKey) {
@@ -155,7 +164,11 @@ public class Keep implements Diffable<Keep> {
 
     public String getVodId() {
         String[] parts = getKey().split(AppDatabase.SYMBOL);
-        return parts.length > 1 ? parts[1] : "";
+        if (parts.length < 2) return "";
+        if (parts.length == 2) return parts[1];
+        StringBuilder sb = new StringBuilder(parts[1]);
+        for (int i = 2; i < parts.length - 1; i++) sb.append(AppDatabase.SYMBOL).append(parts[i]);
+        return sb.toString();
     }
 
     public void save(int cid) {

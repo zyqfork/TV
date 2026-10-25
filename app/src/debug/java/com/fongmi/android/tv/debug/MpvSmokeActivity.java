@@ -70,6 +70,7 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
                 + " dts=" + FfmpegLibrary.supportsFormat("audio/vnd.dts"));
         stopOnBackground = getIntent().getBooleanExtra("stop_on_background", false);
         decode = getIntent().getIntExtra("decode", 1);
+        boolean live = getIntent().getBooleanExtra("live", false);
         startMs = Math.max(0, getIntent().getLongExtra("start_ms", 0L));
 
         setContentView(R.layout.activity_mpv_smoke);
@@ -78,8 +79,8 @@ public final class MpvSmokeActivity extends Activity implements Player.Listener 
         view.setRender(0);
         view.setArtworkDisplayMode(PlayerView.ARTWORK_DISPLAY_MODE_OFF);
         view.setUseController(false);
-        if (getIntent().getBooleanExtra("formal_config", false)) {
-            player = MpvUtil.buildPlayer(decode, this);
+        if (getIntent().getBooleanExtra("formal_config", false) || live) {
+            player = MpvUtil.buildPlayer(decode, live, this);
         } else {
             player = new MpvPlayer.Builder(this)
                     .setDecode(decode)

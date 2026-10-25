@@ -26,6 +26,7 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.github.catvod.utils.NetIface;
 import com.fongmi.android.tv.setting.AirPlaySetting;
 import com.fongmi.android.tv.setting.DlnaSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -37,6 +38,7 @@ import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.NetworkStorageActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
+import com.fongmi.android.tv.ui.dialog.NetIfaceDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
@@ -85,6 +87,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dlnaLibraryText.setText(Setting.getSwitch(Setting.isDlnaLibrary()));
         mBinding.castText.setText(getCastText());
         setStorageText();
+        setNetIfaceText();
     }
 
     /**
@@ -101,6 +104,15 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.networkStorageText.setText(home == null ? "" : home.displayTitle());
     }
 
+    private void setNetIface(View view) {
+        NetIfaceDialog.show(requireContext(), this::setNetIfaceText);
+    }
+
+    private void setNetIfaceText() {
+        String name = NetIface.resolveName();
+        mBinding.netIfaceText.setText(name.isEmpty() ? getString(R.string.setting_net_iface_none) : name + " (" + NetIface.resolve() + ")");
+    }
+
     /** Which cast receivers are on, so the single 投屏设置 row still says something useful. */
     private String getCastText() {
         List<String> on = new ArrayList<>();
@@ -113,6 +125,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     protected void initEvent() {
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
+        mBinding.netIface.setOnClickListener(this::setNetIface);
         mBinding.dlnaLibrary.setOnClickListener(this::setDlnaLibrary);
         mBinding.cast.setOnClickListener(this::onCast);
         mBinding.live.setOnClickListener(this::onLive);
@@ -260,12 +273,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void setSize(View view) {
-        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
-            mBinding.sizeText.setText(size[which]);
-            PlayerSetting.putSize(which);
-            RefreshEvent.size();
-            dialog.dismiss();
-        }).show();
+        int next = (PlayerSetting.getSize() + 1) % size.length;
+        PlayerSetting.putSize(next);
+        mBinding.sizeText.setText(size[next]);
+        RefreshEvent.size();
     }
 
     private void onNetworkStorage(View view) {
@@ -289,13 +300,18 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
+        setStorageText();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // returning from 投屏设置: a receiver switch may have changed
-        if (mBinding != null) mBinding.castText.setText(getCastText());
+        // 投屏开关和网盘首页标题都在别的页面里改，返回时要重读。
+        if (mBinding != null) {
+            mBinding.castText.setText(getCastText());
+            setStorageText();
+            setNetIfaceText();
+        }
     }
 
     @Override

@@ -1,0 +1,57 @@
+{
+  "buildFiles": [
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/CMakeLists.txt",
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/cmake/BuildFFmpeg.cmake",
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/third_party/openssl-cmake/CMakeLists.txt",
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/third_party/openssl-cmake/cmake/BuildOpenSSL.cmake",
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/third_party/openssl-cmake/cmake/ByproductsOpenSSL.cmake"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/data/home/zyq/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/data/home/zyq/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "airplay_native::@6890427a1f51a3e7e1df": {
+      "artifactName": "airplay_native",
+      "abi": "arm64-v8a",
+      "output": "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/build/intermediates/cxx/Debug/1g1s23p3/obj/arm64-v8a/libairplay_native.so",
+      "runtimeFiles": [
+        "/data/home/zyq/.gradle/caches/9.6.1/transforms/4b2953fd92f1b0cc2fbabb51b335b77a/transformed/oboe-1.10.0/prefab/modules/oboe/libs/android.arm64-v8a/liboboe.so",
+        "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-build/usr/local/lib/libcrypto.so"
+      ]
+    },
+    "llhttp::@6890427a1f51a3e7e1df": {
+      "artifactName": "llhttp",
+      "abi": "arm64-v8a",
+      "output": "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/libllhttp.a",
+      "runtimeFiles": []
+    },
+    "playfair::@6890427a1f51a3e7e1df": {
+      "artifactName": "playfair",
+      "abi": "arm64-v8a",
+      "output": "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/libplayfair.a",
+      "runtimeFiles": []
+    },
+    "ffmpeg_ep::@6890427a1f51a3e7e1df": {
+      "artifactName": "ffmpeg_ep",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "plist::@6890427a1f51a3e7e1df": {
+      "artifactName": "plist",
+      "abi": "arm64-v8a",
+      "output": "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/libplist.a",
+      "runtimeFiles": []
+    }
+  }
+}

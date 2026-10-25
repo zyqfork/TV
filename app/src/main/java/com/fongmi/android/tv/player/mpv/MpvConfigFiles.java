@@ -4,11 +4,13 @@ import android.content.Context;
 import android.net.Uri;
 
 import com.fongmi.android.tv.utils.FileUtil;
+import com.github.catvod.utils.Prefers;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,11 +28,10 @@ public final class MpvConfigFiles {
     public static String read() {
         String value = Path.read(file());
         if (value != null && !value.trim().isEmpty()) return value;
-        return "# mpv.conf — user options override Android defaults.\n"
-                + "# App still forces vo/hwdec when required by the selected playback mode.\n"
-                + "# Example:\n"
-                + "# vo=gpu\n"
-                + "# hwdec=mediacodec-copy\n";
+        return "# Custom options are read only when explicitly enabled in Advanced playback.\n"
+                + "# Android uses OpenGL/EGL; subtitle language and font follow the app.\n"
+                + "# Example alternative renderer:\n"
+                + "# vo=gpu-next\n";
     }
 
     public static boolean write(String content) {
@@ -58,8 +59,23 @@ public final class MpvConfigFiles {
                 .toList();
     }
 
+    public static boolean isEnabled() {
+        if (!Prefers.getBoolean("mpv_conf_migrated_v1")) {
+            // Preserve existing expert files, including named profiles; new installs default off.
+            boolean existing = Arrays.stream(read().replace("\uFEFF", "").split("\\R")).map(String::trim)
+                    .anyMatch(line -> !line.isEmpty() && !line.startsWith("#"));
+            setEnabled(existing);
+        }
+        return Prefers.getBoolean("mpv_custom_config_enabled");
+    }
+
+    public static void setEnabled(boolean enabled) {
+        Prefers.put("mpv_custom_config_enabled", enabled);
+        Prefers.put("mpv_conf_migrated_v1", true);
+    }
+
     public static Map<String, String> readGlobalOptions() {
-        return parseGlobalOptions(read());
+        return isEnabled() ? parseGlobalOptions(read()) : Map.of();
     }
 
     /** Same parser for playback and the managed-option warning, including imported UTF-8 BOM. */

@@ -75,8 +75,9 @@ final class FontFamilyParser {
         if (family == null) return;
         String subfamily = bestName(names, 17, 2);
         String postScriptName = bestName(names, 6);
+        String fullName = bestName(names, 4);
         List<String> instances = fvar == null ? List.of() : readInstances(buffer, fvar, names);
-        faces.add(new Face(faceIndex, family, subfamily == null ? "" : subfamily, postScriptName == null ? "" : postScriptName, fvar != null, instances));
+        faces.add(new Face(faceIndex, family, subfamily == null ? "" : subfamily, postScriptName == null ? "" : postScriptName, fullName == null ? "" : fullName, buffer.getInt(faceOffset) == 0x4F54544F, fvar != null, instances));
     }
 
     private static List<NameValue> readNames(ByteBuffer buffer, Table table) {
@@ -176,7 +177,7 @@ final class FontFamilyParser {
         return offset >= 0 && length >= 0 && offset <= buffer.limit() && length <= buffer.limit() - offset;
     }
 
-    record Face(int index, String family, String subfamily, String postScriptName, boolean variable, List<String> instances) {
+    record Face(int index, String family, String subfamily, String postScriptName, String fullName, boolean postScript, boolean variable, List<String> instances) {
     }
 
     private record Table(int offset, int length) {

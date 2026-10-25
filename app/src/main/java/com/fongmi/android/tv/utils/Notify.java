@@ -1,11 +1,17 @@
 package com.fongmi.android.tv.utils;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.Notification;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.Looper;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
@@ -16,6 +22,7 @@ import androidx.core.content.ContextCompat;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.databinding.ViewProgressBinding;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.snackbar.Snackbar;
 
 public class Notify {
 
@@ -23,6 +30,7 @@ public class Notify {
     public static final int ID = 9527;
     private AlertDialog mDialog;
     private Toast mToast;
+    private Snackbar mBar;
 
     private static class Loader {
         static volatile Notify INSTANCE = new Notify();
@@ -75,8 +83,38 @@ public class Notify {
     }
 
     private void makeText(String text) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            App.post(() -> makeText(text));
+            return;
+        }
+        if (showBar(text)) return;
         if (mToast != null) mToast.cancel();
         mToast = Toast.makeText(App.get(), text, Toast.LENGTH_LONG);
+        mToast.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, ResUtil.dp2px(32));
         mToast.show();
+    }
+
+    /** Keep short messages near the top so they do not cover the playback bar. */
+    private boolean showBar(String text) {
+        try {
+            Activity activity = App.activity();
+            View root = activity == null || activity.isFinishing() ? null : activity.findViewById(android.R.id.content);
+            if (root == null) return false;
+            if (mBar != null) mBar.dismiss();
+            if (mToast != null) mToast.cancel();
+            Snackbar bar = Snackbar.make(root, text, Snackbar.LENGTH_LONG);
+            View view = bar.getView();
+            ViewGroup.LayoutParams params = view.getLayoutParams();
+            if (params instanceof FrameLayout.LayoutParams layout) {
+                layout.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                layout.topMargin = ResUtil.dp2px(32);
+                view.setLayoutParams(layout);
+            }
+            mBar = bar;
+            bar.show();
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 }

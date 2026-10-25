@@ -16,6 +16,20 @@ public final class LangUtil {
     private static final String TAG_HANS = "zh-Hans";
     private static final String TAG_HANT = "zh-Hant";
 
+    /** Empty means follow the file's default audio selection. */
+    public static String[] getPreferredAudioLanguages() {
+        return switch (com.fongmi.android.tv.setting.PlayerSetting.getAudioLanguage()) {
+            case com.fongmi.android.tv.setting.PlayerSetting.AUDIO_MANDARIN -> new String[]{"zh", "cmn", "zh-CN"};
+            case com.fongmi.android.tv.setting.PlayerSetting.AUDIO_CANTONESE -> new String[]{"yue", "zh-HK", "zh-yue"};
+            case com.fongmi.android.tv.setting.PlayerSetting.AUDIO_ENGLISH -> new String[]{"en"};
+            default -> new String[0];
+        };
+    }
+
+    public static String getPreferredAudioLanguageList() {
+        return String.join(",", getPreferredAudioLanguages());
+    }
+
     public static String[] getPreferredTextLanguages() {
         Locale locale = Locale.getDefault();
         String tag = locale.toLanguageTag();

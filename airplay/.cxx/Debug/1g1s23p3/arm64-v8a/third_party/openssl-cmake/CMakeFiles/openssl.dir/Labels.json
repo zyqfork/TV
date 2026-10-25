@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/CMakeFiles/openssl"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/CMakeFiles/openssl.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/CMakeFiles/openssl-complete.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-build.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-configure.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-download.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-install.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-mkdir.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-patch.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-test.rule"
+		},
+		{
+			"file" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl-stamp/openssl-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"openssl"
+		],
+		"name" : "openssl"
+	}
+}

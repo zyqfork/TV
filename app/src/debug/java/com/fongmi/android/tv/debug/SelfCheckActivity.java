@@ -201,24 +201,18 @@ public final class SelfCheckActivity extends Activity {
 
     private void checkPlayerSettingBounds() {
         int buffer = PlayerSetting.getBuffer();
-        int http = PlayerSetting.getHttp();
         int latency = PlayerSetting.getLiveLatency();
         try {
             PlayerSetting.putBuffer(-10);
-            expect("setting_buffer_min", PlayerSetting.getBuffer(), 1);
+            expect("setting_buffer_min", PlayerSetting.getBuffer(), 5);
             PlayerSetting.putBuffer(100);
-            expect("setting_buffer_max", PlayerSetting.getBuffer(), 15);
-            PlayerSetting.putHttp(-1);
-            expect("setting_http_min", PlayerSetting.getHttp(), 0);
-            PlayerSetting.putHttp(9);
-            expect("setting_http_max", PlayerSetting.getHttp(), 1);
+            expect("setting_buffer_max", PlayerSetting.getBuffer(), 10);
             PlayerSetting.putLiveLatency(-1);
             expect("setting_latency_min", PlayerSetting.getLiveLatency(), PlayerSetting.LIVE_LATENCY_SMOOTH);
             PlayerSetting.putLiveLatency(9);
             expect("setting_latency_max", PlayerSetting.getLiveLatency(), PlayerSetting.LIVE_LATENCY_LOW);
         } finally {
             PlayerSetting.putBuffer(buffer);
-            PlayerSetting.putHttp(http);
             PlayerSetting.putLiveLatency(latency);
         }
     }

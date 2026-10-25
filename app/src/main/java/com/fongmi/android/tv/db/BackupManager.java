@@ -60,8 +60,15 @@ public final class BackupManager {
     private static boolean restore(File file) {
         Backup backup = Backup.objectFrom(FileUtil.readGzip(file));
         boolean valid = !backup.getConfig().isEmpty();
-        if (valid) backup.restore();
-        return valid;
+        if (!valid) return false;
+        try {
+            backup.restore();
+            return true;
+        } catch (RuntimeException e) {
+            // Backup.restore owns its SQLite transaction and preference compensation.
+            Log.e(TAG, "Restore failed; original database retained, file=" + file, e);
+            return false;
+        }
     }
 
     private static void post(Callback callback, boolean success) {

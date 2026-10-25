@@ -1,0 +1,84 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"third_party/openssl-cmake/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 93,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 94,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 95,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				{
+					"from" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-build/usr/local/bin",
+					"to" : "."
+				}
+			],
+			"type" : "directory"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				{
+					"from" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-build/usr/local/include",
+					"to" : "."
+				}
+			],
+			"type" : "directory"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				{
+					"from" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-build/usr/local/lib",
+					"to" : "."
+				}
+			],
+			"type" : "directory"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "third_party/openssl-cmake",
+		"source" : "third_party/openssl-cmake"
+	}
+}

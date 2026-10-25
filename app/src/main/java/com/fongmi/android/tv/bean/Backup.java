@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.bean;
 
+import android.content.SharedPreferences;
+
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
@@ -14,6 +16,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
+import java.util.HashSet;
 
 public class Backup {
 
@@ -53,21 +57,62 @@ public class Backup {
 
     public void restore() {
         AppDatabase db = AppDatabase.get();
-        // clearAllTables() drops every table, but a backup only carries site/live/keep/config/
-        // history plus the preferences. Cast devices and per-video track choices are not in it, so
-        // they have to be carried across the wipe by hand — otherwise every restore silently
-        // deletes them.
-        List<Device> devices = db.getDeviceDao().findAll();
-        List<Track> tracks = db.getTrackDao().findAll();
-        db.clearAllTables();
-        db.getSiteDao().insertOrUpdate(getSite());
-        db.getLiveDao().insertOrUpdate(getLive());
-        db.getKeepDao().insertOrUpdate(getKeep());
-        db.getConfigDao().insertOrUpdate(getConfig());
-        db.getHistoryDao().insertOrUpdate(getHistory());
-        db.getDeviceDao().insertOrUpdate(devices);
-        db.getTrackDao().insertOrUpdate(tracks);
-        for (Map.Entry<String, ?> entry : getPrefers().entrySet()) Prefers.put(entry.getKey(), entry.getValue());
+        SharedPreferences preferences = Prefers.getPrefers();
+        Map<String, ?> previous = new HashMap<>(preferences.getAll());
+        // Validate and stage preferences before deleting anything. Keep legacy merge semantics.
+        SharedPreferences.Editor editor = stagePreferences(preferences.edit(), getPrefers(), previous);
+        boolean[] preferencesAttempted = {false};
+        try {
+            db.runInTransaction(() -> {
+                // Device and Track are not backed up. Never touch them, even during rollback.
+                db.getSiteDao().deleteAllForRestore();
+                db.getLiveDao().deleteAllForRestore();
+                db.getKeepDao().deleteAllForRestore();
+                db.getConfigDao().deleteAllForRestore();
+                db.getHistoryDao().delete();
+                db.getSiteDao().insertOrUpdate(getSite());
+                db.getLiveDao().insertOrUpdate(getLive());
+                db.getKeepDao().insertOrUpdate(getKeep());
+                db.getConfigDao().insertOrUpdate(getConfig());
+                db.getHistoryDao().insertOrUpdate(getHistory());
+                preferencesAttempted[0] = true;
+                if (!editor.commit()) throw new IllegalStateException("Unable to persist restored preferences");
+            });
+        } catch (RuntimeException failure) {
+            // Preferences and SQLite have different transactions; compensate if prefs were written.
+            if (preferencesAttempted[0] &&
+                    !stagePreferences(preferences.edit().clear(), previous, previous).commit()) {
+                failure.addSuppressed(new IllegalStateException("Unable to roll back preferences"));
+            }
+            throw failure;
+        }
+    }
+
+    private static SharedPreferences.Editor stagePreferences(SharedPreferences.Editor editor,
+                                                             Map<String, ?> values, Map<String, ?> previous) {
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (key == null || value == null) throw new IllegalArgumentException("Invalid preference");
+            if (value instanceof String v) editor.putString(key, v);
+            else if (value instanceof Boolean v) editor.putBoolean(key, v);
+            else if (value instanceof Float v) editor.putFloat(key, v);
+            else if (value instanceof Long v) editor.putLong(key, v);
+            else if (value instanceof Number v) {
+                if (previous.get(key) instanceof Long) editor.putLong(key, v.longValue());
+                else if (previous.get(key) instanceof Float || v.toString().contains(".")) editor.putFloat(key, v.floatValue());
+                else if (v.longValue() > Integer.MAX_VALUE || v.longValue() < Integer.MIN_VALUE) editor.putLong(key, v.longValue());
+                else editor.putInt(key, v.intValue());
+            } else if (value instanceof Collection<?> collection) {
+                HashSet<String> strings = new HashSet<>();
+                for (Object item : collection) {
+                    if (!(item instanceof String)) throw new IllegalArgumentException("Invalid preference set");
+                    strings.add((String) item);
+                }
+                editor.putStringSet(key, strings);
+            } else throw new IllegalArgumentException("Unsupported preference value");
+        }
+        return editor;
     }
 
     public List<Site> getSite() {

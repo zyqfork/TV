@@ -2,10 +2,12 @@ plugins {
     alias libs.plugins.android.application
 }
 
+// local.properties is developer/CI-specific (SDK path and signing key) and is not committed.
+// A fresh clone can still build: SDK comes from ANDROID_HOME, signing falls back to debug.
 def localProps = new Properties()
-rootProject.file('local.properties').withInputStream {
-    localProps.load(it)
-}
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) localPropsFile.withInputStream { localProps.load(it) }
+def releaseStore = localProps.getProperty('storeFile')
 
 android {
     namespace = 'com.fongmi.android.tv'
@@ -51,11 +53,13 @@ android {
     }
 
     signingConfigs {
-        release {
-            storeFile file(localProps['storeFile'])
-            keyAlias localProps['keyAlias']
-            keyPassword localProps['storePassword']
-            storePassword localProps['storePassword']
+        if (releaseStore) {
+            release {
+                storeFile file(releaseStore)
+                keyAlias localProps.getProperty('keyAlias', 'androiddebugkey')
+                keyPassword localProps.getProperty('keyPassword', localProps.getProperty('storePassword'))
+                storePassword localProps.getProperty('storePassword')
+            }
         }
     }
 
@@ -63,7 +67,7 @@ android {
         release {
             minifyEnabled = true
             shrinkResources = true
-            signingConfig = signingConfigs.release
+            signingConfig = releaseStore ? signingConfigs.release : signingConfigs.debug
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-rules-media.pro'
         }
     }

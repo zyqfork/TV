@@ -158,11 +158,6 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     private static HttpDataSource.Factory createHttpDataSourceFactory() {
-        if (PlayerSetting.getHttp() == 0) {
-            // Do not allow HTTPS credentials to follow a protocol downgrade. OkHttp separately
-            // strips Authorization on cross-origin redirects.
-            return new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(false);
-        }
         return new OkHttpDataSource.Factory(OkHttp.player());
     }
 }

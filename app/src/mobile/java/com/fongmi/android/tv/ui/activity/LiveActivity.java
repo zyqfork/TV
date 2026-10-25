@@ -50,9 +50,11 @@ import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -167,6 +169,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background - a flat near-black that had
+        // nothing to do with the wallpaper. Paint the colour the wallpaper-backed pages resolve to.
+        // On the root, not just the list container: the container starts below the video, so the
+        // strip behind a collapsed video would otherwise stay on the theme background.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         mKeyDown = CustomKeyDown.create(this, mBinding.player);
         setPadding(mBinding.control.getRoot());
         setPadding(mBinding.recycler, true);
@@ -376,7 +384,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void checkPlay() {
-        if (player().isPlaying()) onPaused();
+        // isPlaying() is false while a live stream is still buffering, so the button never paused.
+        if (controller() != null && controller().getPlayWhenReady()) onPaused();
         else onPlay();
     }
 
@@ -665,8 +674,18 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         int type = mChannel != null ? mChannel.getPlayerType() : PlayerSetting.PLAYER_TYPE_FOLLOW;
         if (type < 0) type = getHome().getPlayerType();
         player().setEngineForNextPlayback(PlayerSetting.resolveEngine(true, type));
-        mPlaybackKey = result.getRealUrl();
+        mPlaybackKey = trackKey(mChannel, result);
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
+    }
+
+    /** Prefer a stable channel id so audio/subtitle Track rows survive URL/line changes. */
+    private static String trackKey(Channel channel, Result result) {
+        if (channel != null) {
+            String id = channel.getTvgId();
+            if (!android.text.TextUtils.isEmpty(id)) return "live@@@" + id;
+            if (!android.text.TextUtils.isEmpty(channel.getName())) return "live@@@" + channel.getName();
+        }
+        return result.getRealUrl();
     }
 
     private void stopPlayer() {
@@ -844,8 +863,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
-        if (isPlaying || isPaused()) updatePlayControl(isPlaying);
-        if (!isPlaying && isPaused()) showControl();
+        boolean playing = controller() != null && controller().getPlayWhenReady();
+        updatePlayControl(playing);
+        if (!playing) showControl();
     }
 
     private void updatePlayControl(boolean isPlaying) {
@@ -1057,7 +1077,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     public void onDoubleTap() {
         if (isLock()) return;
         if (isVisible(mBinding.recycler)) hideUI();
-        if (player().isPlaying()) {
+        if (controller() != null && controller().getPlayWhenReady()) {
             showControl();
             onPaused();
         } else {

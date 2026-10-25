@@ -1,0 +1,10 @@
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/CMakeFiles/ffmpeg_ep
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/CMakeFiles/ffmpeg_ep.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/CMakeFiles/ffmpeg_ep-complete.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-build.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-configure.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-download.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-install.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-mkdir.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-patch.rule
+/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg-ep/src/ffmpeg_ep-stamp/ffmpeg_ep-update.rule

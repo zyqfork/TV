@@ -1,0 +1,59 @@
+install prefix            /data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg
+source path               /data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp/third_party/ffmpeg
+C compiler                /data/home/zyq/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+C library                 bionic
+host C compiler           gcc
+host C library            glibc
+ARCH                      c (generic)
+big-endian                no
+runtime cpu detection     yes
+debug symbols             no
+strip symbols             yes
+optimize for size         no
+optimizations             yes
+static                    yes
+shared                    no
+network support           no
+threading support         pthreads
+safe bitstream reader     yes
+texi2html enabled         no
+perl enabled              yes
+pod2man enabled           yes
+makeinfo enabled          no
+makeinfo supports HTML    no
+experimental features     yes
+xmllint enabled           yes
+
+External libraries:
+
+External libraries providing hardware acceleration:
+
+Libraries:
+avcodec                 avutil
+
+Programs:
+
+Enabled decoders:
+alac
+
+Enabled encoders:
+
+Enabled hwaccels:
+
+Enabled parsers:
+
+Enabled demuxers:
+
+Enabled muxers:
+
+Enabled protocols:
+
+Enabled filters:
+
+Enabled bsfs:
+
+Enabled indevs:
+
+Enabled outdevs:
+
+License: LGPL version 2.1 or later

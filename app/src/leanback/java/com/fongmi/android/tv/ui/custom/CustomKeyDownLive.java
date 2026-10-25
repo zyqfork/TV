@@ -17,6 +17,7 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     private final StringBuilder text;
     private final Listener listener;
     private long holdTime;
+    private boolean centerLongPressed;
 
     private final Runnable runnable = new Runnable() {
         @Override
@@ -41,11 +42,38 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     }
 
     public boolean hasEvent(KeyEvent event) {
-        return KeyUtil.isEnterKey(event) || KeyUtil.isUpKey(event) || KeyUtil.isDownKey(event) || KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event) || KeyUtil.isDigitKey(event) || KeyUtil.isMenuKey(event) || event.isLongPress();
+        return KeyUtil.isEnterKey(event) || KeyUtil.isUpKey(event) || KeyUtil.isDownKey(event) || KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event) || KeyUtil.isDigitKey(event) || KeyUtil.isMenuKey(event) || KeyUtil.isMediaPlayPause(event) || event.isLongPress();
     }
 
-    public void onKeyDown(KeyEvent event) {
-        if (listener.dispatch(true)) check(event);
+    public boolean onKeyDown(KeyEvent event) {
+        if (KeyUtil.isEnterKey(event) && centerLongPressed) {
+            if (KeyUtil.isActionUp(event)) centerLongPressed = false;
+            return true; // release belongs to the long press, not the newly focused channel
+        }
+        boolean media = event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                || event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY
+                || event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PAUSE;
+        if (!media && !listener.dispatch(true)) return false;
+        if (media) {
+            if (KeyUtil.isActionUp(event)) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY) listener.onMediaPlay(true);
+                else if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PAUSE) listener.onMediaPlay(false);
+                else listener.onPlayPause();
+            }
+            return true; // consume both halves: MediaSession must not toggle a second time
+        }
+        if (KeyUtil.isEnterKey(event)) {
+            if (KeyUtil.isActionDown(event) && event.getRepeatCount() == 0) centerLongPressed = false;
+            boolean held = event.isLongPress() || (KeyUtil.isActionDown(event)
+                    && event.getRepeatCount() > 0 && event.getEventTime() - event.getDownTime() >= 500);
+            if (held && !centerLongPressed) {
+                centerLongPressed = true;
+                listener.onChannelList();
+            } else if (KeyUtil.isActionUp(event) && !centerLongPressed) listener.onKeyCenter();
+            return true;
+        }
+        check(event);
+        return true;
     }
 
     private void check(KeyEvent event) {
@@ -63,6 +91,8 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
             listener.onKeyRight(holdTime);
         } else if (KeyUtil.isActionUp(event) && KeyUtil.isDigitKey(event)) {
             onKeyDown(event.getKeyCode());
+        } else if (KeyUtil.isMediaPlayPause(event)) {
+            listener.onPlayPause();
         } else if (KeyUtil.isActionUp(event) && KeyUtil.isEnterKey(event)) {
             listener.onKeyCenter();
         } else if (KeyUtil.isMenuKey(event) || event.isLongPress() && KeyUtil.isEnterKey(event)) {
@@ -124,6 +154,12 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
         void onKeyRight(long time);
 
         void onKeyCenter();
+
+        void onPlayPause();
+
+        void onMediaPlay(boolean play);
+
+        void onChannelList();
 
         void onMenu();
 

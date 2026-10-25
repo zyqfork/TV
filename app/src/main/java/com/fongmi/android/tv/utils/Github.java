@@ -38,7 +38,7 @@ public class Github {
      * Picks the newest published, non-prerelease entry of a {@code /releases} payload.
      *
      * @param json          raw GitHub releases list
-     * @param currentCode   installed VERSION_CODE (5.5.8 -&gt; 558)
+     * @param currentCode   installed VERSION_CODE (5.6.0 -&gt; 50600)
      * @param currentSource installed source revision, 0 when the build carries none
      * @return the newest release that is newer than the installed build, or {@code null} if none
      */
@@ -72,8 +72,9 @@ public class Github {
     }
 
     /**
-     * Map a release tag to the historical VERSION_CODE scheme (5.5.6 -> 556).
-     * Accepts v5.5.7, 5.5.7, or v5.5.7-source.1 (suffix ignored).
+     * Map a release tag to the VERSION_CODE stamped by CI (5.6.0 -&gt; 50600, 5.5.10 -&gt; 50510).
+     * Two digits each for minor and patch, so 5.5.10 and 5.6.0 do not collide.
+     * Accepts v5.6.1, 5.6.1, or v5.6.1-source.1 (suffix ignored).
      */
     public static int parseCode(String tag) {
         if (tag == null || tag.isEmpty()) return 0;
@@ -85,7 +86,7 @@ public class Github {
             int major = parts.length > 0 && !parts[0].isEmpty() ? Integer.parseInt(parts[0]) : 0;
             int minor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
             int patch = parts.length > 2 ? Integer.parseInt(parts[2]) : 0;
-            return major * 100 + minor * 10 + patch;
+            return major * 10000 + minor * 100 + patch;
         } catch (NumberFormatException e) {
             return 0;
         }

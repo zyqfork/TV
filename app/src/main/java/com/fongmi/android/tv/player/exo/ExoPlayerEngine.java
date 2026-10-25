@@ -15,6 +15,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     private ExoPlayerSession session;
     private int decode;
     private boolean live;
+    private int appliedConfig;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
         this(decode, false, listener);
@@ -26,6 +27,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.listener = listener;
         this.provider = new ErrorMsgProvider();
         this.session = new ExoPlayerSession(this.decode, live, listener);
+        this.appliedConfig = ExoUtil.playbackConfig(this.decode, live);
     }
 
     @Override
@@ -39,13 +41,19 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public String getVideoDecoderDescription() { return session.videoDecoderDescription(); }
+
+    @Override
+    public float getEstimatedVideoFrameRate() { return session.estimatedVideoFrameRate(); }
+
+    @Override
     public PlayerEffect getEffect() {
         return session.effect();
     }
 
     @Override
     public boolean requiresAudioEffectRebuild() {
-        return !session.effect().isAudioProcessorInstalled();
+        return session.effect().isAudioProcessorInstalled() == ExoUtil.isAudioPassThroughEnabled();
     }
 
     @Override
@@ -57,12 +65,23 @@ public class ExoPlayerEngine implements PlayerEngine {
     public Player rebuild() {
         session.release();
         session = new ExoPlayerSession(decode, live, listener);
+        appliedConfig = ExoUtil.playbackConfig(decode, live);
         return session.player();
+    }
+
+    @Override
+    public boolean refreshConfig() {
+        return ExoUtil.playbackConfig(decode, live) != appliedConfig;
     }
 
     @Override
     public void setVolumeGain(float gain) {
         session.setVolumeGain(gain);
+    }
+
+    @Override
+    public boolean consumeSoftwareFallbackNotice() {
+        return session.consumeSoftwareFallbackNotice();
     }
 
     @Override

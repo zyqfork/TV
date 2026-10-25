@@ -1,0 +1,13 @@
+prefix=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-prefix/src/openssl
+exec_prefix=${prefix}
+libdir=${exec_prefix}
+includedir=${prefix}/include ${prefix}/./include 
+enginesdir=${libdir}/engines
+modulesdir=${libdir}/providers
+
+Name: OpenSSL-libcrypto
+Description: OpenSSL cryptography library
+Version: 3.4.4
+Libs: -L${libdir} -lcrypto
+Libs.private: -ldl -pthread
+Cflags: -I${prefix}/include  -I${prefix}/./include 

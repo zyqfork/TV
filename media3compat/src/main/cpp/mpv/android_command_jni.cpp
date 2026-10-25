@@ -22,6 +22,7 @@ void android_command_reply(JNIEnv *env, const mpv_event *event)
 extern "C" {
     jni_func(jint, nativeCommandAsync, jlong id, jobjectArray commands);
     jni_func(void, nativeAbortAsyncCommand, jlong id);
+    jni_func(jint, nativeSetPropertyAsync, jlong id, jstring name, jstring value);
 }
 
 jni_func(jint, nativeCommandAsync, jlong id, jobjectArray commands)
@@ -52,6 +53,22 @@ jni_func(jint, nativeCommandAsync, jlong id, jobjectArray commands)
     args.push_back(nullptr);
     // libmpv copies arguments before returning. HTTP/demux work runs on its worker thread.
     return mpv_command_async(g_mpv, static_cast<uint64_t>(id), args.data());
+}
+
+jni_func(jint, nativeSetPropertyAsync, jlong id, jstring name, jstring value)
+{
+    if (!g_mpv) return MPV_ERROR_UNINITIALIZED;
+    if (id <= 0 || !name || !value) return MPV_ERROR_INVALID_PARAMETER;
+    const char *key = env->GetStringUTFChars(name, nullptr);
+    if (!key) return MPV_ERROR_NOMEM;
+    const char *text = env->GetStringUTFChars(value, nullptr);
+    if (!text) { env->ReleaseStringUTFChars(name, key); return MPV_ERROR_NOMEM; }
+    // Copies the value before returning; never wait for the playback/render core on UI.
+    int result = mpv_set_property_async(g_mpv, static_cast<uint64_t>(id), key,
+                                      MPV_FORMAT_STRING, &text);
+    env->ReleaseStringUTFChars(value, text);
+    env->ReleaseStringUTFChars(name, key);
+    return result;
 }
 
 jni_func(void, nativeAbortAsyncCommand, jlong id)

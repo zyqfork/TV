@@ -1,0 +1,8 @@
+CMake Warning at third_party/openssl-cmake/cmake/BuildOpenSSL.cmake:50 (message):
+  Not building OpenSSL again.  Remove
+  /data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/third_party/openssl-cmake/openssl-build
+  for rebuild
+Call Stack (most recent call first):
+  third_party/openssl-cmake/CMakeLists.txt:70 (include)
+
+

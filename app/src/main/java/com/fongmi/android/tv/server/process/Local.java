@@ -29,6 +29,8 @@ import fi.iki.elonen.NanoHTTPD.Response.Status;
 public class Local implements Process {
 
     private static final String FILE = "/file";
+    private static final int ZIP_MAX_ENTRIES = 512;
+    private static final long ZIP_MAX_BYTES = 256L * 1024 * 1024;
 
     @Override
     public boolean isRequest(IHTTPSession session, String url) {
@@ -56,7 +58,9 @@ public class Local implements Process {
 
     private Response getFile(IHTTPSession session, String url) throws IOException {
         String path = url.substring(FILE.length());
-        File file = resolveFile(session, path);
+        // The web UI sends storage-relative paths ("/Download"); Path.local() keeps the leading
+        // slash, so every subdirectory resolved outside the storage root and 500'd.
+        File file = resolvePath(path);
         if (file.isDirectory()) return getFolder(file);
         if (!file.isFile()) throw new FileNotFoundException("File not found");
         return getFile(session.getHeaders(), file, getMimeTypeForFile(path));
@@ -76,7 +80,9 @@ public class Local implements Process {
 
     private void storeUpload(File source, File directory, String name) throws IOException {
         if (name.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            if (!FileUtil.zipDecompress(source, directory)) throw new IOException("Unable to extract archive");
+            if (!FileUtil.zipDecompress(source, directory, ZIP_MAX_ENTRIES, ZIP_MAX_BYTES)) {
+                throw new IOException("Unable to extract archive");
+            }
         } else {
             FileUtil.copyAtomically(source, resolveChild(directory, name));
         }
@@ -164,12 +170,6 @@ public class Local implements Process {
         return resolve(new File(Path.root(), relativePath(path)));
     }
 
-    private static File resolveFile(IHTTPSession session, String path) throws IOException {
-        File file = Path.local(path).getCanonicalFile();
-        if (isLoopback(session) || isWithin(file, Path.root())) return file;
-        throw new SecurityException("Path outside shared storage");
-    }
-
     private static File resolveChild(File directory, String name) throws IOException {
         return resolve(new File(directory, name));
     }
@@ -204,11 +204,6 @@ public class Local implements Process {
             for (File child : children) deleteRecursively(child);
         }
         if (!file.delete() && file.exists()) throw new IOException("Unable to delete file");
-    }
-
-    private static boolean isLoopback(IHTTPSession session) {
-        String address = session.getRemoteIpAddress();
-        return address != null && (address.startsWith("127.") || address.equals("::1") || address.equals("0:0:0:0:0:0:0:1"));
     }
 
     private static String relativeTo(File file, String rootPath) {

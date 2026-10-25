@@ -1,6 +1,4 @@
 package com.fongmi.android.tv.player.mpv;
-
-import android.content.pm.PackageManager;
 import android.text.TextUtils;
 
 import androidx.media3.common.Player;
@@ -22,6 +20,7 @@ import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class MpvUtil {
@@ -38,16 +37,13 @@ public final class MpvUtil {
     private static final String OPT_OPENGL_ES = "opengl-es";
     private static final String OPT_SUB_LANG = "slang";
     private static final String VALUE_ANDROID = "android";
-    private static final String VALUE_ANDROID_VK = "androidvk";
     private static final String VALUE_GPU = "gpu";
     private static final String VALUE_OPENGL = "opengl";
-    private static final String VALUE_VULKAN = "vulkan";
     private static final String VALUE_YES = "yes";
     private static final String OPT_PROXY_URL = "proxy-url";
-    private static final int VULKAN_1_2 = 0x00402000;
 
     public static List<String> getManagedOptionNames() {
-        return List.of("vo", "hwdec");
+        return List.of("gpu-api", "gpu-context", "opengl-es", "slang", "sub-font");
     }
 
     public static boolean isAvailable() {
@@ -58,6 +54,25 @@ public final class MpvUtil {
         }
     }
 
+    /** Construction-only options; exact equality avoids hash-only rebuild decisions. */
+    public static Map<String, Object> playbackConfig(int decode, boolean live) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("decode", decode);
+        config.put("live", live);
+        config.put("user-options", Map.copyOf(MpvConfigFiles.readGlobalOptions()));
+        config.put("user-config-enabled", MpvConfigFiles.isEnabled());
+        config.put("user-config", MpvConfigFiles.isEnabled() ? MpvConfigFiles.read() : "");
+        config.put("video-effects", VideoSetting.isEnabled());
+        config.put("gpu-next", PlayerSetting.isMpvGpuNext());
+        config.put("deband", PlayerSetting.isMpvDeband());
+        config.put("audio-language", PlayerSetting.getAudioLanguage());
+        config.put("buffer", PlayerSetting.getBuffer());
+        config.put("low-latency", PlayerSetting.isLiveLowLatency());
+        config.put("ua", getDefaultUserAgent());
+        config.put("languages", LangUtil.getPreferredTextLanguageList());
+        return Map.copyOf(config);
+    }
+
     public static MpvPlayer buildPlayer(int decode, Player.Listener listener) {
         return buildPlayer(decode, false, listener);
     }
@@ -65,25 +80,20 @@ public final class MpvUtil {
     /** 2 is an internal live zero-copy candidate, never a persisted/user-selected decode mode. */
     public static int internalDecode(int decode, boolean live) {
         if (!isAutomaticCandidate(decode, live)) return decode;
-        return MpvAutomaticOutputPolicy.acceptsUserOptions(MpvConfigFiles.readGlobalOptions(),
-                PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+        return 2;
     }
 
     private static boolean isAutomaticCandidate(int decode, boolean live) {
-        return MpvAutomaticOutputPolicy.direct(live, decode == 1, VideoSetting.isEnabled(),
-                false, false, PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE);
-    }
-
-    private static int internalDecode(int decode, boolean live, Map<String, String> userOptions) {
-        return isAutomaticCandidate(decode, live)
-                && MpvAutomaticOutputPolicy.acceptsUserOptions(userOptions,
-                        PlayerSetting.isMpvGpuNext(), PlayerSetting.isMpvVulkan()) ? 2 : decode;
+        // gpu-next needs its own VO; never route a live item through mediacodec_embed then.
+        return !PlayerSetting.isMpvGpuNext() && !PlayerSetting.isMpvDeband() && !MpvConfigFiles.isEnabled()
+                && MpvAutomaticOutputPolicy.direct(
+                live, decode == 1, VideoSetting.isEnabled(), false, false, true);
     }
 
     public static MpvPlayer buildPlayer(int decode, boolean live, Player.Listener listener) {
         // The eligibility check and config builder must see the same parsed mpv.conf snapshot.
         Map<String, String> userOptions = MpvConfigFiles.readGlobalOptions();
-        int internal = internalDecode(decode, live, userOptions);
+        int internal = internalDecode(decode, live);
         MpvPlayer player = new MpvPlayer.Builder(App.get()).setDecode(internal).setLive(live)
                 .setConfig(buildConfig(internal, live, userOptions)).build();
         player.addListener(listener);
@@ -122,7 +132,9 @@ public final class MpvUtil {
         MpvConfigFiles.ensureAndroidFontsConfig(cacheDir);
         builder.addConfigDirectory(configDir)
                 .addAndroidFontConfig(configDir, cacheDir)
-                .addAndroidDefaults(getVideoOutputDriver(userOptions, decode), cacheDir);
+                .addAndroidDefaults(getVideoOutputDriver(userOptions, decode), cacheDir)
+                .addPreInitStringOption("config", MpvConfigFiles.isEnabled() ? "yes" : "no")
+                .addPreInitStringOption("load-scripts", MpvConfigFiles.isEnabled() ? "yes" : "no");
     }
 
     private static void addTlsCaFile(MpvPlayerConfig.Builder builder) {
@@ -146,6 +158,15 @@ public final class MpvUtil {
         if (!userOptions.containsKey(OPT_PROXY_URL)) {
             builder.addPreInitStringOption(OPT_PROXY_URL, Server.get().getAddress(true) + "/proxy?");
         }
+        // Hard decode prefers the hardware decoder but must still fall back to software when the
+        // device has no usable one for this stream (e.g. H.264 High 4:4:4, MPEG-2 on a phone).
+        // libmpv does that itself, on two paths: a decoder it cannot open is replaced immediately,
+        // while one that opens but keeps failing to decode is tolerated for `hwdec-software-fallback`
+        // frames first (default 3, reset by any successful frame) so an occasional bad frame does
+        // not drop the whole stream to software. Writing "no" here (INT_MAX) disables both, and
+        // libmpv then force-EOFs the video track: audio continues over a black surface with no
+        // error at all. Leave the option at its default; the explicit soft mode still uses
+        // hwdec=no, which never enters this path.
         if (decode == 2) {
             builder.addPreInitStringOption("vo", MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED)
                     .addPreInitStringOption("hwdec", MpvAutomaticOutputPolicy.HWDEC_MEDIACODEC);
@@ -153,24 +174,28 @@ public final class MpvUtil {
             addVideoOutputOptions(builder, userOptions);
         }
         addStreamOptions(builder, userOptions, live);
-        addPreloadOptions(builder, userOptions, live);
     }
 
     private static void addStreamOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
         if (!userOptions.containsKey("network-timeout")) {
             builder.addPreInitStringOption("network-timeout", live ? "15" : "30");
         }
-        if (!userOptions.containsKey("framedrop")) builder.addPreInitStringOption("framedrop", "vo");
+        // Dropping late frames is how a live stream catches up. On VOD it reads as stutter.
+        if (live && !userOptions.containsKey("framedrop")) builder.addPreInitStringOption("framedrop", "vo");
         if (live && !userOptions.containsKey("video-sync")) builder.addPreInitStringOption("video-sync", "audio");
         if (!userOptions.containsKey("demuxer-max-bytes")) {
-            int mb = PlayerSetting.isLiveLowLatency()
+            // Low latency is a live setting. Applying it to VOD shrinks the cache of every title
+            // whenever the live page is set to low delay.
+            int mb = live && PlayerSetting.isLiveLowLatency()
                     ? Math.max(8, PlayerSetting.getBuffer() * 2)
                     : Math.max(15, PlayerSetting.getBuffer() * 3);
             builder.addPreInitStringOption("demuxer-max-bytes", mb + "MiB");
         }
         if (live) {
             if (!userOptions.containsKey("demuxer-max-back-bytes")) {
-                builder.addPreInitStringOption("demuxer-max-back-bytes", "0");
+                // A zero back buffer discards the only data pause can resume from.
+                builder.addPreInitStringOption("demuxer-max-back-bytes",
+                        PlayerSetting.isLiveLowLatency() ? "2MiB" : "8MiB");
             }
             if (!userOptions.containsKey("cache-secs")) {
                 int seconds = PlayerSetting.isLiveLowLatency()
@@ -178,11 +203,9 @@ public final class MpvUtil {
                         : Math.max(1, PlayerSetting.getBuffer());
                 builder.addPreInitStringOption("cache-secs", Integer.toString(seconds));
             }
-            if (!userOptions.containsKey("demuxer-lavf-o")) {
-                builder.addPreInitStringOption("demuxer-lavf-o", PlayerSetting.isLiveLowLatency()
-                        ? "analyzeduration=1000000,probesize=524288"
-                        : "analyzeduration=2500000,probesize=1048576");
-            }
+            // A live TS join may precede its next SPS/PPS/IDR by an entire GOP. Artificial
+            // 1-2.5s probe caps can publish an audio-only stream before video parameters exist.
+            // Use libavformat/mpv defaults, including in low-latency mode; explicit config wins.
             if (!userOptions.containsKey("rtsp-transport")) {
                 builder.addPreInitStringOption("rtsp-transport", "tcp");
             }
@@ -191,78 +214,52 @@ public final class MpvUtil {
             // playback buffer. On high-bitrate remote MKVs this repeatedly emptied the cache
             // after a seek (observed on home-rk as 0% -> ~1s -> 0%). Do not override explicit
             // mpv.conf values or the separate disk-preload policy.
-            if (!userOptions.containsKey("cache-secs") && !PreloadSetting.isPreload()) {
+            if (!userOptions.containsKey("cache-secs")) {
                 builder.addPreInitStringOption("cache-secs", Integer.toString(PlayerSetting.getBuffer()));
             }
             if (!userOptions.containsKey("demuxer-max-back-bytes")) {
                 builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
             }
         }
+        if (PlayerSetting.isMpvDeband() && !userOptions.containsKey("deband")) {
+            builder.addPreInitStringOption("deband", "yes");
+        }
+        String audioLanguages = LangUtil.getPreferredAudioLanguageList();
+        if (!audioLanguages.isEmpty() && !userOptions.containsKey("alang")) {
+            builder.addPreInitStringOption("alang", audioLanguages);
+        }
         if (!userOptions.containsKey("stream-lavf-o")) {
             builder.addPreInitStringOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
+        }
+        // mpv closes the file at EOF by default, which clears the rendered frame and leaves the
+        // player page black with no way back. Keep the last frame on screen instead; mpv still
+        // reports END_FILE(EOF), so auto-advance and STATE_ENDED keep working.
+        if (!userOptions.containsKey("keep-open")) {
+            builder.addPreInitStringOption("keep-open", "yes");
         }
     }
 
     private static String getVideoOutputDriver(Map<String, String> userOptions, int decode) {
-        if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
         if (PlayerSetting.isMpvGpuNext()) return MpvPlayerConfig.VIDEO_OUTPUT_GPU_NEXT;
+        if (decode == 2) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
         return userOptions.containsKey("vo") ? null : VALUE_GPU;
     }
 
     private static void addVideoOutputOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions) {
-        // Match mpv-android: Android GLES context is required for vo=gpu, otherwise audio-only.
-        if (PlayerSetting.isMpvVulkan() && isVulkanAvailable()) {
-            builder.addPreInitStringOption(OPT_GPU_API, VALUE_VULKAN)
-                    .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
-            return;
-        }
-        if (VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))) {
-            if (isVulkanAvailable()) {
-                if (!userOptions.containsKey(OPT_GPU_CONTEXT)) builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID_VK);
-            } else {
-                // A copied mpv.conf must not bypass the build/device capability guard.
-                builder.addPreInitStringOption(OPT_GPU_API, VALUE_OPENGL)
-                        .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
-                        .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
-            }
-            return;
-        }
-        if (!userOptions.containsKey(OPT_GPU_CONTEXT)) {
-            builder.addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID);
-        }
-        if (!userOptions.containsKey(OPT_OPENGL_ES)
-                && !VALUE_VULKAN.equals(userOptions.get(OPT_GPU_API))) {
-            builder.addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
-        }
-    }
-
-    private static void addPreloadOptions(MpvPlayerConfig.Builder builder, Map<String, String> userOptions, boolean live) {
-        // Persisting a moving live window wastes flash and can contend with decoder I/O.
-        if (live || !PreloadSetting.isPreload()) return;
-        File mediaCache = new File(Path.mpvCache(), "media");
-        if (!userOptions.containsKey("cache")) builder.addPreInitStringOption("cache", "yes");
-        if (!userOptions.containsKey("cache-on-disk")) builder.addPreInitStringOption("cache-on-disk", "yes");
-        if (!userOptions.containsKey("demuxer-cache-dir")) {
-            builder.addPreInitStringOption("demuxer-cache-dir", mediaCache.getAbsolutePath());
-        }
-        if (!userOptions.containsKey("cache-secs")) {
-            builder.addPreInitStringOption("cache-secs", Integer.toString(Math.max(1, PreloadSetting.getPreloadTimeSeconds())));
-        }
-        if (!userOptions.containsKey("demuxer-max-bytes")) {
-            builder.addPreInitStringOption("demuxer-max-bytes", Math.max(8, PreloadSetting.getPreloadSizeMb()) + "MiB");
-        }
-        if (!userOptions.containsKey("demuxer-max-back-bytes")) {
-            builder.addPreInitStringOption("demuxer-max-back-bytes", "8MiB");
-        }
+        // GLES is the only supported output: it keeps MediaCodec zero-copy and avoids the
+        // experimental Vulkan path, which cannot use the AImageReader hardware decoder.
+        builder.addPreInitStringOption(OPT_GPU_API, VALUE_OPENGL)
+                .addPreInitStringOption(OPT_GPU_CONTEXT, VALUE_ANDROID)
+                .addPreInitStringOption(OPT_OPENGL_ES, VALUE_YES);
     }
 
     private static void addSubtitleStyleOptions(MpvPlayerConfig.Builder builder) {
         builder.addAndroidSubtitleOptions(App.get(), PlayerSetting.isCaption(), getSubtitlePosition(), getSubtitleScale());
-        // External fonts live under Path.font(); fonts.conf already lists that directory. The stored
-        // family is authoritative because libass/fontconfig resolve it by name, and re-parsing a TTC
-        // would only ever yield the collection's first face.
-        String family = com.fongmi.android.tv.setting.SubtitleSetting.getFontFamily();
-        if (!TextUtils.isEmpty(family)) builder.addPostInitStringOption("sub-font", family);
+        // fonts.conf already lists Path.font(). libass treats sub-font as a literal name;
+        // use the font's full face name, never a family:style= pattern.
+        com.fongmi.android.tv.player.subtitle.ExternalFont.Entry entry = com.fongmi.android.tv.setting.SubtitleSetting.getFontEntry();
+        String font = entry == null ? com.fongmi.android.tv.setting.SubtitleSetting.getFontFamily() : entry.mpvFont();
+        if (!TextUtils.isEmpty(font)) builder.addPostInitStringOption("sub-font", font);
     }
 
     private static String getDefaultUserAgent() {
@@ -276,15 +273,6 @@ public final class MpvUtil {
         return Util.constrainValue(DEFAULT_SUB_POS - position * 100.0, MIN_SUB_POS, MAX_SUB_POS);
     }
 
-    public static boolean isVulkanSupported() {
-        return isVulkanAvailable();
-    }
-
-    private static boolean isVulkanAvailable() {
-        PackageManager manager = App.get().getPackageManager();
-        return com.fongmi.media3.compat.BuildConfig.LIBMPV_VULKAN
-                && manager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_2);
-    }
 
     private static double getSubtitleScale() {
         float textSize = PlayerSetting.getSubtitleTextSize();

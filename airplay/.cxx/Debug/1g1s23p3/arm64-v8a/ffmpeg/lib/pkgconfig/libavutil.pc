@@ -1,0 +1,14 @@
+prefix=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg
+exec_prefix=${prefix}
+libdir=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg/lib
+includedir=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a/ffmpeg/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 60.26.102
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil -lm -latomic -landroid -lmediandk -pthread
+Libs.private: 
+Cflags: -I${includedir}

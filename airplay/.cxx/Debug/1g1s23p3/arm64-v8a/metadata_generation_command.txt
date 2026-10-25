@@ -1,0 +1,22 @@
+                        -H/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=24
+-DANDROID_PLATFORM=android-24
+-DANDROID_ABI=arm64-v8a
+-DCMAKE_ANDROID_ARCH_ABI=arm64-v8a
+-DANDROID_NDK=/data/home/zyq/Android/Sdk/ndk/29.0.14206865
+-DCMAKE_ANDROID_NDK=/data/home/zyq/Android/Sdk/ndk/29.0.14206865
+-DCMAKE_TOOLCHAIN_FILE=/data/home/zyq/Android/Sdk/ndk/29.0.14206865/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/data/home/zyq/Android/Sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/build/intermediates/cxx/Debug/1g1s23p3/obj/arm64-v8a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/build/intermediates/cxx/Debug/1g1s23p3/obj/arm64-v8a
+-DCMAKE_BUILD_TYPE=Debug
+-DCMAKE_FIND_ROOT_PATH=/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/prefab/arm64-v8a/prefab
+-B/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a
+-GNinja
+-DANDROID_STL=c++_shared
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+-DOPENSSL_BUILD_HASH=7bdf55ac20f2779e99e5eca306f824fad2b37dee5a06cc35ed5a8b85a6060010
+                        Build command args: []
+                        Version: 2

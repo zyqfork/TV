@@ -113,12 +113,16 @@ public class History implements Diffable<History> {
     }
 
     public static void sync(List<History> targets) {
+        sync(targets, VodConfig.getCid());
+    }
+
+    public static void sync(List<History> targets, int cid) {
         targets.forEach(target -> {
-            List<History> items = findByName(target.getVodName());
-            if (items.isEmpty()) target.cid(VodConfig.getCid()).save();
+            List<History> items = AppDatabase.get().getHistoryDao().findByName(cid, target.getVodName());
+            if (items.isEmpty()) target.cid(cid).save();
             else {
                 long latestTime = items.stream().mapToLong(History::getCreateTime).max().orElse(0L);
-                if (target.getCreateTime() > latestTime) target.cid(VodConfig.getCid()).mergeFrom(items, true).save();
+                if (target.getCreateTime() > latestTime) target.cid(cid).mergeFrom(items, true).save();
             }
         });
     }
@@ -280,7 +284,12 @@ public class History implements Diffable<History> {
 
     public String getVodId() {
         String[] parts = getKey().split(AppDatabase.SYMBOL);
-        return parts.length > 1 ? parts[1] : "";
+        if (parts.length < 2) return "";
+        if (parts.length == 2) return parts[1];
+        // siteKey@@@vodId(with @@@)@@@cid — join the middle segments.
+        StringBuilder sb = new StringBuilder(parts[1]);
+        for (int i = 2; i < parts.length - 1; i++) sb.append(AppDatabase.SYMBOL).append(parts[i]);
+        return sb.toString();
     }
 
     public Flag getFlag() {

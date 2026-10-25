@@ -73,15 +73,23 @@ public class Util {
         return text;
     }
 
+    /**
+     * The address this device publishes to the LAN (server QR code, /device, cast callback).
+     *
+     * Delegates to {@link NetIface}, which honours a user-chosen interface and otherwise picks the
+     * LAN-facing one. Guessing from interface-name prefixes cannot do this: on a Docker host the
+     * bridge is literally named {@code eth0} and holds the default route, while the address peers
+     * need is on another adapter entirely.
+     */
     public static String getIp() {
         try {
-            String ip = getHostAddress("wlan");
-            if (!ip.isEmpty()) return ip;
-            ip = getHostAddress("eth");
-            if (!ip.isEmpty()) return ip;
-            ip = getWifiAddress();
-            if (!ip.isEmpty()) return ip;
-            return getHostAddress("");
+            // Route through NetIface: it knows which adapter is LAN-facing, which the old
+            // wlan/eth name prefixes could not tell (a Docker bridge here is literally "eth0").
+            String resolved = NetIface.resolve();
+            if (!resolved.isEmpty()) return resolved;
+            String wifi = getWifiAddress();
+            if (!wifi.isEmpty()) return wifi;
+            return getHostAddress("", true);
         } catch (Exception e) {
             return "";
         }
@@ -93,10 +101,15 @@ public class Util {
         return ip == 0 ? "" : String.format(Locale.getDefault(), "%d.%d.%d.%d", ip & 0xFF, (ip >> 8) & 0xFF, (ip >> 16) & 0xFF, (ip >> 24) & 0xFF);
     }
 
-    private static String getHostAddress(String keyword) throws SocketException {
+    /**
+     * @param keyword       interface-name prefix to accept, empty for any
+     * @param lanOnly        skip adapters a LAN peer cannot reach (Docker, VM, tunnel, VPN)
+     */
+    private static String getHostAddress(String keyword, boolean lanOnly) throws SocketException {
         for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
             NetworkInterface nif = en.nextElement();
             if (!keyword.isEmpty() && !nif.getName().startsWith(keyword)) continue;
+            if (lanOnly && !NetIface.isLanReachable(nif.getName())) continue;
             for (Enumeration<InetAddress> addresses = nif.getInetAddresses(); addresses.hasMoreElements(); ) {
                 InetAddress addr = addresses.nextElement();
                 if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {

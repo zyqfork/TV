@@ -18,11 +18,23 @@ public interface PlayerEngine {
 
     Player getPlayer();
 
+    default String getVideoDecoderDescription() { return ""; }
+
+    default float getEstimatedVideoFrameRate() { return 0; }
+
     default PlayerEffect getEffect() {
         return PlayerEffect.NONE;
     }
 
     default boolean requiresAudioEffectRebuild() {
+        return false;
+    }
+
+    /**
+     * True when this engine was built from playback settings that have since changed.
+     * LoadControl, renderers, and track selection are fixed at construction.
+     */
+    default boolean refreshConfig() {
         return false;
     }
 
@@ -63,6 +75,15 @@ public interface PlayerEngine {
     boolean isVod();
 
     default void setSubtitleStyle() {
+    }
+
+    /**
+     * Whether this engine had to replace a requested hardware decoder with software for the
+     * current item, consuming the notice. EXO reports its own renderer fallback; MPV reports the
+     * decoder libmpv actually selected. At most one notice per item.
+     */
+    default boolean consumeSoftwareFallbackNotice() {
+        return false;
     }
 
     default void setVolumeGain(float gain) {

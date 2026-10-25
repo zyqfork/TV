@@ -15,6 +15,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.dialog.SyncDialog;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -38,6 +39,11 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         setTitle(R.string.home_history);
         setRecyclerView();
         getHistory();
+    }
+
+    @Override
+    protected void initEvent() {
+        mBinding.sync.setOnClickListener(v -> SyncDialog.create().history().show(this));
     }
 
     private void setRecyclerView() {

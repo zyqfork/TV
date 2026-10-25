@@ -33,11 +33,13 @@ import com.fongmi.android.tv.storage.NetworkStorageStore;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
+import com.fongmi.android.tv.ui.dialog.NetIfaceDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.github.catvod.utils.NetIface;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -75,6 +77,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
         mBinding.castText.setText(getCastText());
         setStorageText();
+        setNetIfaceText();
+    }
+
+    private void setNetIfaceText() {
+        String name = NetIface.resolveName();
+        mBinding.netIfaceText.setText(name.isEmpty() ? getString(R.string.setting_net_iface_none) : name + " (" + NetIface.resolve() + ")");
     }
 
     /** Which cast receivers are on, same summary the phone's 投屏设置 row shows. */
@@ -100,6 +108,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         if (mBinding != null) {
             mBinding.castText.setText(getCastText());
             setStorageText();
+            setNetIfaceText();
         }
     }
 
@@ -113,6 +122,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.danmaku.setOnClickListener(this::onDanmaku);
         mBinding.cast.setOnClickListener(this::onCast);
         mBinding.networkStorage.setOnClickListener(this::onNetworkStorage);
+        mBinding.netIface.setOnClickListener(view -> NetIfaceDialog.show(this, this::setNetIfaceText));
         mBinding.version.setOnClickListener(this::onVersion);
         mBinding.other.setOnClickListener(v -> SettingOtherActivity.start(this));
         mBinding.vod.setOnLongClickListener(this::onVodEdit);
@@ -268,12 +278,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void setSize(View view) {
-        new MaterialAlertDialogBuilder(this).setTitle(R.string.setting_size).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(size, PlayerSetting.getSize(), (dialog, which) -> {
-            mBinding.sizeText.setText(size[which]);
-            PlayerSetting.putSize(which);
-            RefreshEvent.size();
-            dialog.dismiss();
-        }).show();
+        int next = (PlayerSetting.getSize() + 1) % size.length;
+        PlayerSetting.putSize(next);
+        mBinding.sizeText.setText(size[next]);
+        RefreshEvent.size();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -282,6 +290,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
+        setStorageText();
     }
 
 }

@@ -113,22 +113,48 @@ public class EpgParser {
 
     private static void readXml(Live live, File file) throws Exception {
         ZoneId zoneId = live.getZoneId();
-        Map<String, Channel> liveChannelMap = prepareLiveChannels(live);
+        ChannelIndex liveChannels = prepareLiveChannels(live);
         XmlData xmlData = parseXmlData(file);
-        ProgrammeResult result = processProgramme(xmlData, liveChannelMap, zoneId);
+        ProgrammeResult result = processProgramme(xmlData, liveChannels, zoneId);
         bindResultsToLive(live, result);
     }
 
-    private static Map<String, Channel> prepareLiveChannels(Live live) {
-        Map<String, Channel> map = new HashMap<>();
+    /**
+     * Exact ids stay addressable. A normalized alias is registered only when a single channel
+     * produces it, so "电影" and "电影频道" do not share one programme list.
+     */
+    private static ChannelIndex prepareLiveChannels(Live live) {
+        ChannelIndex index = new ChannelIndex();
+        Map<String, Channel> pending = new HashMap<>();
+        Set<String> ambiguous = new HashSet<>();
         live.getGroups().stream()
                 .flatMap(group -> group.getChannel().stream())
                 .forEach(channel -> {
-                    if (!channel.getTvgId().isEmpty()) map.putIfAbsent(channel.getTvgId(), channel);
-                    if (!channel.getTvgName().isEmpty()) map.putIfAbsent(channel.getTvgName(), channel);
-                    if (!channel.getName().isEmpty()) map.putIfAbsent(channel.getName(), channel);
+                    putExact(index.exact, channel.getTvgId(), channel);
+                    putExact(index.exact, channel.getTvgName(), channel);
+                    putExact(index.exact, channel.getName(), channel);
+                    noteFuzzy(pending, ambiguous, channel.getTvgId(), channel);
+                    noteFuzzy(pending, ambiguous, channel.getTvgName(), channel);
+                    noteFuzzy(pending, ambiguous, channel.getName(), channel);
                 });
-        return map;
+        for (Map.Entry<String, Channel> entry : pending.entrySet()) {
+            if (!ambiguous.contains(entry.getKey())) index.fuzzy.put(entry.getKey(), entry.getValue());
+        }
+        return index;
+    }
+
+    private static void putExact(Map<String, Channel> map, String key, Channel channel) {
+        if (key == null || key.isEmpty()) return;
+        map.putIfAbsent(key, channel);
+    }
+
+    private static void noteFuzzy(Map<String, Channel> pending, Set<String> ambiguous, String key, Channel channel) {
+        if (key == null || key.isEmpty()) return;
+        String normalized = EpgName.fold(key);
+        if (normalized.isEmpty()) return;
+        Channel previous = pending.get(normalized);
+        if (previous == null) pending.put(normalized, channel);
+        else if (previous != channel) ambiguous.add(normalized);
     }
 
     private static XmlData parseXmlData(File file) throws Exception {
@@ -137,7 +163,7 @@ public class EpgParser {
         return new XmlData(tv, map);
     }
 
-    private static ProgrammeResult processProgramme(XmlData data, Map<String, Channel> liveChannelMap, ZoneId zoneId) {
+    private static ProgrammeResult processProgramme(XmlData data, ChannelIndex liveChannels, ZoneId zoneId) {
         Map<String, Map<String, Epg>> epgMap = new HashMap<>();
         Map<String, String> srcMap = new HashMap<>();
         Map<String, Channel> channelCache = new HashMap<>();
@@ -151,7 +177,7 @@ public class EpgParser {
             } else if (channelMiss.contains(xmlChannelId)) {
                 targetChannel = null;
             } else {
-                targetChannel = findTargetChannel(xmlChannelId, liveChannelMap, data.map);
+                targetChannel = findTargetChannel(xmlChannelId, liveChannels, data.map);
                 if (targetChannel != null) channelCache.put(xmlChannelId, targetChannel);
                 else channelMiss.add(xmlChannelId);
             }
@@ -182,12 +208,31 @@ public class EpgParser {
         return new ProgrammeResult(epgMap, srcMap);
     }
 
-    private static Channel findTargetChannel(String xmlChannelId, Map<String, Channel> liveChannelMap, Map<String, List<Tv.Channel>> xmlChannelIdMap) {
-        Channel targetChannel = liveChannelMap.get(xmlChannelId);
+    private static Channel findTargetChannel(String xmlChannelId, ChannelIndex liveChannels, Map<String, List<Tv.Channel>> xmlChannelIdMap) {
+        Channel targetChannel = lookupChannel(liveChannels, xmlChannelId);
         if (targetChannel != null) return targetChannel;
         List<Tv.Channel> channels = xmlChannelIdMap.get(xmlChannelId);
         if (channels == null) return null;
-        return channels.stream().flatMap(xmlChannel -> xmlChannel.getDisplayName().stream()).map(Tv.DisplayName::getText).filter(name -> !name.isEmpty()).filter(liveChannelMap::containsKey).findFirst().map(liveChannelMap::get).orElse(null);
+        return channels.stream()
+                .flatMap(xmlChannel -> xmlChannel.getDisplayName().stream())
+                .map(Tv.DisplayName::getText)
+                .filter(name -> name != null && !name.isEmpty())
+                .map(name -> lookupChannel(liveChannels, name))
+                .filter(channel -> channel != null)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static Channel lookupChannel(ChannelIndex liveChannels, String key) {
+        if (key == null || key.isEmpty()) return null;
+        Channel hit = liveChannels.exact.get(key);
+        if (hit != null) return hit;
+        String folded = EpgName.fold(key);
+        if (folded.isEmpty()) return null;
+        Channel fuzzy = liveChannels.fuzzy.get(folded);
+        if (fuzzy != null) return fuzzy;
+        String stripped = EpgName.stripQuality(folded);
+        return stripped.equals(folded) ? null : liveChannels.fuzzy.get(stripped);
     }
 
     private static void bindResultsToLive(Live live, ProgrammeResult result) {
@@ -230,6 +275,11 @@ public class EpgParser {
         } catch (Exception e) {
             return new EpgData();
         }
+    }
+
+    private static final class ChannelIndex {
+        private final Map<String, Channel> exact = new HashMap<>();
+        private final Map<String, Channel> fuzzy = new HashMap<>();
     }
 
     private static class XmlData {

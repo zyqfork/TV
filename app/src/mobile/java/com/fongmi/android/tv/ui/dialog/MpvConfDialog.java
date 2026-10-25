@@ -11,6 +11,7 @@ import android.view.View;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
@@ -30,6 +31,11 @@ public class MpvConfDialog extends BaseAlertDialog {
 
     public static void show(Fragment fragment) {
         new MpvConfDialog().show(fragment.getChildFragmentManager(), null);
+    }
+
+    /** Settings-page entry: no owning fragment for the dialog editor. */
+    public static void show(FragmentActivity activity) {
+        new MpvConfDialog().show(activity.getSupportFragmentManager(), null);
     }
 
     @Override

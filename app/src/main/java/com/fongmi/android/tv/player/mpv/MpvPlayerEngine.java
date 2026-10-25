@@ -26,6 +26,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     private PlaySpec spec;
     private int decode;
     private int startGeneration;
+    private java.util.Map<String, Object> builtConfig;
     private boolean live;
 
     public MpvPlayerEngine(int decode, Player.Listener listener) {
@@ -36,6 +37,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         this.decode = decode;
         this.live = live;
         this.listener = listener;
+        this.builtConfig = MpvUtil.playbackConfig(decode, live);
         this.player = MpvUtil.buildPlayer(decode, live, listener);
         this.effect = new MpvPlayerEffect(player);
         this.provider = new MpvErrorMsgProvider();
@@ -53,6 +55,12 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public Player getPlayer() {
         return player;
+    }
+
+    @Override
+    public String getVideoDecoderDescription() {
+        String value = is.xyz.mpv.MPVLib.getCachedString("hwdec-current");
+        return value == null ? "" : value;
     }
 
     @Override
@@ -78,14 +86,25 @@ public class MpvPlayerEngine implements PlayerEngine {
     public Player rebuild() {
         startGeneration++;
         player.release();
+        builtConfig = MpvUtil.playbackConfig(decode, live);
         player = MpvUtil.buildPlayer(decode, live, listener);
         effect = new MpvPlayerEffect(player);
         return player;
     }
 
     @Override
+    public boolean refreshConfig() {
+        return !MpvUtil.playbackConfig(decode, live).equals(builtConfig);
+    }
+
+    @Override
     public void setSubtitleStyle() {
         MpvUtil.setSubtitleStyle(player);
+    }
+
+    @Override
+    public boolean consumeSoftwareFallbackNotice() {
+        return player.consumeSoftwareFallbackNotice();
     }
 
     @Override
@@ -187,19 +206,49 @@ public class MpvPlayerEngine implements PlayerEngine {
     public ErrorAction handleError(PlaybackException e) {
         return switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;
-            case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> retryHls();
+            case PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> retryHls(e);
+            // A first-frame timeout in hard mode means no hardware decoder produced a picture for
+            // this stream (unsupported profile, or a decoder that never came up). Retrying the same
+            // mode cannot help, so switch to software once - the same outcome EXO reaches through
+            // its own renderer fallback. Soft mode already is the last resort, so it keeps retrying.
+            case PlaybackException.ERROR_CODE_TIMEOUT -> decode != PlayerEngine.SOFT
+                    ? ErrorAction.DECODE : ErrorAction.RETRY;
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-                 PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
-                 PlaybackException.ERROR_CODE_TIMEOUT -> ErrorAction.RETRY;
+                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> ErrorAction.RETRY;
             default -> ErrorAction.FATAL;
         };
     }
 
-    private ErrorAction retryHls() {
-        if (spec == null || MimeTypes.APPLICATION_M3U8.equals(spec.getFormat())) return ErrorAction.FATAL;
+    private ErrorAction retryHls(PlaybackException e) {
+        if (spec == null || MimeTypes.APPLICATION_M3U8.equals(spec.getFormat()) || !shouldHintHls(e)) return ErrorAction.FATAL;
         spec.setFormat(MimeTypes.APPLICATION_M3U8);
         startInternal(player.getCurrentPosition());
         return ErrorAction.RECOVERED;
+    }
+
+    /**
+     * One HLS format hint when the URL or the error already says HLS.
+     * A live address with no container suffix gets the same hint. VOD without those signs does not.
+     */
+    private boolean shouldHintHls(PlaybackException e) {
+        String url = spec.getUrl() == null ? "" : spec.getUrl().toLowerCase(java.util.Locale.ROOT);
+        int query = url.indexOf('?');
+        String path = query >= 0 ? url.substring(0, query) : url;
+        if (endsWithContainer(path)) return false;
+        String format = spec.getFormat();
+        if (format != null && !format.isEmpty()) {
+            String lower = format.toLowerCase(java.util.Locale.ROOT);
+            return lower.contains("mpegurl") || lower.contains("m3u8") || lower.contains("hls");
+        }
+        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(java.util.Locale.ROOT);
+        int slash = path.lastIndexOf('/');
+        String leaf = slash >= 0 ? path.substring(slash + 1) : path;
+        if (leaf.contains(".m3u8") || message.contains("m3u8") || message.contains("hls")) return true;
+        return live && !leaf.contains(".");
+    }
+
+    private static boolean endsWithContainer(String path) {
+        return path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".flv")
+                || path.endsWith(".mpd") || path.endsWith(".avi") || path.endsWith(".mov") || path.endsWith(".ts");
     }
 }

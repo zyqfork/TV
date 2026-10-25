@@ -1,0 +1,125 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10.0"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				},
+				{
+					"build" : "third_party/openssl-cmake",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-third_party.openssl-cmake-Debug-016deeb520c49d07f5e6.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "third_party/openssl-cmake"
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "airplay_native",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "openssl-cmake",
+					"parentIndex" : 0
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "airplay_native::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-airplay_native-Debug-3c0344a88316e0bd838b.json",
+					"name" : "airplay_native",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ffmpeg_ep::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ffmpeg_ep-Debug-a0aa950e255168bc9051.json",
+					"name" : "ffmpeg_ep",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "llhttp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-llhttp-Debug-0ef3f5b2243753ea499e.json",
+					"name" : "llhttp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "playfair::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-playfair-Debug-47cff318d7bda4edf15e.json",
+					"name" : "playfair",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "plist::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-plist-Debug-14ec5134efc23d04830e.json",
+					"name" : "plist",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/.cxx/Debug/1g1s23p3/arm64-v8a",
+		"source" : "/data/home/zyq/IdeaProjects/github/FongMi/TV/airplay/src/main/cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

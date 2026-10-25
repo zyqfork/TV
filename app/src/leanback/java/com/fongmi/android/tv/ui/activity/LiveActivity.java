@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -52,9 +53,11 @@ import com.fongmi.android.tv.player.extractor.Source;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownLive;
 import com.fongmi.android.tv.ui.custom.CustomLiveListView;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -160,6 +163,12 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        // The playback page has no wallpaper layer (no decode, no video behind a video), so its
+        // detail area used to sit on the theme's window background - a flat near-black that had
+        // nothing to do with the wallpaper. Paint the colour the wallpaper-backed pages resolve to.
+        // On the root, not just the list container: the container starts below the video, so the
+        // strip behind a collapsed video would otherwise stay on the theme background.
+        mBinding.getRoot().setBackgroundColor(CustomWallView.readableBackdrop(Setting.getWallColor()));
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownLive.create(this);
         mObserveUrl = this::onUrlObserved;
@@ -368,7 +377,8 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     private void checkPlay() {
-        if (player().isPlaying()) onPaused();
+        // isPlaying() is false while a live stream is still buffering, so the button never paused.
+        if (controller() != null && controller().getPlayWhenReady()) onPaused();
         else onPlay();
     }
 
@@ -517,8 +527,10 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
-        if (isPlaying || isPaused()) updatePlayControl(isPlaying);
-        if (!isPlaying && isPaused()) showControl(getFocus2());
+        boolean playing = controller() != null && controller().getPlayWhenReady();
+        updatePlayControl(playing);
+        // Do not steal fullscreen remote focus when pausing: the next OK must resume,
+        // not activate the configuration button. Explicit touch/control actions show their UI.
     }
 
     private void updatePlayControl(boolean isPlaying) {
@@ -735,8 +747,18 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         // deliberately keeps an error visible for in-place retries, so clearing it here (and on
         // STATE_READY) is the only thing that removes it again.
         hideError();
-        mPlaybackKey = result.getRealUrl();
+        mPlaybackKey = trackKey(mChannel, result);
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), startPositionMs, buildMetadata());
+    }
+
+    /** Prefer a stable channel id so audio/subtitle Track rows survive URL/line changes. */
+    private static String trackKey(Channel channel, Result result) {
+        if (channel != null) {
+            String id = channel.getTvgId();
+            if (!TextUtils.isEmpty(id)) return "live@@@" + id;
+            if (!TextUtils.isEmpty(channel.getName())) return "live@@@" + channel.getName();
+        }
+        return result.getRealUrl();
     }
 
     private void stopPlayer() {
@@ -964,7 +986,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
-        if (mKeyDown.hasEvent(event) && service() != null) mKeyDown.onKeyDown(event);
+        if (mKeyDown.hasEvent(event) && service() != null && mKeyDown.onKeyDown(event)) return true;
         return super.dispatchKeyEvent(event);
     }
 
@@ -1034,8 +1056,24 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     public void onKeyCenter() {
+        if (controller() == null) return;
+        controller().setPlayWhenReady(!controller().getPlayWhenReady());
+    }
+
+    @Override
+    public void onChannelList() {
         hideInfo();
         showUI();
+    }
+
+    @Override
+    public void onMediaPlay(boolean play) {
+        if (controller() != null) controller().setPlayWhenReady(play);
+    }
+
+    @Override
+    public void onPlayPause() {
+        onKeyCenter();
     }
 
     @Override
@@ -1051,7 +1089,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     @Override
     public void onDoubleTap() {
         if (isVisible(mBinding.recycler)) hideUI();
-        if (player().isPlaying()) {
+        if (controller() != null && controller().getPlayWhenReady()) {
             showControl(getFocus2());
             onPaused();
         } else {

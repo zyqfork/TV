@@ -10,6 +10,9 @@ import java.util.List;
 @Dao
 public abstract class KeepDao extends BaseDao<Keep> {
 
+    @Query("DELETE FROM Keep")
+    public abstract void deleteAllForRestore();
+
     @Query("SELECT * FROM Keep")
     public abstract List<Keep> findAll();
 

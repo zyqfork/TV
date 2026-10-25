@@ -25,6 +25,7 @@ import com.fongmi.android.tv.databinding.ActivityAirplayCastBinding;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.Util;
 
 import kotlin.jvm.functions.Function1;
@@ -43,6 +44,7 @@ public class AirPlayCastActivity extends BaseActivity {
     private ActivityAirplayCastBinding mBinding;
     private AirPlayService mService;
     private Clock mClock;
+    private PiP mPiP;
     private Handler mHandler;
     private Runnable mPoll;
     private Runnable mHideControl;
@@ -84,6 +86,7 @@ public class AirPlayCastActivity extends BaseActivity {
         if (Util.isMobile()) Util.hideSystemUI(this);
         mHandler = new Handler(Looper.getMainLooper());
         mClock = Clock.create(mBinding.widget.clock);
+        mPiP = new PiP();
         mHideControl = this::hideControl;
         mIdleFinish = this::finishIfIdle;
         mPoll = this::poll;
@@ -376,6 +379,7 @@ public class AirPlayCastActivity extends BaseActivity {
 
         boolean playing = video ? infoPlaying : Boolean.TRUE.equals(mService.getPlaying().getValue());
         mBinding.control.play.setText(playing ? R.string.airplay_cast_pause : R.string.airplay_cast_play);
+        if (mPiP != null) updatePiPActions(playing);
 
         if (!scrubbing && canSeek) {
             long duration = currentDuration();
@@ -474,6 +478,13 @@ public class AirPlayCastActivity extends BaseActivity {
 
     private boolean isMirrorMode() {
         return mService != null && Boolean.TRUE.equals(mService.getMirroringActive().getValue()) && !isVideoMode();
+    }
+
+    private void updatePiPActions(boolean playing) {
+        boolean audioControls = isAudioMode() && mService.getDacpController() != null
+                && mService.getDacpController().isAvailable();
+        // Mirror mode is sender-controlled; it has neither pause nor queue/audio-mode actions.
+        mPiP.updateAirPlay(this, playing, isVideoMode() || audioControls, audioControls);
     }
 
     private boolean canControlPlayback() {
@@ -642,6 +653,17 @@ public class AirPlayCastActivity extends BaseActivity {
         mClock.stop();
         mHandler.removeCallbacks(mPoll);
         App.removeCallbacks(mIdleFinish);
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (mPiP == null) return;
+        if (isVideoMode() || isMirrorMode()) {
+            VideoPlaybackInfo info = mService.getVideoPlaybackInfo().getValue();
+            updatePiPActions(isVideoMode() && info != null && info.getPlaying());
+            mPiP.enter(this, 16, 9, 1);
+        }
     }
 
     @Override

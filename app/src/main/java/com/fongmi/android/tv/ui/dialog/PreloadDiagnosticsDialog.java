@@ -102,9 +102,9 @@ public class PreloadDiagnosticsDialog extends DialogFragment {
         StringBuilder builder = new StringBuilder();
         builder.append("policy=").append(decision.allowed() ? "allowed" : "blocked");
         builder.append(" (").append(decision.reason()).append(")");
-        builder.append("\nmeteredAllowed=").append(PreloadSetting.isPreloadOnMetered());
+        builder.append("\nmeteredAllowed=").append(false);
         builder.append("\nduration=").append(PreloadSetting.getPreloadDurationMs() / 1000).append('s');
-        builder.append("\nthreads=").append(PreloadSetting.getPreloadThreads());
+        builder.append("\nthreads=").append(1);
         builder.append("\n\n").append(PreloadDiagnostics.summary());
         return builder.toString();
     }
