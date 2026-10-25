@@ -97,6 +97,8 @@ public final class MpvPlayer extends SimpleBasePlayer
     private boolean embedVoDisabled;
     /** Per-file latch: subtitles need GPU composition, not CPU copy-back or a decode-mode change. */
     private boolean subtitleGpuRequired;
+    /** Per-file latch: the stream is HDR, so only the direct MediaCodec path keeps its metadata. */
+    private boolean hdrDirect;
     /** How many times we already retried embed after a surface race (before gpu fallback). */
     private int embedSurfaceRetries;
     private static final int EMBED_SURFACE_RETRY_LIMIT = 2;
@@ -339,6 +341,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         MPVLib.observeProperty("secondary-sid", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("current-vo", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("hwdec-current", MPVLib.MpvFormat.STRING);
+        MPVLib.observeProperty("video-params/gamma", MPVLib.MpvFormat.STRING);
         MPVLib.observeProperty("sub-visibility", MPVLib.MpvFormat.FLAG);
         MPVLib.observeProperty("track-list/count", MPVLib.MpvFormat.INT64);
     }
@@ -478,7 +481,44 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private boolean wantsDirectOutput() {
-        return decode == 2 || explicitDirectOutput();
+        return decode == 2 || explicitDirectOutput() || hdrDirect;
+    }
+
+    /**
+     * HDR metadata (PQ/HLG) only reaches the display through the direct MediaCodec path; the GPU
+     * VO composes to RGBA and drops it. Upgrade once the stream announces itself, but never force
+     * it over the user's explicit hwdec, GPU subtitles or video effects.
+     */
+    static boolean shouldUpgradeForHdr(boolean hdrDirect, boolean embedVoDisabled, boolean subtitleGpuRequired,
+            int decode, boolean fileLoaded, boolean surfaceReady,
+            boolean externalSubtitles, int selectedSid, String gamma) {
+        if (hdrDirect || embedVoDisabled || subtitleGpuRequired || decode != 1) return false;
+        if (!fileLoaded || !surfaceReady) return false;
+        if (externalSubtitles || selectedSid > 0) return false;
+        return "pq".equals(gamma) || "hlg".equals(gamma);
+    }
+
+    private void maybeUpgradeHdrToDirectOutput(String gamma) {
+        if (released) return;
+        boolean external = mediaItem != null && mediaItem.localConfiguration != null
+                && !mediaItem.localConfiguration.subtitleConfigurations.isEmpty();
+        int selectedSid = parseInt(MPVLib.getCachedString("sid"), -1);
+        if (!shouldUpgradeForHdr(hdrDirect, embedVoDisabled, subtitleGpuRequired, decode, fileLoaded,
+                surfaceReady, external, selectedSid, gamma)) return;
+        hdrDirect = true;
+        Log.i("MpvPlayer", "HDR transfer '" + gamma + "': switching to direct output for HDR passthrough, vo=" + getVo());
+        activeVideoOutput = "";
+        // Same ordering as requireSubtitleGpu(): close the decoder and drop the current VO before
+        // the new one is applied, so containers that only reveal their size in the stream cannot
+        // reopen against vo=null.
+        MPVLib.setPropertyAsync("vid", "no");
+        MPVLib.setPropertyAsync("vo", "null");
+        MPVLib.setPropertyAsync("hwdec", getDecodeOption());
+        MPVLib.setPropertyAsync("vo", getVo());
+        firstFrameReported = false;
+        videoFrameSeen = false;
+        reopenVideoDecoder();
+        scheduleProgressBlackScreenCheck();
     }
 
     private String getVo() {
@@ -487,8 +527,10 @@ public final class MpvPlayer extends SimpleBasePlayer
         boolean external = mediaItem != null && mediaItem.localConfiguration != null
                 && !mediaItem.localConfiguration.subtitleConfigurations.isEmpty();
         boolean surfaceView = videoOutput == null || videoOutput instanceof SurfaceView;
-        if (!embedVoDisabled && MpvAutomaticOutputPolicy.direct(live || explicitDirectOutput(), wantsDirectOutput(), false,
+        if (!embedVoDisabled && MpvAutomaticOutputPolicy.direct(live || explicitDirectOutput() || hdrDirect, wantsDirectOutput(), false,
                 external, subtitleGpuRequired, surfaceView)) {
+            // The HDR upgrade decides the route itself; the app's vo=gpu default must not win here.
+            if (hdrDirect) return MpvAutomaticOutputPolicy.VO_MEDIACODEC_EMBED;
             return config.preInitOptions.getOrDefault("vo", "mediacodec_embed");
         }
         String configured = config.preInitOptions.get("vo");
@@ -677,6 +719,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         applyDemuxerOptions(uri);
         // The new item re-evaluates direct eligibility; GPU fallback never persists.
         subtitleGpuRequired = false;
+        hdrDirect = false;
         // An automatic live hard candidate may select embed after the item and view are known.
         // Wait for its Surface even when this particular item needs GPU (e.g. external subs),
         // so the pre-init embed VO cannot race the final routing decision or open audio-only.
@@ -1482,6 +1525,8 @@ public final class MpvPlayer extends SimpleBasePlayer
             // The decoder libmpv actually selected. Also read from the cache at first frame, since
             // mpv publishes this on video-reconfig and that may already have passed.
             onApplicationThread(() -> noteActiveHwdec(value));
+        } else if ("video-params/gamma".equals(property)) {
+            onApplicationThread(() -> maybeUpgradeHdrToDirectOutput(value));
         } else if ("sid".equals(property) || "secondary-sid".equals(property)) {
             onApplicationThread(() -> {
                 if (!fileLoaded) return;
