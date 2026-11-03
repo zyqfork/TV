@@ -21,6 +21,7 @@ import com.fongmi.android.tv.utils.Task;
 /** Owns one ExoPlayer instance and all resources whose lifecycle must match that instance. */
 final class ExoPlayerSession {
 
+    private final FrameRateEstimator frameRate = new FrameRateEstimator();
     private final ExoVolumeGain volumeGain;
     private final ExoPlayerEffect effect;
     private final PreCache preCache;
@@ -51,6 +52,7 @@ final class ExoPlayerSession {
         this.live = live;
         this.effect = new ExoPlayerEffect(!ExoUtil.isAudioPassThroughEnabled());
         this.player = ExoUtil.buildPlayer(this.decode, listener, effect.getAudioProcessor(), live, this::onVideoDecoderInitialized);
+        this.player.setVideoFrameMetadataListener((ptsUs, releaseNs, format, mediaFormat) -> frameRate.addFrame(ptsUs));
         this.effect.setPlayer(player);
         this.player.addListener(effectListener);
         this.preCache = new PreCache();
@@ -61,6 +63,8 @@ final class ExoPlayerSession {
     ExoPlayer player() {
         return player;
     }
+
+    float estimatedVideoFrameRate() { return frameRate.getFrameRate(); }
 
     String videoDecoderDescription() {
         return player.getVideoFormat() == null || activeVideoDecoder == null ? "" : activeVideoDecoder;
@@ -230,6 +234,16 @@ final class ExoPlayerSession {
     }
 
     private final Player.Listener effectListener = new Player.Listener() {
+        @Override
+        public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+            frameRate.reset();
+        }
+
+        @Override
+        public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+            frameRate.reset();
+        }
+
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
             effect.applyAudioEffect();

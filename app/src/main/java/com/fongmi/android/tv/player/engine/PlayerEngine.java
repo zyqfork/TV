@@ -20,6 +20,8 @@ public interface PlayerEngine {
 
     default String getVideoDecoderDescription() { return ""; }
 
+    default float getEstimatedVideoFrameRate() { return 0; }
+
     default PlayerEffect getEffect() {
         return PlayerEffect.NONE;
     }

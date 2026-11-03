@@ -298,6 +298,10 @@ public class PlayerManager implements ParseCallback {
         return engine == null ? "" : engine.getVideoDecoderDescription();
     }
 
+    public float getEstimatedVideoFrameRate() {
+        return engine == null ? 0 : engine.getEstimatedVideoFrameRate();
+    }
+
     public int getEngine() {
         return engine.getType() == PlayerEngine.Type.MPV ? PlayerSetting.ENGINE_MPV : PlayerSetting.ENGINE_EXO;
     }

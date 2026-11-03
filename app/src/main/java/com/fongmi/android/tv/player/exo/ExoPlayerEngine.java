@@ -44,6 +44,9 @@ public class ExoPlayerEngine implements PlayerEngine {
     public String getVideoDecoderDescription() { return session.videoDecoderDescription(); }
 
     @Override
+    public float getEstimatedVideoFrameRate() { return session.estimatedVideoFrameRate(); }
+
+    @Override
     public PlayerEffect getEffect() {
         return session.effect();
     }

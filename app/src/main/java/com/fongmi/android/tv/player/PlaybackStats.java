@@ -11,6 +11,8 @@ import androidx.media3.mpvplayer.MpvPlayer;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.setting.PlayerSetting;
 
+import java.util.Locale;
+
 import is.xyz.mpv.MPVLib;
 
 /** Short snapshot for the on-screen overlay; never includes URLs, headers or credentials. */
@@ -30,7 +32,12 @@ public final class PlaybackStats {
         String dropped = "-";
         if (player instanceof ExoPlayer exo) {
             Format format = exo.getVideoFormat();
-            if (format != null && format.frameRate > 0) fps = String.valueOf(format.frameRate);
+            float sourceRate = format == null ? 0 : format.frameRate;
+            boolean estimated = !Float.isFinite(sourceRate) || sourceRate <= 0;
+            if (estimated) sourceRate = manager.getEstimatedVideoFrameRate();
+            if (Float.isFinite(sourceRate) && sourceRate > 0) {
+                fps = (estimated ? "≈" : "") + String.format(Locale.ROOT, "%.2f", sourceRate);
+            }
             DecoderCounters counters = exo.getVideoDecoderCounters();
             if (counters != null) {
                 counters.ensureUpdated();
