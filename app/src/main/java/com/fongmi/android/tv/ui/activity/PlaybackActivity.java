@@ -428,7 +428,6 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         playerView.setRender(0);
         playerView.getSubtitleView().setStyle(getCaptionStyle());
         playerView.getSubtitleView().setApplyEmbeddedStyles(true);
-        playerView.getSubtitleView().setApplyEmbeddedFontSizes(false);
         subtitleResourceBinding = new com.fongmi.android.tv.ui.playback.SubtitleResourceBinding(playerView.getSubtitleView());
         secondarySubtitleOverlay = new SecondarySubtitleOverlay(playerView);
         PlaybackOverlayBinder.sync(playerView, mService == null ? null : player());

@@ -62,7 +62,6 @@ public final class SecondarySubtitleOverlay {
         if (subtitleView != null) return;
         subtitleView = new SubtitleView(playerView.getContext());
         subtitleView.setApplyEmbeddedStyles(true);
-        subtitleView.setApplyEmbeddedFontSizes(false);
         subtitleView.setBottomPaddingFraction(0.20f);
         FrameLayout overlay = playerView.getOverlayFrameLayout();
         if (overlay != null) overlay.addView(subtitleView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
