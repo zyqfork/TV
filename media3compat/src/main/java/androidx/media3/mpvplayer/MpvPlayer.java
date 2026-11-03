@@ -445,7 +445,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     private String getDecodeOption() {
         // mediacodec_embed requires a live Android Surface; after Surface-unavailable we stay on
         // direct gpu output so audio-only / black-screen sessions can recover without a rebuild.
-        if (decode == 2) return HWDEC_HARD;
+        if (wantsDirectOutput()) return HWDEC_HARD;
         if (decode == 1) return config.preInitOptions.getOrDefault("hwdec", HWDEC_GPU_HARD);
         return HWDEC_SOFT;
     }
@@ -453,7 +453,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     public void setDecode(int decode) {
         this.decode = decode;
         renderFallbackUsed = false;
-        if (decode == 2) {
+        if (wantsDirectOutput()) {
             embedVoDisabled = false;
             embedSurfaceRetries = 0;
         }
@@ -464,14 +464,22 @@ public final class MpvPlayer extends SimpleBasePlayer
         }
     }
 
+    private boolean explicitDirectOutput() {
+        return decode == 1 && "mediacodec_embed".equals(config.preInitOptions.get("vo"))
+                && HWDEC_HARD.equals(config.preInitOptions.getOrDefault("hwdec", HWDEC_HARD));
+    }
+
+    private boolean wantsDirectOutput() {
+        return decode == 2 || explicitDirectOutput();
+    }
+
     private String getVo() {
-        // Internal auto-direct candidate only: never bind embed to TextureView or an item
-        // carrying external subtitles. Before the first item/SurfaceView is known, retain the
-        // candidate so initial Surface settling still protects Rockchip's MediaCodec window.
+        // Explicit mpv.conf direct output also permits VOD HDR; subtitles still need GPU/libass.
+        // Retain the candidate until its first Surface arrives so MediaCodec cannot race it.
         boolean external = mediaItem != null && mediaItem.localConfiguration != null
                 && !mediaItem.localConfiguration.subtitleConfigurations.isEmpty();
         boolean surfaceView = videoOutput == null || videoOutput instanceof SurfaceView;
-        if (!embedVoDisabled && MpvAutomaticOutputPolicy.direct(live, decode == 2, false,
+        if (!embedVoDisabled && MpvAutomaticOutputPolicy.direct(live || explicitDirectOutput(), wantsDirectOutput(), false,
                 external, subtitleGpuRequired, surfaceView)) {
             return config.preInitOptions.getOrDefault("vo", "mediacodec_embed");
         }
@@ -484,7 +492,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     /** Once needed, retain GPU output for this file to avoid repeated decoder teardown on sid changes. */
     private void requireSubtitleGpu() {
-        if (released || decode != 2 || subtitleGpuRequired) return;
+        if (released || !wantsDirectOutput() || subtitleGpuRequired) return;
         boolean wasEmbed = isEmbedVo();
         subtitleGpuRequired = true;
         Log.i("MpvPlayer", "Selected subtitle needs GPU/libass; leaving automatic direct output");
@@ -504,7 +512,7 @@ public final class MpvPlayer extends SimpleBasePlayer
     }
 
     private void checkSelectedSubtitles() {
-        if (released || !fileLoaded || decode != 2) return;
+        if (released || !fileLoaded || !wantsDirectOutput()) return;
         int sid = parseInt(MPVLib.getCachedString("sid"), -1);
         int secondary = parseInt(MPVLib.getCachedString("secondary-sid"), -1);
         boolean visible = !trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
@@ -661,7 +669,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         // An automatic live hard candidate may select embed after the item and view are known.
         // Wait for its Surface even when this particular item needs GPU (e.g. external subs),
         // so the pre-init embed VO cannot race the final routing decision or open audio-only.
-        if (decode != 2 || surfaceReady) {
+        if (!wantsDirectOutput() || surfaceReady) {
             loadFile(uri);
         } else {
             pendingLoadUri = uri;
@@ -939,7 +947,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     /** Applies a public libavfilter graph through mpv's {@code vf} property. */
     public boolean setVideoFilter(String filter) {
-        if (released || decode == 2) return false;
+        if (released || wantsDirectOutput()) return false;
         try {
             MPVLib.setPropertyAsync("vf", mergeFilters(baseVideoFilter, filter));
             return true;
@@ -957,7 +965,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     /** Applies mpv's built-in GPU equalizer properties. Values use mpv's -100..100 range. */
     public boolean setVideoEqualizer(float brightness, float contrast, float saturation, float gamma, float hue) {
-        if (released || decode == 2) return false;
+        if (released || wantsDirectOutput()) return false;
         try {
             MPVLib.setPropertyAsync("brightness", combineEqualizer("brightness", brightness));
             MPVLib.setPropertyAsync("contrast", combineEqualizer("contrast", contrast));
@@ -1625,7 +1633,7 @@ public final class MpvPlayer extends SimpleBasePlayer
 
     private boolean maybeRetryAfterSurfaceFailure(String detail) {
         if (released || mediaItem == null || mediaItem.localConfiguration == null) return false;
-        if (decode != 2) return false;
+        if (!wantsDirectOutput()) return false;
         String d = detail == null ? "" : detail.toLowerCase(Locale.US);
         // HTTP/auth failures also end as "loading failed" — do not treat them as Surface races.
         if (d.contains("http error") || d.contains("403") || d.contains("404") || d.contains("402")
@@ -2005,7 +2013,7 @@ public final class MpvPlayer extends SimpleBasePlayer
         // Rebind the render target without changing the user's quality/profile options.
         // A direct MediaCodec presentation error can leave the existing EGL/VO state poisoned.
         // Recreate it before reloading the decoder; changing hwdec alone still produces black.
-        if (decode == 2) embedVoDisabled = true;
+        if (wantsDirectOutput()) embedVoDisabled = true;
         String activeHwdec = MPVLib.getCachedString("hwdec");
         MPVLib.setPropertyAsync("vo", "null");
         if ((decode == 1 || embedVoDisabled) && activeHwdec != null && !"no".equals(activeHwdec)) {

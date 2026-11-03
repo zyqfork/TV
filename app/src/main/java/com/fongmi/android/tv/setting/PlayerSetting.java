@@ -162,7 +162,7 @@ public class PlayerSetting {
         return live ? getLiveEngine() : getVodEngine();
     }
 
-    /** Two bounded targets; byte limits still take precedence over duration. */
+    /** Two duration targets; load control keeps enough forward data to resume. */
     public static int getBuffer() {
         return Prefers.getInt("exo_buffer", DEFAULT_BUFFER) > DEFAULT_BUFFER ? 10 : DEFAULT_BUFFER;
     }

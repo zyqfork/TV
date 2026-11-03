@@ -116,7 +116,8 @@ public class ExoUtil {
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, playbackMs, rebufferMs)
                 .setTargetBufferBytes(targetBufferBytes)
                 .setBackBuffer(backBufferMs, backBufferMs > 0)
-                .setPrioritizeTimeOverSizeThresholds(false)
+                // Retained GOP data must not fill the byte target and prevent rebuffering.
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
     }
 

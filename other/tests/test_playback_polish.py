@@ -94,7 +94,8 @@ def main():
     assert "addPreloadOptions" not in util
     assert "getPreloadTimeSeconds" not in util
     setting = (ROOT / "app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java").read_text(encoding="utf-8")
-    assert "isMpvGpuNext" not in setting and "isMpvVulkan" not in setting
+    # GPU-next is a supported user setting and must reach MPV's output configuration.
+    assert "isMpvGpuNext()" in setting and "PlayerSetting.isMpvGpuNext()" in util
     exo = (ROOT / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java").read_text(encoding="utf-8")
     check_exo_video_events(exo)
     assert "Math.max(bufferMs, live ? 3000 : 5000)" not in exo

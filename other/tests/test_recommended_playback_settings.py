@@ -22,7 +22,7 @@ public class Prefers {
  public static int getInt(String k){return getInt(k,0);} public static int getInt(String k,int d){return data.get(k) instanceof Integer i?i:d;}
  public static float getFloat(String k){return getFloat(k,0);} public static float getFloat(String k,float d){return data.get(k) instanceof Float f?f:d;}
  public static boolean getBoolean(String k){return getBoolean(k,false);} public static boolean getBoolean(String k,boolean d){return data.get(k) instanceof Boolean b?b:d;}
- public static void put(String k,Object v){data.put(k,v);}
+ public static void put(String k,Object v){data.put(k,v);} public static void remove(String k){data.remove(k);}
 }''',
  'com/github/catvod/utils/Path.java': '''package com.github.catvod.utils;
 import java.io.*;import java.nio.file.Files;
@@ -97,9 +97,9 @@ with tempfile.TemporaryDirectory() as tmp:
 util=(ROOT/'app/src/main/java/com/fongmi/android/tv/player/mpv/MpvUtil.java').read_text(encoding='utf8')
 assert '"config", MpvConfigFiles.isEnabled() ? "yes" : "no"' in util
 assert '"load-scripts", MpvConfigFiles.isEnabled() ? "yes" : "no"' in util
-assert '!MpvConfigFiles.isEnabled() && MpvAutomaticOutputPolicy.direct(' in util
+assert '!MpvConfigFiles.isEnabled()' in util and 'MpvAutomaticOutputPolicy.direct(' in util
 assert 'addPreloadOptions' not in util and 'cache-on-disk' not in util
-assert 'setPrioritizeTimeOverSizeThresholds(false)' in exo
+assert 'setPrioritizeTimeOverSizeThresholds(true)' in exo
 for retired in ['isVideoPrefer','isAudioPrefer','isPreferAAC','isTunnelingEnabled']:
     assert retired not in exo
 for f in ['app/src/leanback/res/layout/activity_setting_player.xml','app/src/mobile/res/layout/fragment_setting_player.xml']:
